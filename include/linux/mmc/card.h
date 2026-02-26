@@ -11,10 +11,12 @@
 #define LINUX_MMC_CARD_H
 
 #include <linux/device.h>
-#include <linux/mmc/core.h>
 #include <linux/mod_devicetable.h>
 
-#define MMC_CARD_CMDQ_BLK_SIZE 512
+#define MAX_CNT_U64     0xFFFFFFFFFF
+#define MAX_CNT_U32     0x7FFFFFFF
+#define STATUS_MASK     (R1_ERROR | R1_CC_ERROR | R1_CARD_ECC_FAILED | R1_WP_VIOLATION | R1_OUT_OF_RANGE)
+
 struct mmc_cid {
 	unsigned int		manfid;
 	char			prod_name[8];
@@ -53,7 +55,6 @@ struct mmc_ext_csd {
 	u8			sec_feature_support;
 	u8			rel_sectors;
 	u8			rel_param;
-	bool			enhanced_rpmb_supported;
 	u8			part_config;
 	u8			cache_ctrl;
 	u8			rst_n_function;
@@ -97,15 +98,11 @@ struct mmc_ext_csd {
 	unsigned int		cmdq_depth;	/* Command Queue depth */
 #define MMC_FIRMWARE_LEN 8
 	u8			fwrev[MMC_FIRMWARE_LEN];  /* FW version */
-	u8			raw_ext_csd_cmdq;	/* 15 */
 	u8			raw_exception_status;	/* 54 */
 	u8			raw_partition_support;	/* 160 */
 	u8			raw_rpmb_size_mult;	/* 168 */
 	u8			raw_erased_mem_count;	/* 181 */
-	u8			raw_ext_csd_bus_width;	/* 183 */
 	u8			strobe_support;		/* 184 */
-#define MMC_STROBE_ENHANCED_SUPPORT	BIT(0)
-	u8			raw_ext_csd_hs_timing;	/* 185 */
 	u8			raw_ext_csd_structure;	/* 194 */
 	u8			raw_card_type;		/* 196 */
 	u8			raw_driver_strength;	/* 197 */
@@ -126,15 +123,12 @@ struct mmc_ext_csd {
 	u8			raw_pwr_cl_200_360;	/* 237 */
 	u8			raw_pwr_cl_ddr_52_195;	/* 238 */
 	u8			raw_pwr_cl_ddr_52_360;	/* 239 */
-	u8			cache_flush_policy;	/* 240 */
 	u8			raw_pwr_cl_ddr_200_360;	/* 253 */
 	u8			raw_bkops_status;	/* 246 */
 	u8			raw_sectors[4];		/* 212 - 4 bytes */
 	u8			pre_eol_info;		/* 267 */
 	u8			device_life_time_est_typ_a;	/* 268 */
 	u8			device_life_time_est_typ_b;	/* 269 */
-	u8			barrier_support;	/* 486 */
-	u8			barrier_en;
 
 	unsigned int            feature_support;
 #define MMC_DISCARD_FEATURE	BIT(0)                  /* CMD38 feature */
@@ -217,7 +211,6 @@ struct sdio_cis {
 };
 
 struct mmc_host;
-struct mmc_ios;
 struct sdio_func;
 struct sdio_func_tuple;
 struct mmc_queue_req;
@@ -248,7 +241,23 @@ struct mmc_part {
 #define MMC_BLK_DATA_AREA_RPMB	(1<<3)
 };
 
-#define MMC_QUIRK_CMDQ_DELAY_BEFORE_DCMD 6 /* microseconds */
+struct mmc_card_error_log {
+	char	type[4];        // sbc, cmd, data, stop
+	int	err_type;
+	u32	status;
+	u64	first_issue_time;
+	u64	last_issue_time;
+	u32	count;
+	u32	ge_cnt;			// status[19] : general error or unknown error_count
+	u32	cc_cnt;			// status[20] : internal card controller error_count
+	u32	ecc_cnt;		// status[21] : ecc error_count
+	u32	wp_cnt;			// status[26] : write protection error_count
+	u32	oor_cnt;		// status[31] : out of range error
+	u32	noti_cnt;		// uevent notification count
+	u32	halt_cnt;	// cq halt / unhalt fail
+	u32	cq_cnt;		// cq enable / disable fail
+	u32	rpmb_cnt;	// RPMB switch fail
+};
 
 /*
  * MMC device
@@ -281,8 +290,6 @@ struct mmc_card {
 #define MMC_QUIRK_BROKEN_IRQ_POLLING	(1<<11)	/* Polling SDIO_CCCR_INTx could create a fake interrupt */
 #define MMC_QUIRK_TRIM_BROKEN	(1<<12)		/* Skip trim */
 #define MMC_QUIRK_BROKEN_HPI	(1<<13)		/* Disable broken HPI support */
-#define MMC_QUIRK_CACHE_DISABLE (1<<14)		/* prevent cache enable */
-#define MMC_QUIRK_CMDQ_EMPTY_BEFORE_DCMD (1<<17)/* Make sure CMDQ is empty before queuing DCMD */
 
 	bool			reenable_cmdq;	/* Re-enable Command Queue */
 
@@ -321,9 +328,9 @@ struct mmc_card {
 	unsigned int    nr_parts;
 
 	unsigned int		bouncesz;	/* Bounce buffer size */
-	unsigned int	part_curr;
-	u8 en_strobe_enhanced;	/*enhanced strobe ctrl */
-	bool cmdq_init;
+
+	struct device_attribute error_count;
+	struct mmc_card_error_log err_log[10];
 };
 
 static inline bool mmc_large_sector(struct mmc_card *card)

@@ -367,6 +367,17 @@ config INPUT_ATI_REMOTE2
 	  To compile this driver as a module, choose M here: the module will be
 	  called ati_remote2.
 
+config INPUT_KEYCHORD
+	tristate "Key chord input driver support"
+	help
+	  Say Y here if you want to enable the key chord driver
+	  accessible at /dev/keychord.  This driver can be used
+	  for receiving notifications when client specified key
+	  combinations are pressed.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called keychord.
+
 config INPUT_KEYSPAN_REMOTE
 	tristate "Keyspan DMR USB remote control"
 	depends on USB_ARCH_HAS_HCD
@@ -859,15 +870,5 @@ config INPUT_HISI_POWERKEY
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called hisi_powerkey.
-
-config INPUT_S2MU106_HAPTIC
-	tristate "s2mu106 haptic driver"
-	default n
-	depends on PWM
-	help
-	 Say Y to include support for System LSI s2mu106
-	 Haptic driver.
-	 The Haptic Motor driver support both ERM and
-	 LRA type actuators.
 
 endif

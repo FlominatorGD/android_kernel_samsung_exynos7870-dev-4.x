@@ -13,8 +13,6 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/mfd/syscon.h>
-#include <linux/regmap.h>
 
 /* USI v2 mode */
 #define I2C_SW_CONF		(1<<2)
@@ -30,8 +28,6 @@ struct usi_v2_data {
 	void __iomem	*base;
 	int 		mode;
 	int		ch_id;
-	struct regmap	*sysreg;
-	unsigned int	sys_ps_cfg;
 };
 
 static const struct usi_v2_mode usi_v2_modes[] = {
@@ -58,7 +54,6 @@ static int usi_v2_probe(struct platform_device *pdev)
 	struct resource *res;
 	const char* mode_name;
 	struct usi_v2_data *data;
-	int ret;
 
 	data = devm_kzalloc(&pdev->dev, sizeof(struct usi_v2_data), GFP_KERNEL);
 	if (!data) {
@@ -85,18 +80,22 @@ static int usi_v2_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	ret = of_property_read_u32(node, "samsung,weak-pull-up-mask", &data->sys_ps_cfg);
-	if (ret == 0) {
-		dev_info(&pdev->dev, "weak-pull-up-mask was set\n");
-		data->sysreg = syscon_regmap_lookup_by_phandle(node, "samsung,sysreg-phandle");
-		if (IS_ERR(data->sysreg))
-			dev_err(&pdev->dev, "failed to get sysreg phandle\n");
-
-		regmap_update_bits(data->sysreg, 0x0, 0x3 << data->sys_ps_cfg,
-			0x3 << data->sys_ps_cfg);
-	}
-
 	platform_set_drvdata(pdev, data);
+#ifdef CONFIG_ESE_SECURE
+	if (data->ch_id == CONFIG_ESE_SECURE_USI_MODE) {
+		dev_info(&pdev->dev,
+			"usi configuration for secure channel is skipped(eSE)\n");
+		return 0;
+	}
+#endif
+
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (data->ch_id == CONFIG_SENSORS_FP_USI_NUMBER) {
+		dev_info(&pdev->dev,
+				"usi configuration for secure channel is skipped(FP)\n");
+		return 0;
+	}
+#endif
 
 	writel(data->mode, data->base);
 
@@ -118,6 +117,21 @@ static int usi_v2_resume_noirq(struct device *dev)
 	struct usi_v2_data *data = platform_get_drvdata(pdev);
 	int ret;
 
+#ifdef CONFIG_ESE_SECURE
+	if (data->ch_id == CONFIG_ESE_SECURE_USI_MODE) {
+		dev_info(&pdev->dev,
+			"usi configuration for secure channel is skipped(eSE)\n");
+		return 0;
+	}
+#endif
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (data->ch_id == CONFIG_SENSORS_FP_USI_NUMBER) {
+		dev_info(&pdev->dev,
+				"usi configuration for secure channel is skipped(FP)\n");
+		return 0;
+	}
+#endif	
+
 	if (data->mode && data->base) {
 		writel(data->mode, data->base);
 		dev_info(&pdev->dev, "%s mode:%d\n", __func__, data->mode);
@@ -126,10 +140,6 @@ static int usi_v2_resume_noirq(struct device *dev)
 		dev_err(&pdev->dev, "%s wrong usi_v2 data\n", __func__);
 		ret = -EINVAL;
 	}
-
-	if (data->sys_ps_cfg)
-		regmap_update_bits(data->sysreg, 0x0, 0x3 << data->sys_ps_cfg,
-			0x3 << data->sys_ps_cfg);
 
 	return ret;
 }

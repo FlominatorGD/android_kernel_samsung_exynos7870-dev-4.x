@@ -147,19 +147,12 @@ static int plugins_init(void)
 			}
 
 			ret = handle_dynamic_plugin(exynos_acpm->dev->of_node, plugins[i].id, plugins[i].stay_attached);
-			if (ret < 0) {
+			if (ret < 0)
 				dev_err(exynos_acpm->dev, "plugin attach/detach:%u fail! plugin_id:%d, ret:%d",
 						plugins[i].stay_attached, plugins[i].id, ret);
-				return ret;
-			}
 
-			if (fw_name && strstr(fw_name, "dvfs")) {
-				ret = fvmap_init(fw_base_addr + plugins[i].size);
-				if (ret) {
-					dev_err(exynos_acpm->dev, "fvmap init error %d\n", ret);
-					return ret;
-				}
-			}
+			if (fw_name && strstr(fw_name, "dvfs"))
+				fvmap_init(fw_base_addr + plugins[i].size);
 
 		} else if (plugins[i].is_attached == 1 && plugins[i].stay_attached == 1) {
 			fw_name = (const char *)(acpm_srambase + plugins[i].fw_name);
@@ -171,11 +164,7 @@ static int plugins_init(void)
 				prop = of_get_property(exynos_acpm->dev->of_node, "fvmap_offset", &len);
 				if (prop) {
 					offset = be32_to_cpup(prop);
-					ret = fvmap_init(fw_base_addr + offset);
-					if (ret) {
-						dev_err(exynos_acpm->dev, "fvmap init error %d\n", ret);
-						return ret;
-					}
+					fvmap_init(fw_base_addr + offset);
 				}
 			}
 		}
@@ -306,7 +295,8 @@ void exynos_acpm_reboot(void)
 	soc_id = exynos_soc_info.product_id;
 	revision = exynos_soc_info.revision;
 
-	acpm_enter_wfi();
+	if (!(soc_id == EXYNOS9810_SOC_ID && revision < EXYNOS_MAIN_REV_1))
+		acpm_enter_wfi();
 }
 
 static int acpm_send_data(struct device_node *node, unsigned int check_id,

@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_failsafe.c
+/* sound/soc/samsung/abox/abox_failsafe.c
  *
  * ALSA SoC Audio Layer - Samsung Abox Failsafe driver
  *
@@ -110,9 +110,11 @@ void abox_failsafe_report_reset(struct device *dev)
 
 static int abox_failsafe_reset(struct device *dev, struct abox_data *data)
 {
+	struct device *dev_abox = &data->pdev->dev;
+
 	dev_dbg(dev, "%s\n", __func__);
 
-	return abox_failsafe_start(data->dev, data);
+	return abox_failsafe_start(dev_abox, data);
 }
 
 static ssize_t reset_store(struct device *dev, struct device_attribute *attr,

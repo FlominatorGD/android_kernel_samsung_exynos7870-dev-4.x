@@ -5,7 +5,6 @@
 menuconfig EXYNOS_ACPM
 	bool "ACPM driver support"
 	default n
-	depends on ECT
 	help
 	  Enable ACPM support
 
@@ -36,13 +35,6 @@ config EXYNOS9810_ACPM
 	bool "EXYNOS9810_ACPM support"
 	default y
 	depends on SOC_EXYNOS9810
-	help
-	  Enable ACPM support
-
-config EXYNOS9610_ACPM
-	bool "EXYNOS9610_ACPM support"
-	default y
-	depends on SOC_EXYNOS9610
 	help
 	  Enable ACPM support
 

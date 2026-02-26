@@ -284,6 +284,43 @@ struct devfreq_simple_exynos_data {
 #endif
 
 #if IS_ENABLED(CONFIG_DEVFREQ_GOV_SIMPLE_INTERACTIVE)
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+#define LOAD_BUFFER_MAX			10
+struct devfreq_alt_load {
+	unsigned long long	delta;
+	unsigned int		load;
+};
+
+#define ALTDVFS_MIN_SAMPLE_TIME 	15
+#define ALTDVFS_HOLD_SAMPLE_TIME	100
+#define ALTDVFS_TARGET_LOAD		75
+#define ALTDVFS_NUM_TARGET_LOAD 	1
+#define ALTDVFS_HISPEED_LOAD		99
+#define ALTDVFS_HISPEED_FREQ		1000000
+#define ALTDVFS_TOLERANCE		1
+
+struct devfreq_alt_dvfs_data {
+	struct devfreq_alt_load	buffer[LOAD_BUFFER_MAX];
+	struct devfreq_alt_load	*front;
+	struct devfreq_alt_load	*rear;
+
+	unsigned long long	busy;
+	unsigned long long	total;
+	unsigned int		min_load;
+	unsigned int		max_load;
+	unsigned long long	max_spent;
+
+	/* ALT-DVFS parameter */
+	unsigned int		*target_load;
+	unsigned int		num_target_load;
+	unsigned int		min_sample_time;
+	unsigned int		hold_sample_time;
+	unsigned int		hispeed_load;
+	unsigned int		hispeed_freq;
+	unsigned int		tolerance;
+};
+#endif /* ALT_DVFS */
+
 #define DEFAULT_DELAY_TIME		10 /* msec */
 #define DEFAULT_NDELAY_TIME		1
 #define DELAY_TIME_RANGE		10
@@ -302,6 +339,11 @@ struct devfreq_simple_interactive_data {
 	int pm_qos_class_max;
 	struct devfreq_notifier_block nb;
 	struct devfreq_notifier_block nb_max;
+
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+	struct devfreq_alt_dvfs_data alt_data;
+	unsigned int governor_freq;
+#endif
 };
 #endif
 

@@ -239,7 +239,6 @@ struct i2c_driver {
  * managing the device.
  */
 struct i2c_client {
-	unsigned int frequency;
 	unsigned short flags;		/* div., see below		*/
 	unsigned short addr;		/* chip address - NOTE: 7bit	*/
 					/* addresses are stored in the	*/
@@ -686,7 +685,6 @@ i2c_unlock_adapter(struct i2c_adapter *adapter)
 #define I2C_CLIENT_SCCB		0x9000	/* Use Omnivision SCCB protocol */
 					/* Must match I2C_M_STOP|IGNORE_NAK */
 #define I2C_CLIENT_SPEEDY	0x40	/* 12 bit of slave address for speedy */
-					/* 4bit(device id) + 8bit(register offet) */
 
 /* i2c adapter classes (bitmask) */
 #define I2C_CLASS_HWMON		(1<<0)	/* lm_sensors, ... */

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Samsung Electronics Co., Ltd.
+ * Copyright (c) 2018 Samsung Electronics Co., Ltd.
  *
  * Author: Jiun Yu <jiun.yu@samsung.com>
  *
@@ -12,7 +12,6 @@
 
 #ifndef _DT_BINDINGS_EXYNOS_DISPLAY_H
 #define _DT_BINDINGS_EXYNOS_DISPLAY_H
-
 
 /* RGB 8bit display */
 /* 4byte */
@@ -83,14 +82,5 @@
 #define DECON_PIXEL_FORMAT_NV61M_S10B		39
 
 #define DECON_PIXEL_FORMAT_NV12_P010		40
-
-/* formats for lossless SBWC case */
-#define DECON_PIXEL_FORMAT_NV12M_SBWC_8B	41
-#define DECON_PIXEL_FORMAT_NV12M_SBWC_10B	42
-#define DECON_PIXEL_FORMAT_NV21M_SBWC_8B	43
-#define DECON_PIXEL_FORMAT_NV21M_SBWC_10B	44
-#define DECON_PIXEL_FORMAT_NV12N_SBWC_8B	45
-#define DECON_PIXEL_FORMAT_NV12N_SBWC_10B	46
-
 
 #endif	/* _DT_BINDINGS_EXYNOS_DISPLAY_H */

@@ -57,6 +57,7 @@ static void ion_buffer_add(struct ion_device *dev,
 	struct rb_node **p = &dev->buffers.rb_node;
 	struct rb_node *parent = NULL;
 	struct ion_buffer *entry;
+	struct task_struct *task;
 
 	while (*p) {
 		parent = *p;
@@ -72,13 +73,14 @@ static void ion_buffer_add(struct ion_device *dev,
 		}
 	}
 
+	task = current;
+	get_task_comm(buffer->task_comm, task->group_leader);
+	get_task_comm(buffer->thread_comm, task);
+	buffer->pid = task_pid_nr(task->group_leader);
+	buffer->tid = task_pid_nr(task);
+
 	rb_link_node(&buffer->node, parent, p);
 	rb_insert_color(&buffer->node, &dev->buffers);
-
-	get_task_comm(buffer->task_comm, current->group_leader);
-	get_task_comm(buffer->thread_comm, current);
-	buffer->pid = current->group_leader->pid;
-	buffer->tid = current->pid;
 }
 
 /* this function should only be called while dev->lock is held */
@@ -89,6 +91,7 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 {
 	struct ion_buffer *buffer;
 	int ret;
+	long nr_alloc_cur, nr_alloc_peak;
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
@@ -129,6 +132,10 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 
 	ion_buffer_add(dev, buffer);
 	mutex_unlock(&dev->buffer_lock);
+	nr_alloc_cur = atomic_long_add_return(len, &heap->total_allocated);
+	nr_alloc_peak = atomic_long_read(&heap->total_allocated_peak);
+	if (nr_alloc_cur > nr_alloc_peak)
+		atomic_long_set(&heap->total_allocated_peak, nr_alloc_cur);
 	return buffer;
 
 err1:
@@ -150,6 +157,7 @@ void ion_buffer_destroy(struct ion_buffer *buffer)
 			     __func__);
 		buffer->heap->ops->unmap_kernel(buffer->heap, buffer);
 	}
+	atomic_long_sub(buffer->size, &buffer->heap->total_allocated);
 	buffer->heap->ops->free(buffer);
 
 	ion_event_end(ION_EVENT_TYPE_FREE, buffer);
@@ -340,13 +348,33 @@ static void ion_dma_buf_release(struct dma_buf *dmabuf)
 static void *ion_dma_buf_kmap(struct dma_buf *dmabuf, unsigned long offset)
 {
 	struct ion_buffer *buffer = dmabuf->priv;
+	void *vaddr;
 
-	return buffer->vaddr + offset * PAGE_SIZE;
+	if (!buffer->heap->ops->map_kernel) {
+		pr_err("%s: map kernel is not implemented by this heap.\n",
+		       __func__);
+		return ERR_PTR(-ENOTTY);
+	}
+	mutex_lock(&buffer->lock);
+	vaddr = ion_buffer_kmap_get(buffer);
+	mutex_unlock(&buffer->lock);
+
+	if (IS_ERR(vaddr))
+		return vaddr;
+
+	return vaddr + offset * PAGE_SIZE;
 }
 
 static void ion_dma_buf_kunmap(struct dma_buf *dmabuf, unsigned long offset,
 			       void *ptr)
 {
+	struct ion_buffer *buffer = dmabuf->priv;
+
+	if (buffer->heap->ops->map_kernel) {
+		mutex_lock(&buffer->lock);
+		ion_buffer_kmap_put(buffer);
+		mutex_unlock(&buffer->lock);
+	}
 }
 
 static void *ion_dma_buf_vmap(struct dma_buf *dmabuf)
@@ -378,17 +406,8 @@ static int ion_dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 					enum dma_data_direction direction)
 {
 	struct ion_buffer *buffer = dmabuf->priv;
-	void *vaddr;
 	struct dma_buf_attachment *att;
 
-	/*
-	 * TODO: Move this elsewhere because we don't always need a vaddr
-	 */
-	if (buffer->heap->ops->map_kernel) {
-		mutex_lock(&buffer->lock);
-		vaddr = ion_buffer_kmap_get(buffer);
-		mutex_unlock(&buffer->lock);
-	}
 
 	mutex_lock(&dmabuf->lock);
 	list_for_each_entry(att, &dmabuf->attachments, node) {
@@ -407,12 +426,6 @@ static int ion_dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 {
 	struct ion_buffer *buffer = dmabuf->priv;
 	struct dma_buf_attachment *att;
-
-	if (buffer->heap->ops->map_kernel) {
-		mutex_lock(&buffer->lock);
-		ion_buffer_kmap_put(buffer);
-		mutex_unlock(&buffer->lock);
-	}
 
 	mutex_lock(&dmabuf->lock);
 	list_for_each_entry(att, &dmabuf->attachments, node) {
@@ -455,6 +468,46 @@ const struct dma_buf_ops ion_dma_buf_ops = {
 
 #define ION_EXPNAME_LEN (4 + 4 + 1) /* strlen("ion-") + strlen("2048") + '\0' */
 
+int camera_heap_id;
+int camera_contig_heap_id;
+
+void exynos_ion_init_camera_heaps(void)
+{
+	struct ion_heap *heap;
+
+	WARN_ON(camera_heap_id || camera_contig_heap_id);
+
+	heap = ion_get_heap_by_name("camera_heap");
+	if (heap)
+		camera_heap_id = (int)heap->id;
+	heap = ion_get_heap_by_name("camera_contig_heap");
+	if (heap)
+		camera_contig_heap_id = (int)heap->id;
+
+	pr_info("%s: camera %d contig %d\n",
+		__func__, camera_heap_id, camera_contig_heap_id);
+}
+
+unsigned int ion_parse_camera_heap_id(unsigned int heap_id_mask,
+				      unsigned int flags)
+{
+	if (!camera_heap_id || !camera_contig_heap_id)
+		return heap_id_mask;
+	/*
+	 * Buffer alloc request on "camera heap" id with ION_FLAG_PROTECTED
+	 * should go to camera_contig heap.
+	 * This is the exynos9820-specific requirement.
+	 */
+	if (heap_id_mask == (1 << camera_heap_id) && (flags & ION_FLAG_PROTECTED))
+		return (1 << camera_contig_heap_id);
+
+	/* User space cannot request camera_contig heap directly */
+	if (heap_id_mask == (1 << camera_contig_heap_id))
+		return 0;
+
+	return heap_id_mask;
+}
+
 struct dma_buf *__ion_alloc(size_t len, unsigned int heap_id_mask,
 			    unsigned int flags)
 {
@@ -483,6 +536,7 @@ struct dma_buf *__ion_alloc(size_t len, unsigned int heap_id_mask,
 		return ERR_PTR(-EINVAL);
 	}
 
+	heap_id_mask = ion_parse_camera_heap_id(heap_id_mask, flags);
 	down_read(&dev->lock);
 	plist_for_each_entry(heap, &dev->heaps, node) {
 		/* if the caller didn't specify this heap id */

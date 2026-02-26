@@ -25,7 +25,6 @@
 #include <linux/smc.h>
 
 #include <soc/samsung/exynos-ppmpu.h>
-#include <soc/samsung/exynos-tzasc.h>
 
 
 static irqreturn_t exynos_ppmpu_irq_handler(int irq, void *dev_id)
@@ -34,18 +33,27 @@ static irqreturn_t exynos_ppmpu_irq_handler(int irq, void *dev_id)
 	uint32_t dir = 0;
 	uint32_t irq_idx;
 
+	/*
+	 *	IRQ_Index	PPMPU_INTR
+	 *	    0		 PPMPU0_R
+	 *	    1		 PPMPU0_W
+	 *	    2		 PPMPU1_R
+	 *	    3		 PPMPU1_W
+	 *	    4		 PPMPU2_R
+	 *	    5		 PPMPU2_W
+	 *	    6		 PPMPU3_R
+	 *	    7		 PPMPU3_W
+	 */
 	for (irq_idx = 0; irq_idx < data->irqcnt; irq_idx++) {
 		if (irq == data->irq[irq_idx])
 			break;
 	}
 
-#ifdef CONFIG_EXYNOS_PPMPU_SEPARATE_INTERRUPT
+#ifdef CONFIG_EXYNOS_PPMPU_SUPPORT_SMC
 	if (irq_idx % 2)
 		dir = PPMPU_ILLEGAL_ACCESS_WRITE;
 	else
 		dir = PPMPU_ILLEGAL_ACCESS_READ;
-
-	irq_idx /= 2;
 #endif
 
 	/*
@@ -55,18 +63,12 @@ static irqreturn_t exynos_ppmpu_irq_handler(int irq, void *dev_id)
 	data->need_log = exynos_smc(SMC_CMD_GET_PPMPU_FAIL_INFO,
 				    data->fail_info_pa,
 				    (dir << PPMPU_DIRECTION_SHIFT) |
-				    irq_idx,
+				    (irq_idx / 2),
 				    data->info_flag);
-	if ((data->need_log == PPMPU_NEED_FAIL_INFO_LOGGING) ||
-		(data->need_log == PPMPU_SKIP_FAIL_INFO_LOGGING)) {
-		data->need_handle = PPMPU_HANDLE_INTERRUPT_THREAD;
-	} else if (data->need_log == PPMPU_NO_PPMPU_FAIL_INTERRUPT) {
-		data->need_handle = PPMPU_DO_NOT_HANDLE_INTERRUPT_THREAD;
-	} else {
-		pr_err("PPMPU_FAIL_DETECTOR: Failed to get fail information! ret(%#x)\n",
-			data->need_log);
-		data->need_handle = PPMPU_DO_NOT_HANDLE_INTERRUPT_THREAD;
-	}
+	if ((data->need_log != PPMPU_NEED_FAIL_INFO_LOGGING) &&
+		(data->need_log != PPMPU_SKIP_FAIL_INFO_LOGGING))
+		pr_err("%s:ppmpu_fail_info buffer is invalid! ret(%#x)\n",
+			__func__, data->need_log);
 
 	return IRQ_WAKE_THREAD;
 }
@@ -74,12 +76,9 @@ static irqreturn_t exynos_ppmpu_irq_handler(int irq, void *dev_id)
 static irqreturn_t exynos_ppmpu_irq_handler_thread(int irq, void *dev_id)
 {
 	struct ppmpu_info_data *data = dev_id;
-	unsigned int intr_stat, addr_low, tzc_ver, ch_num;
+	unsigned int intr_stat, addr_low;
 	unsigned long addr_high;
 	int i;
-
-	if (data->need_handle == PPMPU_DO_NOT_HANDLE_INTERRUPT_THREAD)
-		return IRQ_HANDLED;
 
 	if (data->need_log == PPMPU_SKIP_FAIL_INFO_LOGGING) {
 		pr_debug("PPMPU_FAIL_DETECTOR: Ignore PPMPU illegal reads\n");
@@ -88,11 +87,8 @@ static irqreturn_t exynos_ppmpu_irq_handler_thread(int irq, void *dev_id)
 
 	pr_info("===============[PPMPU FAIL DETECTION]===============\n");
 
-	tzc_ver = data->tzc_ver;
-	ch_num = data->ch_num;
-
 	/* Parse fail register information */
-	for (i = 0; i < ch_num; i++) {
+	for (i = 0; i < data->ch_num; i++) {
 		pr_info("[Channel %d]\n", i);
 
 		intr_stat = data->fail_info[i].ppmpu_intr_stat;
@@ -109,11 +105,6 @@ static irqreturn_t exynos_ppmpu_irq_handler_thread(int irq, void *dev_id)
 			addr_high = data->fail_info[i].ppmpu_illegal_read_addr_high &
 					PPMPU_ILLEGAL_ADDR_HIGH_MASK;
 
-			if ((tzc_ver == TZASC_VERSION_TZC380) && (ch_num == 2)) {
-				addr_low = mif_addr_to_pa(addr_low, i);
-				addr_high <<= 1;
-			}
-
 			pr_info("- [READ] Illegal Adddress : %#lx\n",
 				addr_high ?
 				(addr_high << 32) | addr_low :
@@ -128,12 +119,14 @@ static irqreturn_t exynos_ppmpu_irq_handler_thread(int irq, void *dev_id)
 				PPMPU_ILLEGAL_FIELD_FAIL_ID_MASK);
 
 			pr_info("- [READ] Interrupt Status : %s\n",
-				intr_stat & PPMPU_READ_INTR_STATUS ?
+				(data->fail_info[i].ppmpu_intr_stat &
+				PPMPU_READ_INTR_STATUS) ?
 				"Interrupt is asserted" :
 				"Interrupt is not asserted");
 
 			pr_info("- [READ] Interrupt Overrun : %s\n",
-				intr_stat & PPMPU_READ_INTR_STATUS_OVERRUN ?
+				(data->fail_info[i].ppmpu_intr_stat &
+				PPMPU_READ_INTR_STATUS_OVERRUN) ?
 				"Two or more failures occurred" :
 				"Only one failure occurred");
 
@@ -145,11 +138,6 @@ static irqreturn_t exynos_ppmpu_irq_handler_thread(int irq, void *dev_id)
 			addr_low = data->fail_info[i].ppmpu_illegal_write_addr_low;
 			addr_high = data->fail_info[i].ppmpu_illegal_write_addr_high &
 					PPMPU_ILLEGAL_ADDR_HIGH_MASK;
-
-			if ((tzc_ver == TZASC_VERSION_TZC380) && (ch_num == 2)) {
-				addr_low = mif_addr_to_pa(addr_low, i);
-				addr_high <<= 1;
-			}
 
 			pr_info("- [WRITE] Illegal Adddress : %#lx\n",
 				addr_high ?
@@ -165,12 +153,14 @@ static irqreturn_t exynos_ppmpu_irq_handler_thread(int irq, void *dev_id)
 				PPMPU_ILLEGAL_FIELD_FAIL_ID_MASK);
 
 			pr_info("- [WRITE] Interrupt Status : %s\n",
-				intr_stat & PPMPU_WRITE_INTR_STATUS ?
+				(data->fail_info[i].ppmpu_intr_stat &
+				PPMPU_WRITE_INTR_STATUS) ?
 				"Interrupt is asserted" :
 				"Interrupt is not asserted");
 
 			pr_info("- [WRITE] Interrupt Overrun : %s\n",
-				intr_stat & PPMPU_WRITE_INTR_STATUS_OVERRUN ?
+				(data->fail_info[i].ppmpu_intr_stat &
+				PPMPU_WRITE_INTR_STATUS_OVERRUN) ?
 				"Two or more failures occurred" :
 				"Only one failure occurred");
 
@@ -208,7 +198,6 @@ static irqreturn_t exynos_ppmpu_irq_handler_thread(int irq, void *dev_id)
 static int exynos_ppmpu_probe(struct platform_device *pdev)
 {
 	struct ppmpu_info_data *data;
-	unsigned long irqf = IRQF_SHARED;
 	int ret, i;
 
 	data = devm_kzalloc(&pdev->dev, sizeof(struct ppmpu_info_data), GFP_KERNEL);
@@ -229,25 +218,6 @@ static int exynos_ppmpu_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	ret = of_property_read_u32(data->dev->of_node,
-				   "tzc_ver",
-				   &data->tzc_ver);
-	if (ret) {
-		dev_err(data->dev,
-			"Fail to get TZC version(%d) from dt\n",
-			data->tzc_ver);
-		goto out;
-	}
-
-	if ((data->tzc_ver != TZASC_VERSION_TZC380) &&
-		(data->tzc_ver != TZASC_VERSION_TZC400)) {
-		dev_err(data->dev,
-			"Invalid TZC version(%d)\n",
-			data->tzc_ver);
-		ret = -EINVAL;
-		goto out;
-	}
-
 	ret = exynos_smc(SMC_CMD_CHECK_PPMPU_CH_NUM,
 				data->ch_num,
 				sizeof(struct ppmpu_fail_info),
@@ -261,7 +231,7 @@ static int exynos_ppmpu_probe(struct platform_device *pdev)
 			break;
 		case PPMPU_ERROR_INVALID_FAIL_INFO_SIZE:
 			dev_err(data->dev,
-				"The size of struct ppmpu_fail_info(%#lx) is invalid\n",
+				"The size of struct ppmpu_fail_info(%#x) is invalid\n",
 				sizeof(struct ppmpu_fail_info));
 			break;
 		case SMC_CMD_CHECK_PPMPU_CH_NUM:
@@ -307,12 +277,8 @@ static int exynos_ppmpu_probe(struct platform_device *pdev)
 		"VA of ppmpu_fail_info : %lx\n",
 		(unsigned long)data->fail_info);
 	dev_dbg(data->dev,
-		"PA of ppmpu_fail_info : %llx\n",
+		"PA of ppmpu_fail_info : %lx\n",
 		data->fail_info_pa);
-
-#ifdef CONFIG_EXYNOS_PPMPU_ILLEGAL_READ_LOGGING
-	data->info_flag = PPMPU_STR_INFO_FLAG;
-#endif
 
 	ret = of_property_read_u32(data->dev->of_node, "irqcnt", &data->irqcnt);
 	if (ret) {
@@ -325,9 +291,6 @@ static int exynos_ppmpu_probe(struct platform_device *pdev)
 	dev_dbg(data->dev,
 		"The number of PPMPU interrupt : %d\n",
 		data->irqcnt);
-
-	if (data->tzc_ver == TZASC_VERSION_TZC400)
-		irqf = IRQF_ONESHOT;
 
 	for (i = 0; i < data->irqcnt; i++) {
 		data->irq[i] = irq_of_parse_and_map(data->dev->of_node, i);
@@ -343,7 +306,7 @@ static int exynos_ppmpu_probe(struct platform_device *pdev)
 						data->irq[i],
 						exynos_ppmpu_irq_handler,
 						exynos_ppmpu_irq_handler_thread,
-						irqf,
+						IRQF_ONESHOT,
 						pdev->name,
 						data);
 		if (ret) {
@@ -353,6 +316,10 @@ static int exynos_ppmpu_probe(struct platform_device *pdev)
 			goto out_with_dma_free;
 		}
 	}
+
+#ifdef CONFIG_EXYNOS_PPMPU_ILLEGAL_READ_LOGGING
+	data->info_flag = STR_INFO_FLAG;
+#endif
 
 	dev_info(data->dev, "Exynos PPMPU driver probe done!\n");
 
@@ -368,11 +335,6 @@ out_with_dma_free:
 			  data->fail_info_pa);
 	data->fail_info = NULL;
 	data->fail_info_pa = 0;
-
-	data->ch_num = 0;
-	data->tzc_ver = 0;
-	data->irqcnt = 0;
-	data->info_flag = 0;
 
 out:
 	return ret;
@@ -400,7 +362,6 @@ static int exynos_ppmpu_remove(struct platform_device *pdev)
 		data->irq[i] = 0;
 
 	data->ch_num = 0;
-	data->tzc_ver = 0;
 	data->irqcnt = 0;
 	data->info_flag = 0;
 

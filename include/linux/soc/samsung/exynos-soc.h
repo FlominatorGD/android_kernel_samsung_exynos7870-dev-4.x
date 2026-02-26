@@ -13,7 +13,6 @@
 #define __EXYNOS_SOC_H
 
 #define EXYNOS3250_SOC_ID	0xE3472000
-#define EXYNOS3830_SOC_ID	0xE3830000
 #define EXYNOS4210_SOC_ID	0x43210000
 #define EXYNOS4212_SOC_ID	0x43220000
 #define EXYNOS4412_SOC_ID	0xE4412000
@@ -28,8 +27,7 @@
 #define EXYNOS8895_SOC_ID	0xE8895000
 #define EXYNOS7872_SOC_ID	0x005E7872
 #define EXYNOS9810_SOC_ID	0xE9810000
-#define EXYNOS9610_SOC_ID	0xE9610000
-#define EXYNOS9630_SOC_ID	0xE9630000
+#define EXYNOS9820_SOC_ID	0xE9820000
 
 #define EXYNOS_SOC_MASK		0xFFFFF000
 #define EXYNOS_SOC_MASK_V2	0x00FFFFFF
@@ -62,10 +60,9 @@ struct exynos_chipid_info {
 	u32 main_rev;
 	u32 sub_rev;
 	u32 lot_id;
+	char *lot_id2;
 	u64 unique_id;
-	u64 memsize;
 	struct exynos_chipid_variant *drv_data;
-	struct platform_device *pdev;
 };
 
 extern struct exynos_chipid_info exynos_soc_info;

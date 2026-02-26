@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_qos.h
+/* sound/soc/samsung/abox/abox_qos.h
  *
  * ALSA SoC - Samsung Abox QoS driver
  *
@@ -18,6 +18,7 @@ enum abox_qos_class {
 	ABOX_QOS_AUD = PM_QOS_AUD_THROUGHPUT,
 	ABOX_QOS_CL0 = PM_QOS_CLUSTER0_FREQ_MIN,
 	ABOX_QOS_CL1 = PM_QOS_CLUSTER1_FREQ_MIN,
+	ABOX_QOS_CL2 = PM_QOS_CLUSTER2_FREQ_MIN,
 	ABOX_QOS_INT = PM_QOS_DEVICE_THROUGHPUT,
 	ABOX_QOS_MIF = PM_QOS_BUS_THROUGHPUT,
 };
@@ -34,7 +35,7 @@ struct abox_qos {
 	enum abox_qos_class qos_class;
 	unsigned int val;
 	const char *name;
-	struct abox_qos_req req_array[32];
+	struct abox_qos_req req_array[64];
 };
 
 /**
@@ -129,6 +130,21 @@ static inline int abox_qos_request_cl1(struct device *dev, unsigned int id,
 }
 
 /**
+ * Request minimum lock on PM QoS CLUSTER2
+ * @param[in]	dev		pointer to struct dev which invokes this API
+ * @param[in]	id		key which is used as unique handle
+ * @param[in]	val		QoS value
+ * @param[in]	name		cookie for logging
+ * @return	error code or 0
+ */
+static inline int abox_qos_request_cl2(struct device *dev, unsigned int id,
+		unsigned int val, const char *name)
+{
+	dev_dbg(dev, "%s(%#x, %d)\n", __func__, id, val);
+	return abox_qos_request(dev, ABOX_QOS_CL2, id, val, name);
+}
+
+/**
  * Request minimum lock on PM QoS INT
  * @param[in]	dev		pointer to struct dev which invokes this API
  * @param[in]	id		key which is used as unique handle
@@ -177,4 +193,10 @@ extern void abox_qos_print(struct device *dev, enum abox_qos_class qos_class);
  * @param[in]	adev		abox device
  */
 extern void abox_qos_init(struct device *adev);
+
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+extern ssize_t abox_qos_read_file(struct file *file, char __user *user_buf,
+				    size_t count, loff_t *ppos);
+#endif
+
 #endif /* __SND_SOC_ABOX_QOS_H */

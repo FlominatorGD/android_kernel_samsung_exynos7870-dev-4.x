@@ -39,6 +39,7 @@
 #include <soc/samsung/cal-if.h>
 #include <soc/samsung/ect_parser.h>
 
+#include <dt-bindings/clock/exynos9820.h>
 /*
  * Cooling state <-> CPUFreq frequency
  *
@@ -273,7 +274,7 @@ static int build_static_power_table(struct device_node *np, struct cpufreq_cooli
 	int ratio, asv_group, cal_id, ret = 0;
 
 	void *gen_block;
-	struct ect_gen_param_table *volt_temp_param, *asv_param;
+	struct ect_gen_param_table *volt_temp_param = NULL, *asv_param = NULL;
 	int ratio_table[16] = { 0, 18, 22, 27, 33, 40, 49, 60, 73, 89, 108, 131, 159, 194, 232, 250};
 
 	ret = of_property_read_u32(np, "cal-id", &cal_id);
@@ -297,8 +298,18 @@ static int build_static_power_table(struct device_node *np, struct cpufreq_cooli
 		return -EINVAL;
 	}
 
+#if defined(CONFIG_SOC_EXYNOS9820)
+	if (cal_id == ACPM_DVFS_CPUCL1) {
+		volt_temp_param = ect_gen_param_get_table(gen_block, "DTM_MID_VOLT_TEMP");
+		asv_param = ect_gen_param_get_table(gen_block, "DTM_MID_ASV");
+	} else if (cal_id == ACPM_DVFS_CPUCL2) {
+		volt_temp_param = ect_gen_param_get_table(gen_block, "DTM_BIG_VOLT_TEMP");
+		asv_param = ect_gen_param_get_table(gen_block, "DTM_BIG_ASV");
+	}
+#else
 	volt_temp_param = ect_gen_param_get_table(gen_block, "DTM_BIG_VOLT_TEMP");
 	asv_param = ect_gen_param_get_table(gen_block, "DTM_BIG_ASV");
+#endif
 
 	if (volt_temp_param && asv_param) {
 		cpufreq_cdev->var_volt_size = volt_temp_param->num_of_row - 1;
@@ -789,7 +800,7 @@ static int cpufreq_power2state(struct thermal_cooling_device *cdev,
 	cpumask_and(&tempmask, policy->related_cpus, cpu_online_mask);
 	num_cpus = cpumask_weight(&tempmask);
 
-	cpu = cpumask_any_and(policy->related_cpus, cpu_online_mask);
+	cpu = cpumask_first(&tempmask);
 
 	/* None of our cpus are online */
 	if (cpu >= nr_cpu_ids)
@@ -868,12 +879,10 @@ static struct notifier_block thermal_cpufreq_notifier_block = {
 	.notifier_call = cpufreq_thermal_notifier,
 };
 
-#ifdef CONFIG_EXYNOS_THERMAL
 int exynos_tmu_add_notifier(struct notifier_block *n)
 {
 	return blocking_notifier_chain_register(&cpu_notifier, n);
 }
-#endif
 
 static unsigned int find_next_max(struct cpufreq_frequency_table *table,
 				  unsigned int prev_max)

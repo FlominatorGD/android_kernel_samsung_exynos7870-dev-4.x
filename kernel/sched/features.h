@@ -87,19 +87,18 @@ SCHED_FEAT(WA_WEIGHT, true)
 SCHED_FEAT(WA_BIAS, true)
 
 /*
+ * UtilEstimation. Use estimated CPU utilization.
+ */
+SCHED_FEAT(UTIL_EST, true)
+
+/*
  * Energy aware scheduling. Use platform energy model to guide scheduling
  * decisions optimizing for energy efficiency.
  */
 #ifdef CONFIG_DEFAULT_USE_ENERGY_AWARE
 SCHED_FEAT(ENERGY_AWARE, true)
-
-/*
- * UtilEstimation. Use estimated CPU utilization.
- */
-SCHED_FEAT(UTIL_EST, true)
 #else
 SCHED_FEAT(ENERGY_AWARE, false)
-SCHED_FEAT(UTIL_EST, false)
 #endif
 
 /*

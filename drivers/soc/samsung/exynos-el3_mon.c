@@ -19,6 +19,7 @@
 
 static char *smc_debug_mem;
 
+
 #ifdef CONFIG_EXYNOS_KERNEL_PROTECTION
 static int __init exynos_protect_kernel_text(void)
 {
@@ -47,10 +48,13 @@ static int __init exynos_protect_kernel_text(void)
 	ktext_start_pa = (unsigned long)__pa_symbol(_text);
 	ktext_end_pa = (unsigned long)__pa_symbol(_etext);
 
-	pr_info("%s: Kernel text start VA(%#lx), PA(%#lx)\n",
-			__func__, ktext_start_va, ktext_start_pa);
-	pr_info("%s: Kernel text end VA(%#lx), PA(%#lx)\n",
-			__func__, ktext_end_va, ktext_end_pa);
+	pr_info("%s: Kernel text start VA(%pK), PA(%pK)\n",
+			__func__, (void *)ktext_start_va, (void *)ktext_start_pa);
+	pr_info("%s: Kernel text end VA(%pK), PA(%pK)\n",
+			__func__, (void *)ktext_end_va, (void *)ktext_end_pa);
+
+	/* I-cache flush to the PoC */
+	flush_icache_range_poc(ktext_start_va, ktext_end_va);
 
 	/* Request to protect kernel text area */
 	ret = exynos_smc(SMC_CMD_PROTECT_KERNEL_TEXT,
@@ -102,7 +106,7 @@ static int  __init exynos_set_debug_mem(void)
 	__flush_dcache_area(smc_debug_mem, size);
 
 	phys = (char *)virt_to_phys(smc_debug_mem);
-	pr_err("%s: alloc kmem for smc_dbg virt: 0x%p phys: 0x%p size: %d.\n",
+	pr_err("%s: alloc kmem for smc_dbg virt: 0x%pK phys: 0x%pK size: %d.\n",
 			__func__, smc_debug_mem, phys, size);
 	ret = exynos_smc(SMC_CMD_SET_DEBUG_MEM, (u64)phys, (u64)size, 0);
 
@@ -115,12 +119,12 @@ static int  __init exynos_set_debug_mem(void)
 
 	return 0;
 }
-arch_initcall(exynos_set_debug_mem);
+late_initcall(exynos_set_debug_mem);
 
 static void exynos_smart_exception_handler(unsigned int id,
 				unsigned long elr, unsigned long esr,
 				unsigned long sctlr, unsigned long ttbr,
-				unsigned long far, unsigned long x6,
+				unsigned long tcr, unsigned long x6,
 				unsigned int offset)
 {
 	int i;
@@ -142,33 +146,54 @@ static void exynos_smart_exception_handler(unsigned int id,
 								elr, esr);
 		pr_err("sctlr_el1 : 0x%016lx, \tttbr_el1 : 0x%016lx\n",
 								sctlr, ttbr);
-		pr_err("far_el1   : 0x%016lx, \tlr (EL1) : 0x%016lx\n\n",
-								far, x6);
+		pr_err("tcr_el1   : 0x%016lx, \tlr (EL1) : 0x%016lx\n\n",
+								tcr, x6);
+		if ((offset > 0x0 && offset < (PAGE_SIZE * 2))
+				&& !(offset % 0x8) && (smc_debug_mem)) {
+
+			/* Invalidate smc_debug_mem for cache coherency */
+			__inval_dcache_area(smc_debug_mem, PAGE_SIZE * 2);
+
+			tmp = (unsigned long)smc_debug_mem;
+			tmp += (unsigned long)offset;
+			ptr = (unsigned long *)tmp;
+
+			for (i = 0; i < 15; i++) {
+				pr_err("x%02d : 0x%016lx, \tx%02d : 0x%016lx\n",
+					i * 2, ptr[i * 2],
+					i * 2 + 1, ptr[i * 2 + 1]);
+			}
+			pr_err("x%02d : 0x%016lx\n", i * 2,  ptr[i * 2]);
+		} else {
+			pr_err("GPR dump offset is not valid 0x%x\n", offset);
+		}
 	} else {
 		pr_err("elr_el3   : 0x%016lx, \tesr_el3  : 0x%016lx\n",
 								elr, esr);
 		pr_err("sctlr_el3 : 0x%016lx, \tttbr_el3 : 0x%016lx\n",
 								sctlr, ttbr);
-		pr_err("far_el3   : 0x%016lx, \tscr_el3  : 0x%016lx\n\n",
-								far, x6);
-	}
+		pr_err("tcr_el3   : 0x%016lx, \tscr_el3  : 0x%016lx\n\n",
+								tcr, x6);
 
-	if ((offset > 0x0 && offset < (PAGE_SIZE * 2))
-			&& !(offset % 0x8) && (smc_debug_mem)) {
+		if ((offset > 0x0 && offset < (PAGE_SIZE * 2))
+				&& !(offset % 0x8) && (smc_debug_mem)) {
 
-		/* Invalidate smc_debug_mem for cache coherency */
-		__inval_dcache_area(smc_debug_mem, PAGE_SIZE * 2);
+			/* Invalidate smc_debug_mem for cache coherency */
+			__inval_dcache_area(smc_debug_mem, PAGE_SIZE * 2);
 
-		tmp = (unsigned long)smc_debug_mem;
-		tmp += (unsigned long)offset;
-		ptr = (unsigned long *)tmp;
+			tmp = (unsigned long)smc_debug_mem;
+			tmp += (unsigned long)offset;
+			ptr = (unsigned long *)tmp;
 
-		for (i = 0; i < 15; i++) {
-			pr_err("x%02d : 0x%016lx, \tx%02d : 0x%016lx\n",
-				i * 2, ptr[i * 2],
-				i * 2 + 1, ptr[i * 2 + 1]);
+			for (i = 0; i < 15; i++) {
+				pr_err("x%02d : 0x%016lx, \tx%02d : 0x%016lx\n",
+					i * 2, ptr[i * 2],
+					i * 2 + 1, ptr[i * 2 + 1]);
+			}
+			pr_err("x%02d : 0x%016lx\n", i * 2,  ptr[i * 2]);
+		} else {
+			pr_err("GPR dump offset is not valid 0x%x\n", offset);
 		}
-		pr_err("x%02d : 0x%016lx\n", i * 2,  ptr[i * 2]);
 	}
 
 	pr_err("\n[WARNING] IT'S GOING TO CAUSE KERNEL PANIC FOR DEBUGGING.\n\n");
@@ -203,58 +228,18 @@ static int  __init exynos_set_seh_address(void)
 }
 arch_initcall(exynos_set_seh_address);
 
-/*
- * The function to save TZPC of power domains
- * by calling SMC to EL3 Monitor
- *
- * Power domains for runtime PM
- */
 int exynos_pd_tz_save(unsigned int addr)
 {
 	return exynos_smc(SMC_CMD_PREAPRE_PD_ONOFF,
 				EXYNOS_GET_IN_PD_DOWN,
 				addr,
-				EXYNOS_PD_RUNTIME_PM);
+				RUNTIME_PM_TZPC_GROUP);
 }
 
-/*
- * The function to restore TZPC of power domains
- * by calling SMC to EL3 Monitor
- *
- * Power domains for runtime PM
- */
 int exynos_pd_tz_restore(unsigned int addr)
 {
 	return exynos_smc(SMC_CMD_PREAPRE_PD_ONOFF,
 				EXYNOS_WAKEUP_PD_DOWN,
 				addr,
-				EXYNOS_PD_RUNTIME_PM);
-}
-
-/*
- * The function to save TZPC of power domain
- * by calling SMC to EL3 Monitor
- *
- * Power domains for connectivity
- */
-int exynos_conn_tz_save(unsigned int addr)
-{
-	return exynos_smc(SMC_CMD_PREAPRE_PD_ONOFF,
-				EXYNOS_GET_IN_PD_DOWN,
-				addr,
-				EXYNOS_PD_CONNECTIVITY);
-}
-
-/*
- * The function to restore TZPC of power domain
- * by calling SMC to EL3 Monitor
- *
- * Power domains for connectivity
- */
-int exynos_conn_tz_restore(unsigned int addr)
-{
-	return exynos_smc(SMC_CMD_PREAPRE_PD_ONOFF,
-				EXYNOS_WAKEUP_PD_DOWN,
-				addr,
-				EXYNOS_PD_CONNECTIVITY);
+				RUNTIME_PM_TZPC_GROUP);
 }

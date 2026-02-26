@@ -3,15 +3,6 @@
 
 #include <linux/types.h>
 #include <linux/kernel.h>
-
-#define EVCLKPERM	 1
-#define EVCLKNOENT	 2
-#define EVCLKAGAIN	11
-#define EVCLKNOMEM	12
-#define EVCLKFAULT	14	/* Bad address */
-#define EVCLKBUSY	16
-#define EVCLKINVAL	22
-#define EVCLKTIMEOUT	110
 #include "vclk.h"
 
 struct dentry;
@@ -30,10 +21,18 @@ struct dentry;
 	})
 #endif
 
-#include <asm/div64.h>
 #ifndef do_div
 #define do_div(a, b)	(a /= b)
 #endif
+
+#define EVCLKPERM	 1
+#define EVCLKNOENT	 2
+#define EVCLKAGAIN	11
+#define EVCLKNOMEM	12
+#define EVCLKFAULT	14	/* Bad address */
+#define EVCLKBUSY	16
+#define EVCLKINVAL	22
+#define EVCLKTIMEOUT	110
 
 #define	MASK_OF_TYPE		0x0F000000
 #define	MASK_OF_SUBTYPE		0x00FF0000
@@ -145,11 +144,12 @@ struct vclk {
 };
 
 enum clk_pll_type {
-	pll_0816x = 8160,
-	pll_0818x = 8180,
-	pll_0822x = 8220,
-	pll_0831x = 8310,
-
+	PLL_0831X = 8310,
+	PLL_0817X = 8170,
+	PLL_0818X = 8180,
+	PLL_0820X = 8200,
+	PLL_0821X = 8210,
+	PLL_0822X = 8220,
 	PLL_1416X = 14160,
 	PLL_1417X = 14170,
 	PLL_1418X = 14180,
@@ -163,7 +163,6 @@ enum clk_pll_type {
 	PLL_1050X = 10500,
 	PLL_1051X = 10510,
 	PLL_1052X = 10520,
-	PLL_1054X = 10540,
 	PLL_1061X = 10610,
 
 	PLL_1016X = 10160,
@@ -171,6 +170,8 @@ enum clk_pll_type {
 	PLL_1018X = 10180,
 	PLL_1019X = 10190,
 	PLL_1031X = 10310,
+
+	DPL_L0817X= 138170,
 };
 
 enum margin_id {
@@ -191,9 +192,6 @@ enum margin_id {
 	MARGIN_MFC,
 	MARGIN_NPU,
 	MARGIN_MID,
-	MARGIN_DSP,
-	MARGIN_TNR,
-	MARGIN_DNC,
 	MAX_MARGIN_ID,
 };
 
@@ -410,10 +408,7 @@ struct cmucal_option {
 struct cmucal_clkout {
 	struct cmucal_clk	clk;
 	unsigned int		sel;
-	unsigned int		en;
 };
-
-#define ARRAY_SIZE_OR_0(a) (a != NULL ? sizeof(a) / sizeof((a)[0]) : 0)
 
 #define CMUCAL_VCLK(_id, _lut, _list, _seq, _switch) \
 [_id & MASK_OF_ID] = {	\
@@ -422,7 +417,7 @@ struct cmucal_clkout {
 	.lut		= _lut,						\
 	.list		= _list,					\
 	.seq		= _seq,						\
-	.num_rates	= ARRAY_SIZE_OR_0(_lut),			\
+	.num_rates	= (sizeof(_lut) / sizeof((_lut)[0])),		\
 	.num_list	= (sizeof(_list) / sizeof((_list)[0])),		\
 	.switch_info	= _switch,					\
 	.ops		= NULL,						\
@@ -435,8 +430,8 @@ struct cmucal_clkout {
 	.lut		= _lut,						\
 	.list		= _list,					\
 	.seq		= _seq,						\
-	.num_rates	= ARRAY_SIZE_OR_0(_lut),			\
-	.num_list	= ARRAY_SIZE_OR_0(_list),			\
+	.num_rates	= (sizeof(_lut) / sizeof((_lut)[0])),		\
+	.num_list	= (sizeof(_list) / sizeof((_list)[0])),		\
 	.switch_info	= _switch,					\
 	.ops		= NULL,						\
 	.margin_id	= _margin_id,					\
@@ -494,7 +489,7 @@ struct cmucal_clkout {
 	.clk.status_idx	= _so,				\
 	.clk.enable_idx	= _eo,				\
 	.pid		= _pids,			\
-	.num_parents	= ARRAY_SIZE_OR_0(_pids)	\
+	.num_parents	= (sizeof(_pids) / sizeof((_pids)[0])), \
 }
 
 #define CLK_DIV(_id, _pid, _o, _so, _eo)		\
@@ -528,7 +523,7 @@ struct cmucal_clkout {
 	.ignore_idx     = _ig,                          \
 }
 #else
-#define CLK_QCH(_id, _o, _so, _eo, _ig)			\
+#define CLK_QCH(_id, _o, _so, _eo)			\
 [_id & MASK_OF_ID] = {	\
 	.clk.id		= _id,				\
 	.clk.name	= #_id,				\
@@ -565,7 +560,7 @@ struct cmucal_clkout {
 	.ratio		= _ratio,			\
 }
 
-#define CLKOUT(_id, _o, _s, _w, _sel, _es, _ew, _en)	\
+#define CLKOUT(_id, _o, _s, _w, _sel, _es, _ew)		\
 [_id & MASK_OF_ID] = {	\
 	.clk.id		= _id,				\
 	.clk.name	= #_id,				\
@@ -575,7 +570,6 @@ struct cmucal_clkout {
 	.clk.e_shift	= _es,				\
 	.clk.e_width	= _ew,				\
 	.sel		= _sel,				\
-	.en		= _en,				\
 }
 
 #define PLL_RATE_MPS(_rate, _m, _p, _s)			\
@@ -611,12 +605,6 @@ extern void *cmucal_get_sfr_node(unsigned int id);
 extern unsigned int cmucal_get_id(char *name);
 extern unsigned int cmucal_get_id_by_addr(unsigned int addr);
 extern void (*cal_data_init)(void);
-#ifdef CONFIG_CMUCAL_DEBUG
-extern void cmucal_dbg_set_cmu_top_base(u32 base_addr);
-#else
-static inline void cmucal_dbg_set_cmu_top_base(u32 base_addr)
-{
-	return ;
-}
-#endif
+extern int (*cal_check_hiu_dvfs_id)(u32 id);
+extern void (*cal_set_cmu_smpl_warn)(void);
 #endif

@@ -22,6 +22,7 @@
 #include <linux/debug-snapshot.h>
 #include <linux/ktime.h>
 
+#include <soc/samsung/exynos-adv-tracer.h>
 #include <soc/samsung/exynos-adv-tracer-ipc.h>
 #include <soc/samsung/exynos-pmu.h>
 
@@ -340,7 +341,7 @@ int adv_tracer_ipc_request_channel(struct device_node *np,
 	cmd.buffer[1] = plugin_len;
 	memcpy(&cmd.buffer[2], plugin_name, sizeof(unsigned int));
 
-	ret = adv_tracer_ipc_send_data(EAT_FRM_CHANNEL, &cmd);
+	ret = adv_tracer_ipc_send_data_polling(EAT_FRM_CHANNEL, &cmd);
 	if (ret) {
 		pr_err("%s: %d channel is failed to request\n", __func__, EAT_FRM_CHANNEL);
 		return -ENODEV;
@@ -442,6 +443,8 @@ int adv_tracer_ipc_init(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
+	dev_info(&pdev->dev, "[EAT +] %s\n", __func__);
+
 	adv_tracer_ipc = devm_kzalloc(&pdev->dev,
 				sizeof(struct adv_tracer_ipc_main), GFP_KERNEL);
 
@@ -475,6 +478,6 @@ int adv_tracer_ipc_init(struct platform_device *pdev)
 		return ret;
 	}
 
-	dev_info(&pdev->dev, "%s successful.\n", __func__);
+	dev_info(&pdev->dev, "[EAT -] %s\n", __func__);
 	return ret;
 }

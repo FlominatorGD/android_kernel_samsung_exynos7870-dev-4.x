@@ -520,7 +520,7 @@ void phy_exynos_usbdp_g2_enable(struct exynos_usbphy_info *info)
 {
 	void __iomem *regs_base = info->regs_base;
 	u32 reg;
-	return;
+
 
 #if !defined(CONFIG_SOC_EXYNOS9820_EVT0)
 		/* { 2018.07.05 Power Optimization Code */

@@ -521,18 +521,19 @@ config UID_SYS_STATS_DEBUG
 	help
 	  Per TASK based io statistics exported to /proc/uid_io
 
+config UID_STAT_JBD_SUBMIT_BH
+	bool "Export amount of submit_bh performed by JBD thread"
+	depends on SUBMIT_BH_IO_ACCOUNTING
+	default n
+	help
+	  Export amount of submit_bh performed by JBD thread
+	  (Exported to Background I/O amount)
+
 config MEMORY_STATE_TIME
 	tristate "Memory freq/bandwidth time statistics"
 	depends on PROFILING
 	help
 	  Memory time statistics exported to /sys/kernel/memory_state_time
-
-config SPR5801
-	tristate "Gyrfalcon SPR5801"
-	depends on I2C && OF && GPIOLIB
-	help
-	  AI chip that offers some NPU (Neural Processing Unit) capabilities.
-	  Firmware is uploaded via I2C. Data offloading happens via USB.
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
@@ -546,5 +547,10 @@ source "drivers/misc/mic/Kconfig"
 source "drivers/misc/genwqe/Kconfig"
 source "drivers/misc/echo/Kconfig"
 source "drivers/misc/cxl/Kconfig"
-source "drivers/misc/samsung/Kconfig"
+source "drivers/misc/mcu_ipc/Kconfig"
+source "drivers/misc/modem_v1/Kconfig"
+source "drivers/misc/modem_v1_dual/Kconfig"
+source "drivers/misc/tzdev/Kconfig"
+source "drivers/misc/tui/Kconfig"
+source "drivers/misc/dev_ril_bridge/Kconfig"
 endmenu

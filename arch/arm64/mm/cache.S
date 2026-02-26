@@ -95,6 +95,8 @@ ENTRY(flush_cache_all)
 	bl	__flush_dcache_all
 	mov	x0, #0
 	ic	ialluis				// I+BTB cache invalidate
+	dsb	ish
+	isb
 	ret	x12
 ENDPROC(flush_cache_all)
 
@@ -115,6 +117,8 @@ ENTRY(flush_cache_louis)
         bl      __flush_dcache_louis
         mov     x0, #0
         ic      ialluis
+        dsb	ish
+        isb
         ret     x12
 ENDPROC(flush_cache_louis)
 
@@ -147,7 +151,11 @@ ENTRY(__flush_cache_user_range)
 	sub	x3, x2, #1
 	bic	x4, x0, x3
 1:
+#ifndef	CONFIG_SOC_EXYNOS9810
 user_alt 9f, "dc cvau, x4",  "dc civac, x4",  ARM64_WORKAROUND_CLEAN_CACHE
+#else
+user_alt 9f, "dc civac, x4",  "dc civac, x4",  ARM64_WORKAROUND_CLEAN_CACHE
+#endif
 	add	x4, x4, x2
 	cmp	x4, x1
 	b.lo	1b
@@ -158,6 +166,8 @@ user_alt 9f, "dc cvau, x4",  "dc civac, x4",  ARM64_WORKAROUND_CLEAN_CACHE
 	bic	x4, x0, x3
 1:
 USER(9f, ic	ivau, x4	)		// invalidate I line PoU
+	dsb	ish
+	isb
 	add	x4, x4, x2
 	cmp	x4, x1
 	b.lo	1b
@@ -172,6 +182,49 @@ USER(9f, ic	ivau, x4	)		// invalidate I line PoU
 	b	1b
 ENDPROC(flush_icache_range)
 ENDPROC(__flush_cache_user_range)
+
+/*
+ *	flush_icache_range_poc(start,end)
+ *
+ *	Ensure that the I and D caches for the specified region [start, end]
+ *	are cleaned and invalidated to the PoC.
+ *
+ *	- start   - virtual start address of region
+ *	- end     - virtual end address of region
+ */
+
+ENTRY(flush_icache_range_poc)
+	uaccess_ttbr0_enable x2, x3, x4
+	dcache_line_size x2, x3
+	sub	x3, x2, #1
+	bic	x4, x0, x3
+1:
+USER(9f, dc	civac, x4	)	// clean D line to PoC
+	add	x4, x4, x2
+	cmp	x4, x1
+	b.lo	1b
+	dsb	ish
+
+	icache_line_size x2, x3
+	sub	x3, x2, #1
+	bic	x4, x0, x3
+1:
+USER(9f, ic	ivau, x4	)	// invalidate I line PoU
+	dsb	ish
+	isb
+	add	x4, x4, x2
+	cmp	x4, x1
+	b.lo	1b
+	dsb	ish
+	isb
+	mov	x0, #0
+1:
+	uaccess_ttbr0_disable x1, x2
+	ret
+9:
+	mov	x0, #-EFAULT
+	b	1b
+ENDPROC(flush_icache_range_poc)
 
 /*
  *	__flush_dcache_area(kaddr, size)
@@ -197,7 +250,11 @@ ENDPIPROC(__flush_dcache_area)
  *	- size    - size in question
  */
 ENTRY(__clean_dcache_area_pou)
+#ifndef	CONFIG_SOC_EXYNOS9810
 	dcache_by_line_op cvau, ish, x0, x1, x2, x3
+#else
+	dcache_by_line_op civac, ish, x0, x1, x2, x3
+#endif
 	ret
 ENDPROC(__clean_dcache_area_pou)
 

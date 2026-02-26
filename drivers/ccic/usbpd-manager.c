@@ -1,5 +1,5 @@
 #include <linux/ccic/core.h>
-#include <linux/ccic/s2mm005_usbpd_msg.h>
+#include <linux/ccic/usbpd_msg.h>
 #include <linux/ccic/usbpd_typec.h>
 #include <linux/power_supply.h>
 #include <linux/delay.h>
@@ -130,19 +130,14 @@ static int usbpd_get_src_capacity_info(struct usbpd_dev *udev)
 static void usbpd_process_pd_dr_swap(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 
 	if (desc == NULL)
 		return;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_pd_dr_swap)
-			return ops->usbpd_process_pd_dr_swap(udev);
-	}
+	if (ops->usbpd_process_pd_dr_swap)
+		return ops->usbpd_process_pd_dr_swap(udev);
 
 	dev_info(&udev->dev, "PR_Swap requested to %s\n", pd_info->is_src ? "SOURCE" : "SINK");
 
@@ -178,19 +173,14 @@ static void usbpd_process_pd_dr_swap(struct usbpd_dev *udev)
 static void usbpd_process_pd_pr_swap(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 
 	if (desc == NULL)
 		return;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_pd_pr_swap)
-			return ops->usbpd_process_pd_pr_swap(udev);
-	}
+	if (ops->usbpd_process_pd_pr_swap)
+		return ops->usbpd_process_pd_pr_swap(udev);
 
 	dev_info(&udev->dev, "PR_Swap requested to %s\n", pd_info->is_src ? "SOURCE" : "SINK");
 
@@ -211,26 +201,18 @@ static void usbpd_process_pd_pr_swap(struct usbpd_dev *udev)
 static void usbpd_process_pd_src_cap(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 #if defined(CONFIG_IFCONN_NOTIFIER)
 	struct ifconn_notifier_template *template = &udev->ifconn_template;
 #endif
 	int available_pdo_num = 0;
 	usbpd_pdic_sink_state_t *sink_status = &udev->pd_noti.sink_status;
 
-	if (desc == NULL)
-		return;
-
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
 	pd_info->do_power_nego = 0;
 
-	if (ops != NULL) {
-		if (ops->usbpd_process_pd_src_cap)
-			return ops->usbpd_process_pd_src_cap(udev);
-	}
+	if (ops->usbpd_process_pd_src_cap)
+		return ops->usbpd_process_pd_src_cap(udev);
 
 #if defined(CONFIG_IFCONN_NOTIFIER)
 	template->event = IFCONN_NOTIFY_EVENT_PD_SINK;
@@ -319,20 +301,12 @@ void usbpd_dp_detach(struct usbpd_dev *udev)
 int usbpd_process_cc_attach(struct usbpd_dev *udev, usbpd_attach_mode_t attach_mode)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 	usbpd_pdic_sink_state_t *sink_status = &udev->pd_noti.sink_status;
 
-	if (desc == NULL)
-		return -EINVAL;
-
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_cc_attach)
-			return ops->usbpd_process_cc_attach(udev, attach_mode);
-	}
+	if (ops->usbpd_process_cc_attach)
+		return ops->usbpd_process_cc_attach(udev, attach_mode);
 
 	if (pd_info->attach_mode != attach_mode) {
 		pd_info->attach_mode = attach_mode;
@@ -474,10 +448,8 @@ int usbpd_process_cc_attach(struct usbpd_dev *udev, usbpd_attach_mode_t attach_m
 					IFCONN_NOTIFY_EVENT_DETACH, NULL);
 				pd_info->data_role = USB_STATUS_NOTIFY_DETACH;
 #if defined(CONFIG_DUAL_ROLE_USB_INTF)
-				if (!pd_info->try_state_change && ops != NULL) {
-					if (ops->usbpd_set_rprd_mode)
-						ops->usbpd_set_rprd_mode(udev, TYPE_C_ATTACH_DRP);
-				}
+				if (!pd_info->try_state_change)
+					ops->usbpd_set_rprd_mode(udev, TYPE_C_ATTACH_DRP);
 #endif
 			}
 
@@ -496,20 +468,16 @@ int usbpd_process_cc_attach(struct usbpd_dev *udev, usbpd_attach_mode_t attach_m
 	return 0;
 }
 
-static int usbpd_process_check_accessory(struct usbpd_dev *udev)
+int usbpd_process_check_accessory(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
+	const struct usbpd_ops *ops = desc->ops;
 
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_check_accessory)
-			return ops->usbpd_process_check_accessory(udev);
-	}
+	if (ops->usbpd_process_check_accessory)
+		return ops->usbpd_process_check_accessory(udev);
 
 	return 0;
 }
@@ -518,19 +486,14 @@ static int usbpd_process_check_accessory(struct usbpd_dev *udev)
 static int usbpd_process_discover_identity(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_discover_identity)
-			return ops->usbpd_process_discover_identity(udev);
-	}
+	if (ops->usbpd_process_discover_identity)
+		return ops->usbpd_process_discover_identity(udev);
 
 	pd_info->is_sent_pin_configuration = 0;
 	pd_info->is_samsung_accessory_enter_mode = 0;
@@ -550,20 +513,15 @@ static int usbpd_process_discover_identity(struct usbpd_dev *udev)
 static int usbpd_process_discover_svids(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 	/* struct ifconn_notifier_template *template = &udev->ifconn_template; */
 
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_discover_svids)
-			return ops->usbpd_process_discover_svids(udev);
-	}
+	if (ops->usbpd_process_discover_svids)
+		return ops->usbpd_process_discover_svids(udev);
 
 	pd_info->SVID_0 = pd_info->data_obj[1].discover_svids_vdo.svid_0;
 	pd_info->SVID_1 = pd_info->data_obj[1].discover_svids_vdo.svid_1;
@@ -616,28 +574,17 @@ static int usbpd_process_discover_svids(struct usbpd_dev *udev)
 static int usbpd_process_discover_modes(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 	/* TODO add error exception */
-	u8 port_capability = 0;
-	u8 receptacle_indication = 0;
+	u8 port_capability = pd_info->data_obj[1].discover_mode_dp_capability.port_capability;
+	u8 receptacle_indication = pd_info->data_obj[1].discover_mode_dp_capability.receptacle_indication;
 
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (pd_info == NULL)
-		return -EINVAL;
-
-	port_capability = pd_info->data_obj[1].discover_mode_dp_capability.port_capability;
-	receptacle_indication = pd_info->data_obj[1].discover_mode_dp_capability.receptacle_indication;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_discover_modes)
-			return ops->usbpd_process_discover_modes(udev);
-	}
+	if (ops->usbpd_process_discover_modes)
+		return ops->usbpd_process_discover_modes(udev);
 
 	dev_info(&udev->dev, "%s : vendor_id = 0x%04x , svid_1 = 0x%04x\n",
 			__func__, pd_info->data_obj[0].structured_vdm.svid, pd_info->SVID_1);
@@ -693,18 +640,14 @@ static int usbpd_process_discover_modes(struct usbpd_dev *udev)
 		dev_info(&udev->dev, "pDP_DIS_MODE->DATA_MSG_VDM_HEADER.DATA = 0x%08X\n\r", pd_info->data_obj[0].object);
 		dev_info(&udev->dev, "pDP_DIS_MODE->DATA_MSG_MODE_VDO_DP.DATA = 0x%08X\n\r", pd_info->data_obj[1].object);
 
-		if (ops != NULL) {
-			if (ops->usbpd_pd_next_state)
-				ops->usbpd_pd_next_state(udev);
-		}
+		if (ops->usbpd_pd_next_state)
+			ops->usbpd_pd_next_state(udev);
 	}
 
 	dev_info(&udev->dev, "%s\n", __func__);
 
-	if (ops != NULL) {
-		if (ops->usbpd_clear_discover_mode)
-			ops->usbpd_clear_discover_mode(udev);
-	}
+	if (ops->usbpd_clear_discover_mode)
+		ops->usbpd_clear_discover_mode(udev);
 
 	return 0;
 }
@@ -712,19 +655,14 @@ static int usbpd_process_discover_modes(struct usbpd_dev *udev)
 static int usbpd_process_enter_mode(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_enter_mode)
-			return ops->usbpd_process_enter_mode(udev);
-	}
+	if (ops->usbpd_process_enter_mode)
+		return ops->usbpd_process_enter_mode(udev);
 
 	if (pd_info->data_obj[0].structured_vdm.command_type == Responder_ACK) {
 		dev_info(&udev->dev, "%s : EnterMode ACK.\n", __func__);
@@ -742,8 +680,8 @@ static int usbpd_process_enter_mode(struct usbpd_dev *udev)
 static int usbpd_process_dp_status_update(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 	unsigned int pin_assignment = 0, pin_info = 0;
 	u8 multi_func_preference = 0;
 	int ret = 0, i = 0;
@@ -751,13 +689,8 @@ static int usbpd_process_dp_status_update(struct usbpd_dev *udev)
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_dp_status_update)
-			return ops->usbpd_process_dp_status_update(udev);
-	}
+	if (ops->usbpd_process_dp_status_update)
+		return ops->usbpd_process_dp_status_update(udev);
 
 	if (pd_info->SVID_0 == TypeC_DP_SUPPORT) {
 		dev_info(&udev->dev, "%s DP_STATUS_UPDATE = 0x%08X\n",
@@ -809,15 +742,13 @@ static int usbpd_process_dp_status_update(struct usbpd_dev *udev)
 				pd_info->dp_selected_pin = pin_info;
 
 				dev_info(&udev->dev, "%s multi_func_preference %d  %s\n", __func__,
-					 multi_func_preference, DP_Pin_Assignment_Print[pin_info]);
-				if (ops != NULL) {
-					if (ops->usbpd_dp_pin_assignment) {
-						ret = ops->usbpd_dp_pin_assignment(udev, pin_assignment);
-						if (ret < 0) {
-							dev_err(&udev->dev, "%s has i2c write error.\n",
-								__func__);
-							return ret;
-						}
+					 multi_func_preference, DP_Pin_Assignment_Print[pin_assignment]);
+				if (ops->usbpd_dp_pin_assignment) {
+					ret = ops->usbpd_dp_pin_assignment(udev, pin_assignment);
+					if (ret < 0) {
+						dev_err(&udev->dev, "%s has i2c write error.\n",
+							__func__);
+						return ret;
 					}
 				}
 				pd_info->is_sent_pin_configuration = 1;
@@ -847,20 +778,15 @@ static int usbpd_process_dp_status_update(struct usbpd_dev *udev)
 static int usbpd_process_dp_configure(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 	int ret = 0;
 
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_dp_configure)
-			return ops->usbpd_process_dp_configure(udev);
-	}
+	if (ops->usbpd_process_dp_configure)
+		return ops->usbpd_process_dp_configure(udev);
 
 	dev_info(&udev->dev, "%s : vendor_id = 0x%04x , svid_1 = 0x%04x\n", __func__,
 				pd_info->data_obj[0].structured_vdm.svid, pd_info->SVID_1);
@@ -874,14 +800,12 @@ static int usbpd_process_dp_configure(struct usbpd_dev *udev)
 		/* It will start discover mode with that svid */
 		dev_info(&udev->dev, "%s : svid1 is dex station\n", __func__);
 
-		if (ops != NULL) {
-			if (ops->usbpd_select_svid) {
-				ret = ops->usbpd_select_svid(udev, 1);
-				if (ret < 0) {
-					dev_err(&udev->dev, "%s select svid error.\n",
-						__func__);
-					return ret;
-				}
+		if (ops->usbpd_select_svid) {
+			ret = ops->usbpd_select_svid(udev, 1);
+			if (ret < 0) {
+				dev_err(&udev->dev, "%s select svid error.\n",
+					__func__);
+				return ret;
 			}
 		}
 	}
@@ -892,8 +816,8 @@ static int usbpd_process_dp_configure(struct usbpd_dev *udev)
 static int usbpd_process_attention(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
-	struct usbpd_info *pd_info = NULL;
+	const struct usbpd_ops *ops = desc->ops;
+	struct usbpd_info *pd_info = &desc->pd_info;
 	unsigned int pin_assignment = 0, pin_info = 0;
 	u8 multi_func_preference = 0;
 	int ret = 0, i = 0;
@@ -901,13 +825,8 @@ static int usbpd_process_attention(struct usbpd_dev *udev)
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-	pd_info = &desc->pd_info;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_attention)
-			return ops->usbpd_process_attention(udev);
-	}
+	if (ops->usbpd_process_attention)
+		return ops->usbpd_process_attention(udev);
 
 	if (pd_info->SVID_0 == TypeC_DP_SUPPORT) {
 		dev_info(&udev->dev, "%s DP_ATTENTION = 0x%08X\n", __func__,
@@ -956,16 +875,13 @@ static int usbpd_process_attention(struct usbpd_dev *udev)
 			pd_info->dp_selected_pin = pin_info;
 
 			dev_info(&udev->dev, "%s multi_func_preference %d  %s\n", __func__,
-				 multi_func_preference, DP_Pin_Assignment_Print[pin_info]);
-
-			if (ops != NULL) {
-				if (ops->usbpd_dp_pin_assignment) {
-					ret = ops->usbpd_dp_pin_assignment(udev, pin_assignment);
-					if (ret < 0) {
-						dev_err(&udev->dev, "%s has i2c write error.\n",
-							__func__);
-						return ret;
-					}
+				 multi_func_preference, DP_Pin_Assignment_Print[pin_assignment]);
+			if (ops->usbpd_dp_pin_assignment) {
+				ret = ops->usbpd_dp_pin_assignment(udev, pin_assignment);
+				if (ret < 0) {
+					dev_err(&udev->dev, "%s has i2c write error.\n",
+						__func__);
+					return ret;
 				}
 			}
 			pd_info->is_sent_pin_configuration = 1;
@@ -995,18 +911,14 @@ static int usbpd_process_attention(struct usbpd_dev *udev)
 int usbpd_process_alternate_mode(struct usbpd_dev *udev, usbpd_msg_state_t msg_state)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
+	const struct usbpd_ops *ops = desc->ops;
 	int ret = 0;
 
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_alternate_mode)
-			return ops->usbpd_process_alternate_mode(udev, msg_state);
-	}
+	if (ops->usbpd_process_alternate_mode)
+		return ops->usbpd_process_alternate_mode(udev, msg_state);
 
 	dev_info(&udev->dev, "%s, mode : 0x%x\n", __func__, msg_state);
 
@@ -1043,17 +955,13 @@ int usbpd_process_alternate_mode(struct usbpd_dev *udev, usbpd_msg_state_t msg_s
 int usbpd_process_uvdm_message(struct usbpd_dev *udev)
 {
 	struct usbpd_desc *desc = udev->desc;
-	const struct usbpd_ops *ops = NULL;
+	const struct usbpd_ops *ops = desc->ops;
 
 	if (desc == NULL)
 		return -EINVAL;
 
-	ops = desc->ops;
-
-	if (ops != NULL) {
-		if (ops->usbpd_process_uvdm_message)
-			return ops->usbpd_process_uvdm_message(udev);
-	}
+	if (ops->usbpd_process_uvdm_message)
+		return ops->usbpd_process_uvdm_message(udev);
 
 	return 0;
 }

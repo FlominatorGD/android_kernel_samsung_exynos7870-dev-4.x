@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_ipc.h
+/* sound/soc/samsung/abox/abox_ipc.h
  *
  * ALSA SoC Audio Layer - Samsung Abox Inter-Processor Communication driver
  *

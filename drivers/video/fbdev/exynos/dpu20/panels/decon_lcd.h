@@ -34,8 +34,18 @@ enum type_of_ddi {
 	TYPE_OF_NORMAL_DDI,
 };
 
+enum {
+	DSU_MODE_NONE = 0,
+	DSU_MODE_1,
+	DSU_MODE_2,
+	DSU_MODE_3,
+	DSU_MODE_MAX,
+};
+
 #define MAX_RES_NUMBER		5
 #define HDR_CAPA_NUM		4
+
+#define MAX_COLOR_MODE		5
 
 struct lcd_res_info {
 	unsigned int width;
@@ -60,6 +70,15 @@ struct lcd_hdr_info {
 	unsigned int hdr_min_luma;
 };
 
+/*
+ * dec_sw : slice width in DDI side
+ * enc_sw : slice width in AP(DECON & DSIM) side
+ */
+struct dsc_slice {
+	unsigned int dsc_dec_sw[MAX_RES_NUMBER];
+	unsigned int dsc_enc_sw[MAX_RES_NUMBER];
+};
+
 struct stdphy_pms {
 	unsigned int p;
 	unsigned int m;
@@ -78,6 +97,70 @@ struct stdphy_pms {
 	unsigned int rsel;
 #endif
 };
+
+#ifdef CONFIG_EXYNOS_ADAPTIVE_FREQ
+#define MAX_ADAPTABLE_FREQ	5
+#if defined(CONFIG_EXYNOS_DSIM_DITHER)
+#define MAX_PMSK_CNT	14
+#else
+#define MAX_PMSK_CNT	4
+#endif
+
+struct adaptive_freq_info {
+	unsigned int hs_clk;
+	struct stdphy_pms dphy_pms;
+	unsigned int esc_clk;
+	unsigned int cmd_underrun_lp_ref[MAX_RES_NUMBER];
+};
+
+struct adaptive_idx {
+	int req_freq_idx;	/* requested frequency */
+	int cur_freq_idx;	/* dsim current frequency */
+};
+
+struct adaptive_info {
+	int freq_cnt;
+	struct adaptive_freq_info freq_info[MAX_ADAPTABLE_FREQ];
+	struct adaptive_idx *adap_idx;
+};
+#endif
+
+
+
+#ifdef CONFIG_DYNAMIC_FREQ
+
+#define MAX_DYNAMIC_FREQ	5
+
+struct df_status_info {
+	bool enabled;
+
+	u32 request_df;
+	u32 target_df;
+	u32 current_df;
+	u32 ffc_df;
+	u32 context;
+};
+
+
+struct df_setting_info {
+	unsigned int hs;
+	struct stdphy_pms dphy_pms;
+	unsigned int cmd_underrun_lp_ref[MAX_RES_NUMBER];
+};
+
+struct df_dt_info {
+	int dft_index;
+	int df_cnt;
+	struct df_setting_info setting_info[MAX_DYNAMIC_FREQ];
+};
+
+struct df_param {
+	struct stdphy_pms pms;
+	unsigned int cmd_underrun_lp_ref[MAX_RES_NUMBER];
+	u32 context;
+};
+
+#endif
 
 struct decon_lcd {
 	enum decon_psr_mode mode;
@@ -106,6 +189,8 @@ struct decon_lcd {
 	unsigned int dsc_cnt;
 	unsigned int dsc_slice_num;
 	unsigned int dsc_slice_h;
+	unsigned int dsc_dec_sw;
+	unsigned int dsc_enc_sw;
 	enum mic_ver mic_ver;
 	enum type_of_ddi ddi_type;
 	unsigned int data_lane;
@@ -114,7 +199,20 @@ struct decon_lcd {
 	unsigned int mres_mode;
 	struct lcd_mres_info dt_lcd_mres;
 	struct lcd_hdr_info dt_lcd_hdr;
+	struct dsc_slice dt_dsc_slice;
 	unsigned int bpc;
+	unsigned int partial_width[MAX_RES_NUMBER];
+	unsigned int partial_height[MAX_RES_NUMBER];
+	unsigned int color_mode_cnt;
+	unsigned int color_mode[MAX_COLOR_MODE];
+#ifdef CONFIG_EXYNOS_ADAPTIVE_FREQ
+	struct adaptive_info adaptive_info;
+#endif
+
+#ifdef CONFIG_DYNAMIC_FREQ
+	struct df_dt_info df_set_info;
+#endif
+
 };
 
 struct decon_dsc {
@@ -141,32 +239,4 @@ struct decon_dsc {
 		unsigned int width_per_enc;
 		unsigned char *dec_pps_t;
 };
-
-#if defined(CONFIG_EXYNOS_PANEL_CABC)
-/*
- * cabc_mode[1:0] must be re-mapped according to DDI command
- * 3FA0 is OLED, so CABC command is not supported.
- * Following values represent for ACL2 control of 3FA0.
- * - [2'b00] ACL off
- * - [2'b01] ACL low
- * - [2'b10] ACL mid
- * - [2'b11] ACL high
- */
-enum cabc_mode {
-	CABC_OFF = 0,
-	CABC_USER_IMAGE,
-	CABC_STILL_PICTURE,
-	CABC_MOVING_IMAGE,
-	CABC_READ_MODE = 0x80,
-};
-
-enum power_mode {
-	POWER_SAVE_OFF = 0,
-	POWER_SAVE_LOW = 1,
-	POWER_SAVE_MEDIUM = 2,
-	POWER_SAVE_HIGH = 3,
-	POWER_SAVE_MAX = 4,
-};
-#endif
-
 #endif

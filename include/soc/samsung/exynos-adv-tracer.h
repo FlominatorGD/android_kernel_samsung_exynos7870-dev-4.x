@@ -1,13 +1,17 @@
-#ifndef __EXYNOS_ADV_TRACER_H_
-#define __EXYNOS_ADV_TRACER_H_
+#ifndef __EXYNOS_ADV_TRACER_H__
+#define __EXYNOS_ADV_TRACER_H__
 
-#ifdef CONFIG_EXYNOS_ADV_TRACER
+struct adv_tracer_info {
+	unsigned int plugin_num;
+	struct device *dev;
+	unsigned int enter_wfi;
+};
+
+extern void *adv_tracer_memcpy_align_4(void *dest, const void *src, unsigned int n);
+#if CONFIG_EXYNOS_ADV_TRACER
 extern int adv_tracer_arraydump(void);
 #else
-static inline int adv_tracer_arraydump(void)
-{
-	return 0;
-}
+#define adv_traver_arraydump() do while (0)
+#endif
 #endif
 
-#endif

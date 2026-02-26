@@ -11,6 +11,8 @@
 
 #define ECT_DUMMY_SFR	(0xFFFFFFFF)
 unsigned int asv_table_ver = 0;
+unsigned int main_rev;
+unsigned int sub_rev;
 
 static struct vclk_lut *get_lut(struct vclk *vclk, unsigned int rate)
 {
@@ -673,7 +675,8 @@ int __init vclk_initialize(void)
 
 	ra_init();
 
-//	asv_table_ver = asv_table_init();
+	asv_table_ver = asv_table_init();
+	id_get_rev(&main_rev, &sub_rev);
 
 	vclk_bind();
 

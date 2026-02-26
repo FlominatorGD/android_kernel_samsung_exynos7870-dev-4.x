@@ -99,24 +99,20 @@ static inline bool pmucal_rae_check_value(struct pmucal_seq *seq)
 		return false;
 }
 
-static int pmucal_rae_wait(struct pmucal_seq *seq, unsigned int idx)
+static int pmucal_rae_wait(struct pmucal_seq *seq)
 {
 	u32 timeout = 0;
-
-	if (seq->cond_base_va && seq->cond_offset)
-		if (!pmucal_rae_check_condition(seq))
-			return 0;
 
 	while (1) {
 		if (pmucal_rae_check_value(seq))
 			break;
 		timeout++;
 		udelay(1);
-		if (timeout > 5000) {
+		if (timeout > 2000) {
 			u32 reg;
 			reg = __raw_readl(seq->base_va + seq->offset);
-			pr_err("%s %s:timed out during wait. reg:%s (value:0x%x, seq_idx = %d)\n",
-						PMUCAL_PREFIX, __func__, seq->sfr_name, reg, idx);
+			pr_err("%s %s:timed out during wait. (value:0x%x, seq_idx = %d)\n",
+						PMUCAL_PREFIX, __func__, reg, pmucal_rae_seq_idx);
 			return -ETIMEDOUT;
 		}
 	}
@@ -162,7 +158,7 @@ static inline void pmucal_clr_bit_atomic(struct pmucal_seq *seq)
 	__raw_writel(seq->value, seq->base_va + (seq->offset | 0x8000));
 }
 
-static int pmucal_rae_write_retry(struct pmucal_seq *seq, bool inversion, unsigned int idx)
+static int pmucal_rae_write_retry(struct pmucal_seq *seq, bool inversion)
 {
 	u32 timeout = 0, count = 0, i = 0;
 	bool retry = true;
@@ -187,7 +183,7 @@ static int pmucal_rae_write_retry(struct pmucal_seq *seq, bool inversion, unsign
 			u32 reg;
 			reg = __raw_readl(seq->cond_base_va + seq->cond_offset);
 			pr_err("%s %s:timed out during write-retry. (value:0x%x, seq_idx = %d)\n",
-					PMUCAL_PREFIX, __func__, reg, idx);
+					PMUCAL_PREFIX, __func__, reg, pmucal_rae_seq_idx);
 			return -ETIMEDOUT;
 		}
 	}
@@ -283,7 +279,7 @@ int pmucal_rae_restore_seq(struct pmucal_seq *seq, unsigned int seq_size)
 			break;
 		case PMUCAL_WAIT:
 		case PMUCAL_WAIT_TWO:
-			ret = pmucal_rae_wait(&seq[i], i);
+			ret = pmucal_rae_wait(&seq[i]);
 			if (ret)
 				return ret;
 			break;
@@ -334,23 +330,23 @@ int pmucal_rae_handle_seq(struct pmucal_seq *seq, unsigned int seq_size)
 			break;
 		case PMUCAL_WAIT:
 		case PMUCAL_WAIT_TWO:
-			ret = pmucal_rae_wait(&seq[i], i);
+			ret = pmucal_rae_wait(&seq[i]);
 			if (ret)
 				return ret;
 			break;
 		case PMUCAL_WRITE_WAIT:
 			pmucal_rae_write(&seq[i]);
-			ret = pmucal_rae_wait(&seq[i], i);
+			ret = pmucal_rae_wait(&seq[i]);
 			if (ret)
 				return ret;
 			break;
 		case PMUCAL_WRITE_RETRY:
-			ret = pmucal_rae_write_retry(&seq[i], false, i);
+			ret = pmucal_rae_write_retry(&seq[i], false);
 			if (ret)
 				return ret;
 			break;
 		case PMUCAL_WRITE_RETRY_INV:
-			ret = pmucal_rae_write_retry(&seq[i], true, i);
+			ret = pmucal_rae_write_retry(&seq[i], true);
 			if (ret)
 				return ret;
 			break;
@@ -430,70 +426,7 @@ int pmucal_rae_handle_cp_seq(struct pmucal_seq *seq, unsigned int seq_size)
 			break;
 		case PMUCAL_WAIT:
 		case PMUCAL_WAIT_TWO:
-			ret = pmucal_rae_wait(&seq[i], i);
-			if (ret)
-				return ret;
-			pr_info("%s%s\t%s = 0x%08x(expected = 0x%08x)\n", PMUCAL_PREFIX, "raw_read", seq[i].sfr_name,
-				__raw_readl(seq[i].base_va + seq[i].offset) & seq[i].mask, seq[i].value);
-			break;
-		case PMUCAL_DELAY:
-			udelay(seq[i].value);
-			break;
-		default:
-			pr_err("%s %s:invalid PMUCAL access type\n", PMUCAL_PREFIX, __func__);
-			return -EINVAL;
-		}
-	}
-
-	return 0;
-}
-#endif
-
-/**
- *  pmucal_rae_handle_gnss_seq - handles a sequence array based on each element's access_type.
- *			    exposed to PMUCAL common logics.(CP)
- *
- *  @seq: Sequence array to be handled.
- *  @seq_size: Array size of seq.
- *
- *  Returns 0 on success. Otherwise, negative error code.
- */
-
-#ifdef CONFIG_GNSS_PMUCAL
-static unsigned int pmucal_rae_gnss_seq_idx;
-int pmucal_rae_handle_gnss_seq(struct pmucal_seq *seq, unsigned int seq_size)
-{
-	int ret, i;
-	u32 reg;
-
-	for (i = 0; i < seq_size; i++) {
-		pmucal_rae_gnss_seq_idx = i;
-
-		switch (seq[i].access_type) {
-		case PMUCAL_READ:
-			pmucal_rae_read(&seq[i]);
-			pr_info("%s%s\t%s = 0x%08x\n", PMUCAL_PREFIX, "raw_read", seq[i].sfr_name,
-					__raw_readl(seq[i].base_va + seq[i].offset));
-			break;
-		case PMUCAL_WRITE:
-			reg = __raw_readl(seq[i].base_va + seq[i].offset);
-			reg = (reg & ~seq[i].mask) | seq[i].value;
-			pr_info("%s%s\t%s = 0x%08x\n", PMUCAL_PREFIX, "raw_write", seq[i].sfr_name, reg);
-			pmucal_rae_write(&seq[i]);
-			pr_info("%s%s\t%s = 0x%08x\n", PMUCAL_PREFIX, "raw_read", seq[i].sfr_name,
-					__raw_readl(seq[i].base_va + seq[i].offset));
-			break;
-		case PMUCAL_COND_READ:
-			if (pmucal_rae_check_condition(&seq[i]))
-				pmucal_rae_read(&seq[i]);
-			break;
-		case PMUCAL_COND_WRITE:
-			if (pmucal_rae_check_condition(&seq[i]))
-				pmucal_rae_write(&seq[i]);
-			break;
-		case PMUCAL_WAIT:
-		case PMUCAL_WAIT_TWO:
-			ret = pmucal_rae_wait(&seq[i], i);
+			ret = pmucal_rae_wait(&seq[i]);
 			if (ret)
 				return ret;
 			pr_info("%s%s\t%s = 0x%08x(expected = 0x%08x)\n", PMUCAL_PREFIX, "raw_read", seq[i].sfr_name,

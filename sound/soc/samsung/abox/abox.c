@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox.c
+/* sound/soc/samsung/abox/abox.c
  *
  * ALSA SoC Audio Layer - Samsung Abox driver
  *
@@ -8,7 +8,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-
+/* #define DEBUG */
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -35,7 +35,9 @@
 #include <sound/samsung/vts.h>
 
 #include <soc/samsung/exynos-pmu.h>
+#ifdef CONFIG_EXYNOS_ITMON
 #include <soc/samsung/exynos-itmon.h>
+#endif
 #include "../../../../drivers/iommu/exynos-iommu.h"
 
 #include "abox_util.h"
@@ -45,14 +47,25 @@
 #include "abox_gic.h"
 #include "abox_failsafe.h"
 #include "abox_if.h"
-#include "abox_dma.h"
 #include "abox_vdma.h"
 #include "abox_effect.h"
 #include "abox_cmpnt.h"
-#include "abox_tplg.h"
 #include "abox_core.h"
 #include "abox_ipc.h"
 #include "abox.h"
+
+#undef EMULATOR
+#ifdef EMULATOR
+static void __iomem *pmu_alive;
+static void update_mask_value(void __iomem *sfr,
+		unsigned int mask, unsigned int value)
+{
+	unsigned int sfr_value = readl(sfr);
+
+	set_mask_value(sfr_value, mask, value);
+	writel(sfr_value, sfr);
+}
+#endif
 
 #ifdef CONFIG_SOC_EXYNOS8895
 #define ABOX_PAD_NORMAL				(0x3048)
@@ -63,16 +76,6 @@
 #elif defined(CONFIG_SOC_EXYNOS9820)
 #define ABOX_PAD_NORMAL				(0x1920)
 #define ABOX_PAD_NORMAL_MASK			(0x00000800)
-#elif defined(CONFIG_SOC_EXYNOS9830)
-#define ABOX_PAD_NORMAL				(0x1920)
-#define ABOX_PAD_NORMAL_MASK			(0x00000800)
-#elif defined(CONFIG_SOC_EXYNOS9630)
-#define ABOX_PAD_NORMAL				(0x19A0)
-#define ABOX_PAD_NORMAL_MASK			(0x00000800)
-#elif defined(CONFIG_SOC_EXYNOS3830)
-#define ABOX_PAD_NORMAL				(0x20a0)
-#define ABOX_PAD_NORMAL_MASK			(0x00000800)
-
 #endif
 
 #define DEFAULT_CPU_GEAR_ID		(0xAB0CDEFA)
@@ -90,9 +93,10 @@
 	.params = wparams, .num_params = ARRAY_SIZE(wparams), \
 	.event_flags = SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_WILL_PMD }
 
-void __weak exynos_sysmmu_tlb_invalidate(struct iommu_domain *domain,
-		dma_addr_t start, size_t size)
+#ifdef CONFIG_EXYNOS_ITMON
+void __weak itmon_notifier_chain_register(struct notifier_block *n)
 {}
+#endif
 
 /* For only external static functions */
 static struct abox_data *p_abox_data;
@@ -102,26 +106,16 @@ struct abox_data *abox_get_abox_data(void)
 	return p_abox_data;
 }
 
-struct abox_data *abox_get_data(struct device *dev)
-{
-	while (dev && !is_abox(dev))
-		dev = dev->parent;
-
-	return dev ? dev_get_drvdata(dev) : NULL;
-}
-
-#ifdef CONFIG_EXYNOS_IOMMU
 static int abox_iommu_fault_handler(
 		struct iommu_domain *domain, struct device *dev,
 		unsigned long fault_addr, int fault_flags, void *token)
 {
 	struct abox_data *data = token;
 
-	abox_dbg_print_gpr(data->dev, data);
+	abox_dbg_print_gpr(&data->pdev->dev, data);
 
 	return 0;
 }
-#endif
 
 static void abox_cpu_power(bool on);
 static int abox_cpu_enable(bool enable);
@@ -132,7 +126,8 @@ static void exynos_abox_panic_handler(void)
 {
 	static bool has_run;
 	struct abox_data *data = p_abox_data;
-	struct device *dev = data ? (data->dev ? data->dev : NULL) : NULL;
+	struct device *dev = data ? (data->pdev ? &data->pdev->dev : NULL) :
+			NULL;
 
 	dev_dbg(dev, "%s\n", __func__);
 
@@ -176,7 +171,7 @@ static void abox_wdt_work_func(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct abox_data *data = container_of(dwork, struct abox_data,
 			wdt_work);
-	struct device *dev_abox = data->dev;
+	struct device *dev_abox = &data->pdev->dev;
 
 	abox_dbg_print_gpr(dev_abox, data);
 	abox_dbg_dump_mem(dev_abox, data, ABOX_DBG_DUMP_KERNEL, "watchdog");
@@ -188,7 +183,7 @@ static DECLARE_DELAYED_WORK(abox_wdt_work, abox_wdt_work_func);
 static irqreturn_t abox_wdt_handler(int irq, void *dev_id)
 {
 	struct abox_data *data = dev_id;
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 
 	dev_err(dev, "abox watchdog timeout\n");
 
@@ -230,6 +225,8 @@ static void abox_probe_quirks(struct abox_data *data, struct device_node *np)
 		const char *str;
 		unsigned int bit;
 	} map[] = {
+		DEC_MAP(TRY_TO_ASRC_OFF),
+		DEC_MAP(SHARE_VTS_SRAM),
 	};
 
 	int i, ret;
@@ -325,7 +322,7 @@ EXPORT_SYMBOL(abox_read_gpr);
 static int abox_of_get_addr(struct abox_data *data, struct device_node *np,
 		const char *name, void **addr, size_t *size)
 {
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	unsigned int area[3];
 	int ret;
 
@@ -356,35 +353,6 @@ static int abox_of_get_addr(struct abox_data *data, struct device_node *np,
 		*size = area[2];
 out:
 	return ret;
-}
-
-static void abox_notify_bargein_detect_work_func(struct work_struct *work)
-{
-	struct abox_data *data = container_of(work, struct abox_data,
-			notify_bargein_detect_work);
-	u32 keyword_type = 1;
-	char env[100] = {0,};
-	char *envp[2] = {env, NULL};
-	struct device *dev = data->dev;
-
-	dev_info(dev, "%s: barge in detection\n", __func__);
-	snprintf(env, sizeof(env), "VOICE_WAKEUP_WORD_ID=%x", keyword_type);
-
-	kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
-}
-
-static void abox_seamless_buf_done_work_func(struct work_struct *work)
-{
-	struct abox_data *data = container_of(work, struct abox_data,
-			notify_seamless_buf_done_work);
-	char env[100] = {0,};
-	char *envp[2] = {env, NULL};
-	struct device *dev = data->dev;
-
-	dev_info(dev, "%s: seamless buffer is copied\n", __func__);
-	snprintf(env, sizeof(env), "VOICE_SEAMLESS_BUFFER_RDY");
-
-	kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
 }
 
 static bool __abox_ipc_queue_empty(struct abox_data *data)
@@ -457,13 +425,11 @@ static int abox_ipc_queue_get(struct abox_data *data, struct abox_ipc *ipc)
 static bool abox_can_calliope_ipc(struct device *dev,
 		struct abox_data *data)
 {
-	static int retry;
 	bool ret = true;
 
 	switch (data->calliope_state) {
 	case CALLIOPE_DISABLING:
 	case CALLIOPE_ENABLED:
-		retry = 0;
 		break;
 	case CALLIOPE_ENABLING:
 		wait_event_timeout(data->ipc_wait_queue,
@@ -471,21 +437,11 @@ static bool abox_can_calliope_ipc(struct device *dev,
 				msecs_to_jiffies(CALLIOPE_ENABLE_TIMEOUT_MS));
 		if (data->calliope_state == CALLIOPE_ENABLED)
 			break;
-		retry++;
 		/* Fallthrough */
 	case CALLIOPE_DISABLED:
 	default:
 		dev_warn(dev, "Invalid calliope state: %d\n",
 				data->calliope_state);
-		if (retry >= 10) {
-			abox_dbg_print_gpr(dev,	data);
-			abox_dbg_dump_gpr(dev, data, ABOX_DBG_DUMP_KERNEL,
-					"Invalid State");
-			abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_KERNEL,
-					"Invalid State");
-			abox_failsafe_report(dev);
-			retry = 0;
-		}
 		ret = false;
 	}
 
@@ -494,16 +450,89 @@ static bool abox_can_calliope_ipc(struct device *dev,
 	return ret;
 }
 
+static int __abox_process_ipc_legacy(struct device *dev, struct abox_data *data,
+		int hw_irq, const ABOX_IPC_MSG *msg)
+{
+	struct device *dev_abox = &data->pdev->dev;
+	static unsigned int tout_cnt;
+	static DEFINE_SPINLOCK(lock);
+
+	void __iomem *tx_base = data->sram_base + data->ipc_tx_offset;
+	void __iomem *tx_ack = data->sram_base + data->ipc_tx_ack_offset;
+	int ret = 0, i;
+
+	dev_dbg(dev, "%s(%d, %d, %d)\n", __func__, hw_irq,
+			msg->ipcid, msg->msg.system.msgtype);
+
+	do {
+		spin_lock(&lock);
+
+		memcpy_toio(tx_base, msg, sizeof(*msg));
+		writel(1, tx_ack);
+		abox_gic_generate_interrupt(data->dev_gic, hw_irq);
+		for (i = IPC_TIMEOUT_US; i && readl(tx_ack); i--)
+			udelay(1);
+
+		if (readl(tx_ack)) {
+			tout_cnt++;
+			dev_warn_ratelimited(dev, "Transaction timeout(%d)\n",
+					tout_cnt);
+
+			if (data->failsafe) {
+				writel(0, tx_ack);
+				goto unlock;
+			}
+
+			if (tout_cnt == 1)
+				abox_dbg_dump_simple(dev_abox, data,
+						"Transaction timeout");
+
+			if ((tout_cnt % IPC_RETRY) == 0) {
+				abox_failsafe_report(dev_abox);
+				writel(0, tx_ack);
+			}
+
+			ret = -EIO;
+		} else {
+			tout_cnt = 0;
+			ret = 0;
+		}
+unlock:
+		spin_unlock(&lock);
+	} while (readl(tx_ack));
+
+	return ret;
+}
+
 static int __abox_process_ipc(struct device *dev, struct abox_data *data,
 		int hw_irq, const ABOX_IPC_MSG *msg, size_t size)
 {
-	return abox_ipc_send(dev, msg, size, NULL, 0);
+	int ret;
+
+	switch (data->ipc_version) {
+	case 1:
+		ret = __abox_process_ipc_legacy(dev, data, hw_irq, msg);
+		break;
+	default:
+		ret = abox_ipc_send(dev, msg, size, NULL, 0);
+		if (ret < 0)
+			break;
+
+		ret = abox_ipc_flush(dev);
+		if (ret < 0) {
+			abox_ipc_retry();
+			ret = abox_ipc_flush(dev);
+		}
+		break;
+	}
+
+	return ret;
 }
 
 static void abox_process_ipc(struct work_struct *work)
 {
 	struct abox_data *data = container_of(work, struct abox_data, ipc_work);
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	struct abox_ipc ipc;
 	int ret;
 
@@ -522,6 +551,9 @@ static void abox_process_ipc(struct work_struct *work)
 			ret = __abox_process_ipc(dev, data, hw_irq, msg, size);
 			if (ret < 0)
 				abox_failsafe_report(dev);
+
+			/* giving time to ABOX for processing */
+			usleep_range(10, 100);
 		}
 	}
 
@@ -616,7 +648,7 @@ int abox_register_bclk_usage(struct device *dev, struct abox_data *data,
 	unsigned long target_pll, audif_rate;
 	int id = dai_id - ABOX_UAIF0;
 	int ret = 0;
-	unsigned long i;
+	int i;
 
 	dev_dbg(dev, "%s(%d, %d)\n", __func__, id, rate);
 
@@ -759,7 +791,7 @@ static struct regmap_config abox_timer_regmap_config = {
 	.reg_bits = 32,
 	.val_bits = 32,
 	.reg_stride = 4,
-	.max_register = ABOX_TIMER_MAX_REGISTERS,
+	.max_register = ABOX_MAX_REGISTERS,
 	.volatile_reg = abox_timer_volatile_reg,
 	.readable_reg = abox_timer_readable_reg,
 	.writeable_reg = abox_timer_writeable_reg,
@@ -781,7 +813,7 @@ unsigned int abox_get_requiring_int_freq_in_khz(void)
 	if (data == NULL)
 		return 0;
 
-	return abox_qos_get_target(data->dev, ABOX_QOS_INT);
+	return abox_qos_get_target(&data->pdev->dev, ABOX_QOS_INT);
 }
 EXPORT_SYMBOL(abox_get_requiring_int_freq_in_khz);
 
@@ -792,7 +824,7 @@ unsigned int abox_get_requiring_aud_freq_in_khz(void)
 	if (data == NULL)
 		return 0;
 
-	return abox_qos_get_target(data->dev, ABOX_QOS_AUD);
+	return abox_qos_get_target(&data->pdev->dev, ABOX_QOS_AUD);
 }
 EXPORT_SYMBOL(abox_get_requiring_aud_freq_in_khz);
 
@@ -801,33 +833,16 @@ bool abox_cpu_gear_idle(struct device *dev, unsigned int id)
 	return !abox_qos_is_active(dev, ABOX_QOS_AUD, id);
 }
 
-static bool __maybe_unused abox_is_clearable(struct device *dev,
-		struct abox_data *data)
+static bool abox_is_clearable(struct device *dev, struct abox_data *data)
 {
 	return abox_cpu_gear_idle(dev, ABOX_CPU_GEAR_ABSOLUTE) &&
 			data->audio_mode != MODE_IN_CALL;
 }
 
-bool abox_get_call_state(void)
-{
-	struct abox_data *data = p_abox_data;
-
-	if (data == NULL)
-		return 0;
-
-	return (abox_qos_is_active(data->dev, ABOX_QOS_AUD,
-				ABOX_CPU_GEAR_ABSOLUTE) ||
-			abox_qos_is_active(data->dev, ABOX_QOS_AUD,
-				ABOX_CPU_GEAR_CALL_VSS) ||
-			abox_qos_is_active(data->dev, ABOX_QOS_AUD,
-				ABOX_CPU_GEAR_CALL_KERNEL));
-}
-EXPORT_SYMBOL(abox_get_call_state);
-
 static void abox_check_cpu_request(struct device *dev, struct abox_data *data,
 		unsigned int id, unsigned int old_val, unsigned int val)
 {
-	struct device *dev_abox = data->dev;
+	struct device *dev_abox = &data->pdev->dev;
 
 	if (id != ABOX_CPU_GEAR_BOOT)
 		return;
@@ -846,7 +861,7 @@ static void abox_check_cpu_request(struct device *dev, struct abox_data *data,
 
 static void abox_notify_cpu_gear(struct abox_data *data, unsigned int freq)
 {
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	ABOX_IPC_MSG msg;
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
 	unsigned long long time = sched_clock();
@@ -972,7 +987,7 @@ void abox_request_dram_on(struct device *dev, unsigned int id, bool on)
 
 	ret = regmap_write(regmap, ABOX_SYSPOWER_CTRL, val);
 	if (ret < 0) {
-		dev_err(dev, "syspower write failed: %d\n", ret);
+		dev_err(dev, "syspower write failed\n", ret);
 		return;
 	}
 
@@ -1098,14 +1113,17 @@ int abox_register_ipc_handler(struct device *dev, int ipc_id,
 	struct abox_data *data = dev_get_drvdata(dev);
 	struct abox_ipc_action *action = NULL;
 	bool new_handler = true;
+
 	if (ipc_id >= IPC_ID_COUNT)
 		return -EINVAL;
+
 	list_for_each_entry(action, &data->ipc_actions, list) {
 		if (action->ipc_id == ipc_id && action->data == dev_id) {
 			new_handler = false;
 			break;
 		}
 	}
+
 	if (new_handler) {
 		action = devm_kzalloc(dev, sizeof(*action), GFP_KERNEL);
 		if (IS_ERR_OR_NULL(action)) {
@@ -1117,7 +1135,9 @@ int abox_register_ipc_handler(struct device *dev, int ipc_id,
 		action->data = dev_id;
 		list_add_tail(&action->list, &data->ipc_actions);
 	}
+
 	action->handler = ipc_handler;
+
 	return 0;
 }
 EXPORT_SYMBOL(abox_register_ipc_handler);
@@ -1216,10 +1236,8 @@ static int abox_component_control_get(struct snd_kcontrol *kcontrol,
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	if (value->cache_only) {
-		abox_component_control_get_cache(kcontrol, ucontrol);
-		return 0;
-	}
+	if (value->cache_only || !value->control->is_volatile)
+		return abox_component_control_get_cache(kcontrol, ucontrol);
 
 	msg->ipcid = IPC_SYSTEM;
 	system_msg->msgtype = ABOX_REQUEST_COMPONENT_CONTROL;
@@ -1399,7 +1417,7 @@ static int abox_register_void_component(struct abox_data *data,
 		const void *void_component)
 {
 	static const unsigned int void_id = 0xAB0C;
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	const struct ABOX_COMPONENT_CONTROL *ctrls;
 	struct abox_component *com;
 	struct ABOX_COMPONENT_DESCRIPTIOR *desc;
@@ -1450,7 +1468,7 @@ static void abox_register_component_work_func(struct work_struct *work)
 {
 	struct abox_data *data = container_of(work, struct abox_data,
 			register_component_work);
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	struct abox_component *com;
 	size_t len = ARRAY_SIZE(data->components);
 	int ret;
@@ -1560,7 +1578,6 @@ static void abox_restore_components(struct device *dev, struct abox_data *data)
 	}
 }
 
-#ifdef CONFIG_PM
 static void abox_cache_components(struct device *dev, struct abox_data *data)
 {
 	struct abox_component *com;
@@ -1577,7 +1594,6 @@ static void abox_cache_components(struct device *dev, struct abox_data *data)
 		}
 	}
 }
-#endif
 
 static bool abox_is_calliope_incompatible(struct device *dev)
 {
@@ -1592,7 +1608,7 @@ static bool abox_is_calliope_incompatible(struct device *dev)
 
 static int abox_set_profiling_ipc(struct abox_data *data)
 {
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	ABOX_IPC_MSG msg;
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
 	bool en = !data->no_profiling;
@@ -1628,8 +1644,8 @@ static void abox_restore_data(struct device *dev)
 	dev_dbg(dev, "%s\n", __func__);
 
 	abox_restore_components(dev, data);
-	abox_tplg_restore(dev);
 	abox_cmpnt_restore(dev);
+	abox_effect_restore();
 	data->restored = true;
 	wake_up_all(&data->wait_queue);
 }
@@ -1643,42 +1659,23 @@ static void abox_restore_data_work_func(struct work_struct *work)
 {
 	struct abox_data *data = container_of(work, struct abox_data,
 			restore_data_work);
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 
 	abox_restore_data(dev);
 	abox_set_profiling_ipc(data);
-}
-
-static void abox_boot_clear_work_func(struct work_struct *work)
-{
-	static unsigned long boot_clear_count;
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct abox_data *data = container_of(dwork, struct abox_data,
-			boot_clear_work);
-	struct device *dev = data->dev;
-
-	dev_dbg(dev, "%s\n", __func__);
-
-	if (!abox_cpu_gear_idle(dev, ABOX_CPU_GEAR_BOOT)) {
-		dev_warn(dev, "boot clear activated\n");
-		abox_request_cpu_gear(dev, data, ABOX_CPU_GEAR_BOOT,
-				ABOX_CPU_GEAR_MIN, "boot_clear");
-		boot_clear_count++;
-	}
 }
 
 static void abox_boot_done_work_func(struct work_struct *work)
 {
 	struct abox_data *data = container_of(work, struct abox_data,
 			boot_done_work);
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 
 	dev_dbg(dev, "%s\n", __func__);
 
 	abox_cpu_pm_ipc(data, true);
 	abox_request_cpu_gear(dev, data, DEFAULT_CPU_GEAR_ID,
 			ABOX_CPU_GEAR_MIN, "boot_done");
-	schedule_delayed_work(&data->boot_clear_work, HZ);
 }
 
 static void abox_boot_done(struct device *dev, unsigned int version)
@@ -1700,55 +1697,55 @@ static void abox_boot_done(struct device *dev, unsigned int version)
 
 static irqreturn_t abox_dma_irq_handler(int irq, struct abox_data *data)
 {
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	int id;
-	struct device **dev_dma;
-	struct abox_dma_data *dma_data;
+	struct platform_device **pdev_dma;
+	struct abox_platform_data *platform_data;
 
 	dev_dbg(dev, "%s(%d)\n", __func__, irq);
 
 	switch (irq) {
 	case RDMA0_BUF_EMPTY:
 		id = 0;
-		dev_dma = data->dev_rdma;
+		pdev_dma = data->pdev_rdma;
 		break;
 	case RDMA1_BUF_EMPTY:
 		id = 1;
-		dev_dma = data->dev_rdma;
+		pdev_dma = data->pdev_rdma;
 		break;
 	case RDMA2_BUF_EMPTY:
 		id = 2;
-		dev_dma = data->dev_rdma;
+		pdev_dma = data->pdev_rdma;
 		break;
 	case RDMA3_BUF_EMPTY:
 		id = 3;
-		dev_dma = data->dev_rdma;
+		pdev_dma = data->pdev_rdma;
 		break;
 	case WDMA0_BUF_FULL:
 		id = 0;
-		dev_dma = data->dev_wdma;
+		pdev_dma = data->pdev_wdma;
 		break;
 	case WDMA1_BUF_FULL:
 		id = 1;
-		dev_dma = data->dev_wdma;
+		pdev_dma = data->pdev_wdma;
 		break;
 	default:
 		return IRQ_NONE;
 	}
 
-	if (unlikely(!dev_dma[id])) {
+	if (unlikely(!pdev_dma[id])) {
 		dev_err(dev, "spurious dma irq: irq=%d id=%d\n", irq, id);
 		return IRQ_HANDLED;
 	}
 
-	dma_data = dev_get_drvdata(dev_dma[id]);
-	if (unlikely(!dma_data)) {
+	platform_data = platform_get_drvdata(pdev_dma[id]);
+	if (unlikely(!platform_data)) {
 		dev_err(dev, "dma irq with null data: irq=%d id=%d\n", irq, id);
 		return IRQ_HANDLED;
 	}
 
-	dma_data->pointer = 0;
-	snd_pcm_period_elapsed(dma_data->substream);
+	platform_data->pointer = 0;
+	snd_pcm_period_elapsed(platform_data->substream);
 
 	return IRQ_HANDLED;
 }
@@ -1823,7 +1820,7 @@ static void abox_system_ipc_handler(struct device *dev,
 	case ABOX_REPORT_DUMP:
 		area = abox_addr_to_kernel_addr(data, system_msg->param2);
 		addr = abox_addr_to_phys_addr(data, system_msg->param2);
-		ret = abox_dump_register(dev, system_msg->param1,
+		ret = abox_dump_register_buffer(dev, system_msg->param1,
 				system_msg->bundle.param_bundle, area, addr,
 				system_msg->param3);
 		if (ret < 0) {
@@ -1887,6 +1884,10 @@ static void abox_system_ipc_handler(struct device *dev,
 					ABOX_DBG_DUMP_FIRMWARE, type);
 			abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_FIRMWARE,
 					type);
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+			abox_debug_string_update(system_msg->param1, 
+					abox_addr_to_kernel_addr(data, system_msg->bundle.param_s32[0]));
+#endif
 			break;
 		default:
 			dev_err(dev, "%s(%#x, %#x, %#x) is reported from calliope\n",
@@ -1897,6 +1898,12 @@ static void abox_system_ipc_handler(struct device *dev,
 					type);
 			abox_dbg_dump_mem(dev, data, ABOX_DBG_DUMP_FIRMWARE,
 					type);
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+			if (system_msg->param1 > TYPE_ABOX_UNDEFEXCEPTION)
+				abox_debug_string_update(TYPE_ABOX_UNDEFEXCEPTION, NULL);
+			else
+				abox_debug_string_update(system_msg->param1, NULL);
+#endif
 			break;
 		}
 		abox_failsafe_report(dev);
@@ -1932,20 +1939,55 @@ static void abox_offload_ipc_handler(struct device *dev,
 {
 	struct IPC_OFFLOADTASK_MSG *offloadtask_msg = &msg->msg.offload;
 	int id = offloadtask_msg->channel_id;
-	struct abox_dma_data *dma_data = dev_get_drvdata(data->dev_rdma[id]);
+	struct abox_platform_data *platform_data;
 
-	if (dma_data->compr_data.isr_handler)
-		dma_data->compr_data.isr_handler(data->dev_rdma[id]);
+	if (id != 5) {
+		dev_warn(dev, "%s: unknown channel id(%d)\n", __func__, id);
+		id = 5;
+	}
+	platform_data = platform_get_drvdata(data->pdev_rdma[id]);
+
+	if (platform_data->compr_data.isr_handler)
+		platform_data->compr_data.isr_handler(data->pdev_rdma[id]);
 	else
 		dev_warn(dev, "Redundant offload message on rdma[%d]", id);
 }
 
 static irqreturn_t abox_irq_handler(int irq, void *dev_id)
 {
-	struct device *dev = dev_id;
-	struct abox_data *data = dev_get_drvdata(dev);
+	struct platform_device *pdev = dev_id;
+	struct device *dev = &pdev->dev;
+	struct abox_data *data = platform_get_drvdata(pdev);
+	ABOX_IPC_MSG msg;
 
-	return abox_dma_irq_handler(irq, data);
+	if (abox_dma_irq_handler(irq, data) == IRQ_HANDLED)
+		goto out;
+
+	memcpy(&msg, data->sram_base + data->ipc_rx_offset, sizeof(msg));
+	writel(0, data->sram_base + data->ipc_rx_ack_offset);
+
+	dev_dbg(dev, "%s: irq=%d, ipcid=%d\n", __func__, irq, msg.ipcid);
+
+	switch (msg.ipcid) {
+	case IPC_SYSTEM:
+		abox_system_ipc_handler(dev, data, &msg);
+		break;
+	case IPC_PCMPLAYBACK:
+	case IPC_PCMCAPTURE:
+		abox_pcm_ipc_handler(dev, data, &msg);
+		break;
+	case IPC_OFFLOAD:
+		abox_offload_ipc_handler(dev, data, &msg);
+		break;
+	default:
+		abox_registered_ipc_handler(dev, data, &msg, false);
+		break;
+	}
+out:
+	abox_log_schedule_flush_all(dev);
+
+	dev_dbg(dev, "%s: exit\n", __func__);
+	return IRQ_HANDLED;
 }
 
 static irqreturn_t abox_ipc_handler(int ipc, void *dev_id, ABOX_IPC_MSG *msg)
@@ -2018,7 +2060,7 @@ static int abox_cpu_suspend_complete(struct device *dev)
 	limit = local_clock() + timeout;
 
 	while (regmap_read(regmap, ABOX_TIMER_PRESET_LSB(1), &value) >= 0) {
-		if (value == 0xFFFFFFFE) /* -2 means ABOX enters WFI */
+		if (value == 0)
 			break;
 
 		if (local_clock() > limit) {
@@ -2033,7 +2075,7 @@ static int abox_cpu_suspend_complete(struct device *dev)
 static int abox_cpu_pm_ipc(struct abox_data *data, bool resume)
 {
 	const unsigned long long TIMER_RATE = 26000000;
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	ABOX_IPC_MSG msg;
 	struct IPC_SYSTEM_MSG *system = &msg.msg.system;
 	unsigned long long ktime, atime;
@@ -2062,9 +2104,15 @@ static int abox_cpu_pm_ipc(struct abox_data *data, bool resume)
 
 static void abox_pad_retention(bool retention)
 {
-	if (!retention)
-		exynos_pmu_update(ABOX_PAD_NORMAL, ABOX_PAD_NORMAL_MASK,
-				ABOX_PAD_NORMAL_MASK);
+	if (!retention) {
+#ifndef EMULATOR
+		exynos_pmu_update(ABOX_PAD_NORMAL,
+				ABOX_PAD_NORMAL_MASK, ABOX_PAD_NORMAL_MASK);
+#else
+		update_mask_value(pmu_alive + ABOX_PAD_NORMAL,
+				ABOX_PAD_NORMAL_MASK, ABOX_PAD_NORMAL_MASK);
+#endif
+	}
 }
 
 static void abox_cpu_power(bool on)
@@ -2081,13 +2129,11 @@ static int abox_cpu_enable(bool enable)
 	return 0;
 }
 
-#ifdef CONFIG_PM
 static void abox_save_register(struct abox_data *data)
 {
 	regcache_cache_only(data->regmap, true);
 	regcache_mark_dirty(data->regmap);
 }
-#endif
 
 static void abox_restore_register(struct abox_data *data)
 {
@@ -2095,282 +2141,34 @@ static void abox_restore_register(struct abox_data *data)
 	regcache_sync(data->regmap);
 }
 
-static int abox_ext_bin_request(struct device *dev,
-		struct abox_extra_firmware *efw)
+static int abox_request_firmware(struct device *dev,
+		const struct firmware **fw, const char *name)
 {
 	int ret;
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	mutex_lock(&efw->lock);
-
-	release_firmware(efw->firmware);
-	ret = request_firmware_direct(&efw->firmware, efw->name, dev);
+	release_firmware(*fw);
+	ret = request_firmware_direct(fw, name, dev);
 	if (ret == -ENOENT)
-		dev_warn(dev, "%s doesn't exist\n", efw->name);
+		dev_warn(dev, "%s: %s file does not exist(%d)\n", __func__,
+				name, ret);
 	else if (ret < 0)
-		dev_err(dev, "%s request fail: %d\n", efw->name, ret);
+		dev_err(dev, "%s: %s request failed(%d)\n", __func__,
+				name, ret);
 	else
-		dev_info(dev, "%s is loaded\n", efw->name);
-
-	mutex_unlock(&efw->lock);
+		dev_info(dev, "%s is loaded\n", name);
 
 	return ret;
 }
 
-static void abox_ext_bin_download(struct abox_data *data,
-		struct abox_extra_firmware *efw)
-{
-	struct device *dev = data->dev;
-	void __iomem *base;
-	size_t size;
-
-	dev_dbg(dev, "%s\n", __func__);
-
-	mutex_lock(&efw->lock);
-	if (!efw->firmware)
-		goto unlock;
-
-	switch (efw->area) {
-	case 0:
-		base = data->sram_base;
-		size = data->sram_size;
-		efw->iova = efw->offset;
-		break;
-	case 1:
-		base = data->dram_base;
-		size = DRAM_FIRMWARE_SIZE;
-		efw->iova = efw->offset + IOVA_DRAM_FIRMWARE;
-		break;
-	case 2:
-		base = shm_get_vss_region();
-		size = shm_get_vss_size();
-		efw->iova = efw->offset + IOVA_VSS_FIRMWARE;
-		break;
-	default:
-		dev_err(dev, "%s: invalied area %s, %u, %#x\n", __func__,
-				efw->name, efw->area, efw->offset);
-		goto unlock;
-	}
-
-	if (efw->offset + efw->firmware->size > size) {
-		dev_err(dev, "%s: too large firmware %s, %u, %#x\n", __func__,
-				efw->name, efw->area, efw->offset);
-		goto unlock;
-	}
-
-	memcpy(base + efw->offset, efw->firmware->data, efw->firmware->size);
-	dev_dbg(dev, "%s is downloaded %u, %#x\n", efw->name,
-			efw->area, efw->offset);
-unlock:
-	mutex_unlock(&efw->lock);
-}
-
-static int abox_ext_bin_name_get(struct snd_kcontrol *kcontrol,
-		unsigned int __user *bytes, unsigned int size)
-{
-	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
-	struct device *dev = cmpnt->dev;
-	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
-	struct abox_extra_firmware *efw = params->dobj.private;
-	unsigned long res = size;
-
-	dev_dbg(dev, "%s(%s)\n", __func__, kcontrol->id.name);
-
-	res = copy_to_user(bytes, efw->name, min(sizeof(efw->name), res));
-	if (res)
-		dev_warn(dev, "%s: size=%u, res=%lu\n", __func__, size, res);
-
-	return 0;
-}
-
-static int abox_ext_bin_name_put(struct snd_kcontrol *kcontrol,
-		const unsigned int __user *bytes, unsigned int size)
-{
-	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
-	struct device *dev = cmpnt->dev;
-	struct soc_bytes_ext *params = (void *)kcontrol->private_value;
-	struct abox_extra_firmware *efw = params->dobj.private;
-	unsigned long res = size;
-
-	dev_dbg(dev, "%s(%s)\n", __func__, kcontrol->id.name);
-
-	res = copy_from_user(efw->name, bytes, min(sizeof(efw->name), res));
-	if (res)
-		dev_warn(dev, "%s: size=%u, res=%zu\n", __func__, size, res);
-	abox_ext_bin_request(dev, efw);
-
-	return 0;
-}
-
-static int abox_ext_bin_reload_get(struct snd_kcontrol *kcontrol,
-		struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
-	struct device *dev = cmpnt->dev;
-
-	dev_dbg(dev, "%s(%s)\n", __func__, kcontrol->id.name);
-
-	ucontrol->value.integer.value[0] = 0;
-
-	return 0;
-}
-
-static int abox_ext_bin_reload_put_ipc(struct abox_data *data,
-		struct abox_extra_firmware *efw)
-{
-	struct device *dev = data->dev;
-	ABOX_IPC_MSG msg;
-	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
-
-	dev_dbg(dev, "%s(%s)\n", __func__, efw->name);
-
-	msg.ipcid = IPC_SYSTEM;
-	system_msg->msgtype = ABOX_RELOAD_AREA;
-	system_msg->param1 = efw->iova;
-	system_msg->param2 = (int)(efw->firmware ? efw->firmware->size : 0);
-	return abox_request_ipc(dev, msg.ipcid, &msg, sizeof(msg), 0, 0);
-}
-
-static int abox_ext_bin_reload_put(struct snd_kcontrol *kcontrol,
-		struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
-	struct device *dev = cmpnt->dev;
-	struct abox_data *data = dev_get_drvdata(dev);
-	struct soc_mixer_control *mc =
-			(struct soc_mixer_control *)kcontrol->private_value;
-	struct abox_extra_firmware *efw = mc->dobj.private;
-
-	dev_dbg(dev, "%s(%s)\n", __func__, kcontrol->id.name);
-
-	if (ucontrol->value.integer.value[0]) {
-		abox_ext_bin_request(dev, efw);
-		abox_ext_bin_download(data, efw);
-		abox_ext_bin_reload_put_ipc(data, efw);
-	}
-
-	return 0;
-}
-
-static const struct snd_kcontrol_new abox_ext_bin_controls[] = {
-	SND_SOC_BYTES_TLV("EXT BIN%d NAME", 64,
-			abox_ext_bin_name_get, abox_ext_bin_name_put),
-	SOC_SINGLE_EXT("EXT BIN%d RELOAD", 0, 0, 1, 0,
-			abox_ext_bin_reload_get, abox_ext_bin_reload_put),
-};
-
-static int abox_ext_bin_reload_all_get(struct snd_kcontrol *kcontrol,
-		struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
-	struct device *dev = cmpnt->dev;
-
-	dev_dbg(dev, "%s(%s)\n", __func__, kcontrol->id.name);
-
-	ucontrol->value.integer.value[0] = 0;
-
-	return 0;
-}
-
-static int abox_ext_bin_reload_all_put(struct snd_kcontrol *kcontrol,
-		struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
-	struct device *dev = cmpnt->dev;
-	struct abox_data *data = dev_get_drvdata(dev);
-	struct abox_extra_firmware *efw;
-
-	dev_dbg(dev, "%s(%s)\n", __func__, kcontrol->id.name);
-
-	if (ucontrol->value.integer.value[0]) {
-		list_for_each_entry(efw, &data->firmware_extra, list) {
-			if (efw->changable) {
-				abox_ext_bin_request(dev, efw);
-				abox_ext_bin_download(data, efw);
-				abox_ext_bin_reload_put_ipc(data, efw);
-			}
-		}
-	}
-
-	return 0;
-}
-
-static const struct snd_kcontrol_new abox_ext_bin_reload_all_control =
-	SOC_SINGLE_EXT("EXT BIN RELOAD ALL", 0, 0, 1, 0,
-			abox_ext_bin_reload_all_get,
-			abox_ext_bin_reload_all_put);
-
-static int abox_ext_bin_add_controls(struct snd_soc_component *cmpnt,
-		struct abox_extra_firmware *efw)
-{
-	static bool reload_all_added;
-	struct device *dev;
-	struct snd_kcontrol_new *control, *controls;
-	struct soc_bytes_ext *be;
-	struct soc_mixer_control *mc;
-	char *name;
-	int num_controls = ARRAY_SIZE(abox_ext_bin_controls);
-
-	if (!cmpnt)
-		return -EINVAL;
-
-	dev = cmpnt->dev;
-
-	if (!reload_all_added)
-		reload_all_added = !snd_soc_add_component_controls(cmpnt,
-				&abox_ext_bin_reload_all_control, 1);
-
-	controls = devm_kmemdup(dev, &abox_ext_bin_controls,
-			sizeof(abox_ext_bin_controls), GFP_KERNEL);
-	if (!controls)
-		return -ENOMEM;
-
-	for (control = controls; control - controls < num_controls; control++) {
-		name = devm_kasprintf(dev, GFP_KERNEL, control->name, efw->idx);
-		if (!name) {
-			devm_kfree(dev, controls);
-			return -ENOMEM;
-		}
-		control->name = name;
-
-		if (control->info == snd_soc_bytes_info_ext) {
-			be = (void *)control->private_value;
-			be = devm_kmemdup(dev, be, sizeof(*be), GFP_KERNEL);
-			if (!be) {
-				devm_kfree(dev, name);
-				devm_kfree(dev, controls);
-				return -ENOMEM;
-			}
-			be->dobj.private = efw;
-			control->private_value = (unsigned long)be;
-		} else if (control->info == snd_soc_info_volsw) {
-			mc = (void *)control->private_value;
-			mc = devm_kmemdup(dev, mc, sizeof(*mc), GFP_KERNEL);
-			if (!mc) {
-				devm_kfree(dev, name);
-				devm_kfree(dev, controls);
-				return -ENOMEM;
-			}
-			mc->dobj.private = efw;
-			control->private_value = (unsigned long)mc;
-		} else {
-			devm_kfree(dev, name);
-			devm_kfree(dev, controls);
-			return -EINVAL;
-		}
-	}
-
-	return snd_soc_add_component_controls(cmpnt, controls, num_controls);
-}
-
 static struct abox_extra_firmware *abox_get_extra_firmware(
-		struct abox_data *data, unsigned int idx)
+		struct abox_data *data, const char *name)
 {
 	struct abox_extra_firmware *efw;
 
 	list_for_each_entry(efw, &data->firmware_extra, list) {
-		if (efw->idx == idx)
+		if (strcmp(efw->name, name) == 0)
 			return efw;
 	}
 
@@ -2379,93 +2177,116 @@ static struct abox_extra_firmware *abox_get_extra_firmware(
 
 static void abox_reload_extra_firmware(struct abox_data *data, const char *name)
 {
-	struct device *dev = data->dev;
+	struct platform_device *pdev = data->pdev;
+	struct device *dev = &pdev->dev;
 	struct abox_extra_firmware *efw;
 
 	dev_dbg(dev, "%s(%s)\n", __func__, name);
 
 	list_for_each_entry(efw, &data->firmware_extra, list) {
-		if (strncmp(efw->name, name, sizeof(efw->name)))
+		if (!efw->name || strcmp(efw->name, name))
 			continue;
 
-		abox_ext_bin_request(dev, efw);
+		abox_request_firmware(dev, &efw->firmware, efw->name);
 	}
 }
 
 static void abox_request_extra_firmware(struct abox_data *data)
 {
-	struct device *dev = data->dev;
+	struct platform_device *pdev = data->pdev;
+	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	struct device_node *child_np;
 	struct abox_extra_firmware *efw;
 	const char *name;
-	unsigned int idx, area, offset;
-	bool changable, kcontrol;
+	u32 area, offset;
 	int ret;
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	idx = -1;
 	for_each_available_child_of_node(np, child_np) {
-		if (!of_device_is_compatible(child_np, "samsung,abox-ext-bin"))
-			continue;
-
-		ret = of_samsung_property_read_string(dev, child_np, "name",
-				&name);
+		ret = of_property_read_string(child_np, "samsung,name", &name);
 		if (ret < 0)
 			continue;
 
-		ret = of_samsung_property_read_u32(dev, child_np, "area",
-				&area);
+		ret = of_property_read_u32(child_np, "samsung,area", &area);
 		if (ret < 0)
 			continue;
 
-		ret = of_samsung_property_read_u32(dev, child_np, "offset",
-				&offset);
+		ret = of_property_read_u32(child_np, "samsung,offset", &offset);
 		if (ret < 0)
 			continue;
 
-		kcontrol = of_samsung_property_read_bool(dev, child_np,
-				"mixer-control");
-
-		changable = of_samsung_property_read_bool(dev, child_np,
-				"changable");
-
-		efw = abox_get_extra_firmware(data, ++idx);
-		if (efw)
+		efw = abox_get_extra_firmware(data, name);
+		if (!efw) {
+			dev_info(dev, "new extra firmware %s\n", name);
+			efw = devm_kzalloc(dev, sizeof(*efw), GFP_KERNEL);
+			list_add_tail(&efw->list, &data->firmware_extra);
+			efw->name = name;
+			efw->area = area;
+			efw->offset = offset;
+		}
+		if (!efw) {
+			dev_err(dev, "%s: no memory %s\n", __func__, name);
 			continue;
+		}
 
-		efw = devm_kzalloc(dev, sizeof(*efw), GFP_KERNEL);
-		if (!efw)
-			continue;
-
-		dev_dbg(dev, "%s: name=%s, area=%u, offset=%#x\n", __func__,
+		dev_dbg(dev, "%s: name=%s, area=%u, offset=%u\n", __func__,
 				efw->name, efw->area, efw->offset);
 
-		strlcpy(efw->name, name, sizeof(efw->name));
-		efw->idx = idx;
-		efw->area = area;
-		efw->offset = offset;
-		efw->kcontrol = kcontrol;
-		efw->changable = changable;
-		mutex_init(&efw->lock);
-		list_add_tail(&efw->list, &data->firmware_extra);
-		abox_ext_bin_request(dev, efw);
-		if (efw->changable)
-			abox_ext_bin_add_controls(data->cmpnt, efw);
-
+		if (!efw->firmware) {
+			dev_dbg(dev, "%s: request %s\n", __func__, efw->name);
+			abox_request_firmware(dev, &efw->firmware, efw->name);
+			efw->kcontrol = !!of_find_property(child_np,
+					"samsung,mixer-control", NULL);
+		}
 	}
 }
 
 static void abox_download_extra_firmware(struct abox_data *data)
 {
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	struct abox_extra_firmware *efw;
+	void __iomem *base;
+	size_t size;
 
 	dev_dbg(dev, "%s\n", __func__);
 
 	list_for_each_entry(efw, &data->firmware_extra, list) {
-		abox_ext_bin_download(data, efw);
+		if (!efw->firmware)
+			continue;
+
+		switch (efw->area) {
+		case 0:
+			base = data->sram_base;
+			size = data->sram_size;
+			break;
+		case 1:
+			base = data->dram_base;
+			size = DRAM_FIRMWARE_SIZE;
+			break;
+		case 2:
+			base = shm_get_vss_region();
+			size = shm_get_vss_size();
+			break;
+		default:
+			dev_err(dev, "%s: invalied area %s, %u, %u\n",
+					__func__, efw->name, efw->area,
+					efw->offset);
+			continue;
+		}
+
+		if (efw->offset + efw->firmware->size > size) {
+			dev_err(dev, "%s: too large firmware %s, %u, %u\n",
+					__func__, efw->name, efw->area,
+					efw->offset);
+			continue;
+		}
+
+		memcpy(base + efw->offset, efw->firmware->data,
+				efw->firmware->size);
+		dev_dbg(dev, "%s is downloaded %u, %#x\n", efw->name,
+				efw->area, efw->offset);
 		if (efw->kcontrol)
 			abox_register_void_component(data, efw->firmware->data);
 	}
@@ -2480,19 +2301,49 @@ static int abox_download_firmware(struct device *dev)
 	if (ret)
 		return ret;
 
-	if (list_empty(&data->firmware_extra))
-		abox_request_extra_firmware(data);
+	abox_request_extra_firmware(data);
 	abox_download_extra_firmware(data);
 
 	return 0;
 }
+
+static void abox_cfg_gpio(struct device *dev, const char *name)
+{
+	struct abox_data *data = dev_get_drvdata(dev);
+	struct pinctrl_state *pin_state;
+	int ret;
+
+	dev_dbg(dev, "%s(%s)\n", __func__, name);
+
+	if (!data->pinctrl)
+		return;
+
+	pin_state = pinctrl_lookup_state(data->pinctrl, name);
+	if (IS_ERR(pin_state)) {
+		dev_err(dev, "Couldn't find pinctrl %s\n", name);
+	} else {
+		ret = pinctrl_select_state(data->pinctrl, pin_state);
+		if (ret < 0)
+			dev_err(dev, "Unable to configure pinctrl %s\n", name);
+	}
+}
+
+#undef MANUAL_SECURITY_CHANGE
+#ifdef MANUAL_SECURITY_CHANGE
+static void work_temp_function(struct work_struct *work)
+{
+	exynos_smc(0x82000701, 0, 0, 0);
+	pr_err("%s: ABOX_CA7 security changed!!!\n", __func__);
+}
+static DECLARE_DELAYED_WORK(work_temp, work_temp_function);
+#endif
 
 static bool abox_is_timer_set(struct abox_data *data)
 {
 	unsigned int val;
 	int ret;
 
-	ret = regmap_read(data->timer_regmap, ABOX_TIMER_PRESET_LSB(1),	&val);
+	ret = regmap_read(data->timer_regmap, ABOX_TIMER_CTRL1(0), &val);
 	if (ret < 0)
 		val = 0;
 
@@ -2517,28 +2368,23 @@ static void abox_update_suspend_wait_flag(struct abox_data *data, bool suspend)
 	WRITE_ONCE(data->hndshk_tag->suspend_wait_flag, flag);
 }
 
-#ifdef CONFIG_PM
 static int abox_enable(struct device *dev)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 	bool has_reset;
 	int ret = 0;
 
-	/* disable interleaving mode : MO = 4, Interleaving off*/
-	writel(0x0, data->sysreg_base + SYSREG_AUD_ARAM_OP_MODE);
-
 	dev_info(dev, "%s\n", __func__);
 
 	abox_gic_enable_irq(data->dev_gic);
-
-	/* enable abox core0 ipc intr */
-	abox_gic_target_core0(data->dev_gic, SGI_ABOX_MSG);
-	abox_gic_enable(data->dev_gic, SGI_ABOX_MSG, true);
-
 	abox_enable_wdt(data);
 
-	abox_request_cpu_gear(dev, data, DEFAULT_CPU_GEAR_ID,
+	abox_request_cpu_gear_sync(dev, data, DEFAULT_CPU_GEAR_ID,
 			ABOX_CPU_GEAR_MAX, "enable");
+
+	writel(0x1, data->sysreg_base + ABOX_SYSREG_MISC_CON);
+	if (abox_test_quirk(data, ABOX_QUIRK_BIT_SHARE_VTS_SRAM))
+		writel(0x1, data->sysreg_base + ABOX_SYSREG_L2_CACHE_CON);
 
 	if (data->clk_cpu) {
 		ret = clk_enable(data->clk_cpu);
@@ -2554,15 +2400,13 @@ static int abox_enable(struct device *dev)
 		goto error;
 	}
 
+	abox_cfg_gpio(dev, "default");
 	abox_pad_retention(false);
+
 	abox_restore_register(data);
 	has_reset = !abox_is_timer_set(data);
 	if (!has_reset) {
-		int val;
 		dev_info(dev, "wakeup from WFI\n");
-		regmap_read(data->timer_regmap, ABOX_TIMER_PRESET_LSB(1),
-				&val);
-		dev_info(dev, "[1] ABOX Timer1 Preset LSB = %x\n", val);
 		abox_update_suspend_wait_flag(data, false);
 		abox_start_timer(data);
 	} else {
@@ -2588,6 +2432,10 @@ static int abox_enable(struct device *dev)
 		abox_cpu_enable(true);
 	}
 
+#ifdef MANUAL_SECURITY_CHANGE
+	schedule_delayed_work(&work_temp, msecs_to_jiffies(3000));
+#endif
+
 	data->enabled = true;
 	if (has_reset)
 		pm_wakeup_event(dev, BOOT_DONE_TIMEOUT_MS);
@@ -2603,7 +2451,6 @@ static int abox_disable(struct device *dev)
 {
 	struct abox_data *data = dev_get_drvdata(dev);
 	enum calliope_state state = data->calliope_state;
-	int val;
 
 	dev_info(dev, "%s\n", __func__);
 
@@ -2611,14 +2458,13 @@ static int abox_disable(struct device *dev)
 	data->calliope_state = CALLIOPE_DISABLING;
 	abox_cache_components(dev, data);
 	flush_work(&data->boot_done_work);
-	regmap_read(data->timer_regmap, ABOX_TIMER_PRESET_LSB(1), &val);
-	dev_info(dev, "[2] ABOX Timer1 Preset LSB = %x\n", val);
 	if (state != CALLIOPE_DISABLED)
 		abox_cpu_pm_ipc(data, false);
 	data->calliope_state = CALLIOPE_DISABLED;
 	abox_log_drain_all(dev);
 	abox_request_dram_on(dev, DEFAULT_SYS_POWER_ID, false);
 	abox_save_register(data);
+	abox_cfg_gpio(dev, "idle");
 	abox_pad_retention(true);
 	data->enabled = false;
 	data->restored = false;
@@ -2627,8 +2473,6 @@ static int abox_disable(struct device *dev)
 	abox_gic_disable_irq(data->dev_gic);
 	abox_failsafe_report_reset(dev);
 	abox_dbg_dump_suspend(dev, data);
-	regmap_read(data->timer_regmap, ABOX_TIMER_PRESET_LSB(1), &val);
-	dev_info(dev, "[3] ABOX Timer1 Preset LSB = %x\n", val);
 	return 0;
 }
 
@@ -2659,13 +2503,12 @@ static int abox_resume(struct device *dev)
 	/* nothing to do */
 	return 0;
 }
-#endif
 
 static int abox_qos_notifier(struct notifier_block *nb,
 		unsigned long action, void *nb_data)
 {
 	struct abox_data *data = container_of(nb, struct abox_data, qos_nb);
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	long value = (long)action;
 
 	if (!pm_runtime_active(dev))
@@ -2679,14 +2522,17 @@ static int abox_qos_notifier(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
-#ifdef CONFIG_PM
-static int __maybe_unused abox_print_power_usage(struct device *dev, void *data)
+static int abox_print_power_usage(struct device *dev, void *data)
 {
 	dev_dbg(dev, "%s\n", __func__);
 
 	if (pm_runtime_enabled(dev) && pm_runtime_active(dev)) {
 		dev_info(dev, "usage_count:%d\n",
 				atomic_read(&dev->power.usage_count));
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+		sec_audio_pmlog(6, dev, "usage_count:%d\n",
+				atomic_read(&dev->power.usage_count));
+#endif
 		device_for_each_child(dev, data, abox_print_power_usage);
 	}
 
@@ -2697,7 +2543,7 @@ static int abox_pm_notifier(struct notifier_block *nb,
 		unsigned long action, void *nb_data)
 {
 	struct abox_data *data = container_of(nb, struct abox_data, pm_nb);
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	int ret;
 
 	dev_dbg(dev, "%s(%lu)\n", __func__, action);
@@ -2714,6 +2560,9 @@ static int abox_pm_notifier(struct notifier_block *nb,
 			ret = pm_runtime_suspend(dev);
 			if (ret < 0) {
 				dev_info(dev, "runtime suspend: %d\n", ret);
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+				sec_audio_pmlog(6, dev, "runtime suspend: %d\n", ret);
+#endif
 				abox_print_power_usage(dev, NULL);
 				return NOTIFY_BAD;
 			}
@@ -2725,47 +2574,43 @@ static int abox_pm_notifier(struct notifier_block *nb,
 	}
 	return NOTIFY_DONE;
 }
-#else
-static int __maybe_unused abox_print_power_usage(struct device *dev, void *data)
-{
-	return 0;
-}
-
-static int abox_pm_notifier(struct notifier_block *nb,
-		unsigned long action, void *nb_data)
-{
-	return NOTIFY_DONE;
-}
-#endif
 
 static int abox_modem_notifier(struct notifier_block *nb,
 		unsigned long action, void *nb_data)
 {
 	struct abox_data *data = container_of(nb, struct abox_data, modem_nb);
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	ABOX_IPC_MSG msg;
 	struct IPC_SYSTEM_MSG *system_msg = &msg.msg.system;
 
 	if (!abox_is_on())
 		return NOTIFY_DONE;
 
-	dev_info(dev, "%s(%lu)\n", __func__, action);
+	dev_info(&data->pdev->dev, "%s(%lu)\n", __func__, action);
 
 	msg.ipcid = IPC_SYSTEM;
 	switch (action) {
 	case MODEM_EVENT_RESET:
 		system_msg->msgtype = ABOX_RESET_VSS;
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+		abox_debug_string_update(TYPE_MODEM_CPCRASH, NULL);
+#endif
 		break;
 	case MODEM_EVENT_EXIT:
 		system_msg->msgtype = ABOX_STOP_VSS;
 		abox_dbg_print_gpr(dev, data);
-		abox_failsafe_report(dev);
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+		abox_debug_string_update(TYPE_MODEM_CPCRASH, NULL);
+#endif
 		break;
 	case MODEM_EVENT_ONLINE:
 		system_msg->msgtype = ABOX_START_VSS;
 		break;
 	case MODEM_EVENT_WATCHDOG:
 		system_msg->msgtype = ABOX_WATCHDOG_VSS;
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+		abox_debug_string_update(TYPE_MODEM_CPCRASH, NULL);
+#endif
 		break;
 	default:
 		system_msg->msgtype = 0;
@@ -2778,22 +2623,24 @@ static int abox_modem_notifier(struct notifier_block *nb,
 	return NOTIFY_DONE;
 }
 
+#ifdef CONFIG_EXYNOS_ITMON
 static int abox_itmon_notifier(struct notifier_block *nb,
 		unsigned long action, void *nb_data)
 {
 	struct abox_data *data = container_of(nb, struct abox_data, itmon_nb);
-	struct device *dev = data->dev;
+	struct device *dev = &data->pdev->dev;
 	struct itmon_notifier *itmon_data = nb_data;
 
 	if (itmon_data && itmon_data->dest && (strncmp("ABOX", itmon_data->dest,
 			sizeof("ABOX") - 1) == 0)) {
 		dev_info(dev, "%s(%lu)\n", __func__, action);
 		data->enabled = false;
-		return NOTIFY_BAD;
+		return NOTIFY_OK;
 	}
 
 	return NOTIFY_DONE;
 }
+#endif
 
 static ssize_t calliope_version_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -2888,9 +2735,8 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	if (!data)
 		return -ENOMEM;
 
-	dma_set_mask(dev, DMA_BIT_MASK(36));
 	platform_set_drvdata(pdev, data);
-	data->dev = dev;
+	data->pdev = pdev;
 	p_abox_data = data;
 
 	abox_probe_quirks(data, np);
@@ -2902,20 +2748,16 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	data->cpu_gear = ABOX_CPU_GEAR_MIN;
 	data->cpu_gear_min = 3; /* default value from kangchen */
 	for (i = 0; i < ARRAY_SIZE(data->sif_rate); i++) {
-		data->sif_rate[i] = 48000;
-		data->sif_format[i] = SNDRV_PCM_FORMAT_S16;
-		data->sif_channels[i] = 2;
+		data->sif_rate_min[i] = data->sif_rate[i] = 48000;
+		data->sif_format_min[i] = data->sif_format[i] =
+				SNDRV_PCM_FORMAT_S16;
+		data->sif_channels_min[i] = data->sif_channels[i] = 2;
 	}
 	INIT_WORK(&data->ipc_work, abox_process_ipc);
 	INIT_WORK(&data->register_component_work,
 			abox_register_component_work_func);
 	INIT_WORK(&data->restore_data_work, abox_restore_data_work_func);
 	INIT_WORK(&data->boot_done_work, abox_boot_done_work_func);
-	INIT_WORK(&data->notify_bargein_detect_work,
-			abox_notify_bargein_detect_work_func);
-	INIT_WORK(&data->notify_seamless_buf_done_work,
-			abox_seamless_buf_done_work_func);
-	INIT_DEFERRABLE_WORK(&data->boot_clear_work, abox_boot_clear_work_func);
 	INIT_DELAYED_WORK(&data->wdt_work, abox_wdt_work_func);
 	INIT_LIST_HEAD(&data->firmware_extra);
 	INIT_LIST_HEAD(&data->ipc_actions);
@@ -2978,18 +2820,26 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	abox_iommu_map(dev, IOVA_DRAM_FIRMWARE, data->dram_base_phys,
 			DRAM_FIRMWARE_SIZE, data->dram_base);
 
+	data->priv_base = dmam_alloc_coherent(dev, PRIVATE_SIZE,
+			&data->priv_base_phys, GFP_KERNEL);
+	if (!data->priv_base) {
+		dev_err(dev, "%s: no memory\n", "private");
+		return -ENOMEM;
+	}
+	dev_info(dev, "%s(%#x) alloc\n", "private", PRIVATE_SIZE);
+	abox_iommu_map(dev, IOVA_PRIVATE, data->priv_base_phys,
+			PRIVATE_SIZE, data->priv_base);
+
 	paddr = shm_get_vss_base();
 	dev_info(dev, "%s(%#x) alloc\n", "vss firmware", shm_get_vss_size());
 	abox_iommu_map(dev, IOVA_VSS_FIRMWARE, paddr, shm_get_vss_size(),
 			shm_get_vss_region());
 
-#if 0
 	paddr = shm_get_vparam_base();
 	dev_info(dev, "%s(%#x) alloc\n", "vss parameter",
 			shm_get_vparam_size());
 	abox_iommu_map(dev, IOVA_VSS_PARAMETER, paddr, shm_get_vparam_size(),
 			shm_get_vparam_region());
-#endif
 
 	abox_iommu_map(dev, 0x10000000, 0x10000000, PAGE_SIZE, 0);
 	iovmm_set_fault_handler(dev, abox_iommu_fault_handler, data);
@@ -2997,6 +2847,10 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	data->clk_pll = devm_clk_get_and_prepare(pdev, "pll");
 	if (IS_ERR(data->clk_pll))
 		return PTR_ERR(data->clk_pll);
+
+	data->clk_pll1 = devm_clk_get_and_prepare(pdev, "pll1");
+	if (IS_ERR(data->clk_pll1))
+		return PTR_ERR(data->clk_pll1);
 
 	data->clk_audif = devm_clk_get_and_prepare(pdev, "audif");
 	if (IS_ERR(data->clk_audif))
@@ -3012,7 +2866,7 @@ static int samsung_abox_probe(struct platform_device *pdev)
 
 	data->clk_dmic = devm_clk_get_and_prepare(pdev, "dmic");
 	if (IS_ERR(data->clk_dmic))
-		data->clk_dmic = NULL;
+		return PTR_ERR(data->clk_dmic);
 
 	data->clk_bus = devm_clk_get_and_prepare(pdev, "bus");
 	if (IS_ERR(data->clk_bus))
@@ -3026,6 +2880,26 @@ static int samsung_abox_probe(struct platform_device *pdev)
 			&data->uaif_max_div);
 	if (ret < 0)
 		data->uaif_max_div = 32;
+
+	ret = of_samsung_property_read_u32(dev, np, "ipc-tx-offset",
+			&data->ipc_tx_offset);
+	if (ret < 0)
+		return ret;
+
+	ret = of_samsung_property_read_u32(dev, np, "ipc-rx-offset",
+			&data->ipc_rx_offset);
+	if (ret < 0)
+		return ret;
+
+	ret = of_samsung_property_read_u32(dev, np, "ipc-tx-ack-offset",
+			&data->ipc_tx_ack_offset);
+	if (ret < 0)
+		return ret;
+
+	ret = of_samsung_property_read_u32(dev, np, "ipc-rx-ack-offset",
+			&data->ipc_rx_ack_offset);
+	if (ret < 0)
+		return ret;
 
 	of_samsung_property_read_u32_array(dev, np, "pm-qos-int",
 			data->pm_qos_int, ARRAY_SIZE(data->pm_qos_int));
@@ -3053,11 +2927,27 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	}
 	data->dev_gic = &pdev_tmp->dev;
 
+	if (abox_test_quirk(data, ABOX_QUIRK_BIT_SHARE_VTS_SRAM)) {
+		np_tmp = of_parse_phandle(np, "vts", 0);
+		if (!np_tmp) {
+			dev_err(dev, "Failed to get vts device node\n");
+			return -EPROBE_DEFER;
+		}
+		data->pdev_vts = of_find_device_by_node(np_tmp);
+		if (!data->pdev_vts) {
+			dev_err(dev, "Failed to get vts platform device\n");
+			return -EPROBE_DEFER;
+		}
+	}
+
+#ifdef EMULATOR
+	pmu_alive = ioremap(0x16480000, 0x10000);
+#endif
 	abox_gic_register_irq_handler(data->dev_gic, IRQ_WDT, abox_wdt_handler,
 			data);
 	for (i = 0; i < SGI_ABOX_MSG; i++)
 		abox_gic_register_irq_handler(data->dev_gic, i,
-				abox_irq_handler, dev);
+				abox_irq_handler, pdev);
 
 	abox_of_get_addr(data, np, "samsung,ipc-tx-area", &data->ipc_tx_addr,
 			&data->ipc_tx_size);
@@ -3067,6 +2957,8 @@ static int samsung_abox_probe(struct platform_device *pdev)
 			(void **)&data->hndshk_tag, NULL);
 	ret = abox_ipc_init(dev, data->ipc_tx_addr, data->ipc_tx_size,
 			data->ipc_rx_addr, data->ipc_rx_size);
+	data->ipc_version = (ret < 0) ? 1 : 2;
+	dev_info(dev, "ipc version=%d\n", data->ipc_version);
 	for (i = 0; i < IPC_ID_COUNT; i++)
 		abox_ipc_register_handler(dev, i, abox_ipc_handler, pdev);
 
@@ -3092,8 +2984,10 @@ static int samsung_abox_probe(struct platform_device *pdev)
 	data->modem_nb.notifier_call = abox_modem_notifier;
 	register_modem_event_notifier(&data->modem_nb);
 
+#ifdef CONFIG_EXYNOS_ITMON
 	data->itmon_nb.notifier_call = abox_itmon_notifier;
 	itmon_notifier_chain_register(&data->itmon_nb);
+#endif
 
 	abox_failsafe_init(dev);
 
@@ -3114,11 +3008,10 @@ static int samsung_abox_probe(struct platform_device *pdev)
 
 	ret = abox_cmpnt_register(dev);
 	if (ret < 0)
-		dev_err(dev, "component register failed: %d\n", ret);
+		dev_err(dev, "component register failed:%d\n", ret);
 
 	dev_info(dev, "%s: probe complete\n", __func__);
 
-	abox_vdma_init(dev);
 	of_platform_populate(np, NULL, NULL, dev);
 
 	return 0;
@@ -3132,14 +3025,16 @@ static int samsung_abox_remove(struct platform_device *pdev)
 	dev_info(dev, "%s\n", __func__);
 
 	pm_runtime_disable(dev);
-#ifdef CONFIG_PM
+#ifndef CONFIG_PM
 	abox_runtime_suspend(dev);
 #endif
 	device_init_wakeup(dev, false);
 	destroy_workqueue(data->ipc_workqueue);
 	snd_soc_unregister_component(dev);
 	abox_iommu_unmap(dev, IOVA_DRAM_FIRMWARE);
-
+#ifdef EMULATOR
+	iounmap(pmu_alive);
+#endif
 	return 0;
 }
 
@@ -3182,10 +3077,10 @@ static int __init samsung_abox_late_initcall(void)
 {
 	pr_info("%s\n", __func__);
 
-	if (p_abox_data && p_abox_data->dev)
-		pm_runtime_put_sync_suspend(p_abox_data->dev);
+	if (p_abox_data && p_abox_data->pdev)
+		pm_runtime_put_sync_suspend(&p_abox_data->pdev->dev);
 	else
-		pr_err("%s: p_abox_data or dev is null", __func__);
+		pr_err("%s: p_abox_data or pdev is null", __func__);
 
 	return 0;
 }

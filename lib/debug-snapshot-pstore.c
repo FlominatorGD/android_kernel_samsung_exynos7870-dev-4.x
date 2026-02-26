@@ -21,6 +21,9 @@
 #include <linux/pstore_ram.h>
 #include <linux/sched/clock.h>
 #include <linux/ftrace.h>
+#ifdef CONFIG_SEC_EXT
+#include <linux/sec_ext.h>
+#endif
 
 #include "debug-snapshot-local.h"
 #include <asm/irq.h>
@@ -85,7 +88,7 @@ void register_hook_logger(void (*func)(const char *name, const char *buf, size_t
 	logger.buffer = vmalloc(PAGE_SIZE * 3);
 
 	if (logger.buffer)
-		dev_info(dss_desc.dev, "debug-snapshot: logger buffer alloc success\n");
+		pr_info("debug-snapshot: logger buffer alloc address: 0x%p\n", logger.buffer);
 }
 EXPORT_SYMBOL(register_hook_logger);
 
@@ -146,6 +149,20 @@ static int dbg_snapshot_combine_pmsg(char *buffer, size_t count, unsigned int le
 				break;
 
 			logger.func_hook_logger("log_platform", buffer, count - 1);
+#ifdef CONFIG_SEC_EXT
+			if (count > 1 && strncmp(buffer, "!@", 2) == 0) {
+				/* To prevent potential buffer overrun
+				 * put a null at the end of the buffer if required
+				 */
+				buffer[count - 1] = '\0';
+				pr_info("%s\n", buffer);
+#ifdef CONFIG_SEC_BOOTSTAT
+				if (count > 5 && strncmp(buffer, "!@Boot", 6) == 0)
+					sec_bootstat_add(buffer);
+#endif /* CONFIG_SEC_BOOTSTAT */
+
+			}
+#endif /* CONFIG_SEC_EXT */
 		}
 		break;
 	default:
@@ -224,7 +241,7 @@ static struct platform_device dss_ramoops = {
 
 static int __init dss_pstore_init(void)
 {
-	if (dbg_snapshot_get_enable_item("log_pstore")) {
+	if (dbg_snapshot_get_enable("log_pstore")) {
 		dss_ramoops_data.mem_size = dbg_snapshot_get_item_size("log_pstore");
 		dss_ramoops_data.mem_address = dbg_snapshot_get_item_paddr("log_pstore");
 		dss_ramoops_data.pmsg_size = dss_ramoops_data.mem_size / 2;

@@ -24,8 +24,8 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/gpio.h>
-#include <linux/mfd/s2mpb02.h>
-#include <linux/mfd/s2mpb02-regulator.h>
+#include <linux/mfd/samsung/s2mpb02.h>
+#include <linux/mfd/samsung/s2mpb02-regulator.h>
 
 static const u8 s2mpb02_mask_reg[] = {
 	[LED_INT] = S2MPB02_REG_INT1M,
@@ -145,6 +145,8 @@ int s2mpb02_irq_init(struct s2mpb02_dev *s2mpb02)
 	int ret;
 
 	if (!s2mpb02->irq_gpio) {
+		pr_warn("%s:%s No interrupt specified.\n",
+					MFD_DEV_NAME, __func__);
 		s2mpb02->irq_base = 0;
 		return 0;
 	}

@@ -70,6 +70,10 @@ extern struct ion_heap *ion_cma_heap_create(struct cma *cma,
 #define ion_cma_heap_create(cma, p) ERR_PTR(-ENODEV)
 #endif
 
+#ifdef CONFIG_ION_RBIN_HEAP
+extern struct ion_heap *ion_rbin_heap_create(struct ion_platform_heap *pheap);
+#endif
+
 #if defined(CONFIG_ION_HPA_HEAP)
 extern struct ion_heap *ion_hpa_heap_create(struct ion_platform_heap *pheap,
 					    phys_addr_t except_areas[][2],
@@ -134,10 +138,7 @@ static inline void *ion_buffer_protect_multi(unsigned int protection_id,
 {
 	return NULL;
 }
-static inline int ion_buffer_unprotect(void *priv)
-{
-	return 0;
-}
+#define ion_buffer_unprotect(priv) do { } while (0)
 #define exynos_ion_fixup(idev) do { } while (0)
 static inline int exynos_ion_alloc_fixup(struct ion_device *idev,
 					 struct ion_buffer *buffer)
@@ -179,5 +180,6 @@ extern const struct dma_buf_ops ion_dma_buf_ops;
 struct ion_heap *ion_get_heap_by_name(const char *heap_name);
 struct dma_buf *__ion_alloc(size_t len, unsigned int heap_id_mask,
 			    unsigned int flags);
+void exynos_ion_init_camera_heaps(void);
 
 #endif /* _ION_EXYNOS_H_ */

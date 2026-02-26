@@ -16,8 +16,7 @@
 #include <soc/samsung/bts.h>
 #include <soc/samsung/cal-if.h>
 #include <linux/apm-exynos.h>
-#include <sound/samsung/abox.h>
-
+#include <linux/sec_debug.h>
 struct exynos_pm_domain *exynos_pd_lookup_name(const char *domain_name)
 {
 	struct exynos_pm_domain *exypd = NULL;
@@ -64,8 +63,7 @@ EXPORT_SYMBOL(exynos_pd_status);
  */
 static void exynos_pd_power_on_pre(struct exynos_pm_domain *pd)
 {
-	if (!pd->skip_idle_ip)
-		exynos_update_ip_idle_status(pd->idle_ip_index, 0);
+	exynos_update_ip_idle_status(pd->idle_ip_index, 0);
 
 	if (pd->devfreq_index >= 0) {
 		exynos_bts_scitoken_setting(true);
@@ -87,8 +85,7 @@ static void exynos_pd_power_off_pre(struct exynos_pm_domain *pd)
 
 static void exynos_pd_power_off_post(struct exynos_pm_domain *pd)
 {
-	if (!pd->skip_idle_ip)
-		exynos_update_ip_idle_status(pd->idle_ip_index, 1);
+	exynos_update_ip_idle_status(pd->idle_ip_index, 1);
 
 	if (pd->devfreq_index >= 0) {
 		exynos_bts_scitoken_setting(false);
@@ -166,11 +163,13 @@ static int exynos_pd_power_off(struct generic_pm_domain *genpd)
 			exynos_pd_prepare_forced_off(pd);
 			ret = pd->pd_control(pd->cal_pdid, 0);
 			if (unlikely(ret)) {
-				pr_err(EXYNOS_PD_PREFIX "%s occur error at power off!\n", genpd->name);
+				pr_auto(ASL1, EXYNOS_PD_PREFIX "%s occur error at power off!\n", genpd->name);
+				sec_debug_set_extra_info_epd((char *)(genpd->name));
 				goto acc_unlock;
 			}
 		} else {
-			pr_err(EXYNOS_PD_PREFIX "%s occur error at power off!\n", genpd->name);
+			pr_auto(ASL1, EXYNOS_PD_PREFIX "%s occur error at power off!!\n", genpd->name);
+			sec_debug_set_extra_info_epd((char *)(genpd->name));
 			goto acc_unlock;
 		}
 	}
@@ -360,10 +359,7 @@ static __init int exynos_pd_dt_parse(void)
 			return -EINVAL;
 		}
 
-		if (of_property_read_bool(np, "skip-idle-ip"))
-			pd->skip_idle_ip = true;
-		else
-			pd->idle_ip_index = exynos_get_idle_ip_index(pd->name);
+		pd->idle_ip_index = exynos_get_idle_ip_index(pd->name);
 
 		mutex_init(&pd->access_lock);
 		platform_set_drvdata(pdev, pd);

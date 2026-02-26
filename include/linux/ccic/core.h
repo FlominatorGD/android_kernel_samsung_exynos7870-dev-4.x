@@ -3,7 +3,7 @@
 
 #include <linux/device.h>
 #include <linux/types.h>
-#include <linux/ccic/s2mm005_usbpd_msg.h>
+#include <linux/ccic/usbpd_msg.h>
 #include <linux/ccic/usbpd_typec.h>
 #include <linux/ccic/usbpd_config.h>
 #if defined(CONFIG_SAMSUNG_BATTERY)
@@ -230,22 +230,6 @@ struct usbpd_dev {
 					IFCONN_NOTIFY_ID_##id,	\
 					event,	\
 					IFCONN_NOTIFY_PARAM_DATA,	\
-					udata);	\
-	if (ret < 0) {	\
-		pr_err("%s: Fail to send noti\n", \
-				__func__);	\
-	}	\
-}
-
-#define USBPD_SEND_NOTI_TEMPLATE(listener, id, event, udata)	\
-{	\
-	int ret;	\
-	ret = ifconn_notifier_notify( \
-					IFCONN_NOTIFY_CCIC,	\
-					listener,	\
-					IFCONN_NOTIFY_ID_##id,	\
-					event,	\
-					IFCONN_NOTIFY_PARAM_TEMPLATE,	\
 					udata);	\
 	if (ret < 0) {	\
 		pr_err("%s: Fail to send noti\n", \

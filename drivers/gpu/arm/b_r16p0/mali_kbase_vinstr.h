@@ -31,6 +31,9 @@
 struct kbase_vinstr_context;
 struct kbase_hwcnt_virtualizer;
 struct kbase_ioctl_hwcnt_reader_setup;
+//SRUK-START
+struct kbase_device;
+//SRUK-END
 
 /**
  * kbase_vinstr_init() - Initialise a vinstr context.
@@ -43,6 +46,9 @@ struct kbase_ioctl_hwcnt_reader_setup;
  * Return: 0 on success, else error code.
  */
 int kbase_vinstr_init(
+//SRUK-START
+	struct kbase_device* kbdev,
+//SRUK-END
 	struct kbase_hwcnt_virtualizer *hvirt,
 	struct kbase_vinstr_context **out_vctx);
 

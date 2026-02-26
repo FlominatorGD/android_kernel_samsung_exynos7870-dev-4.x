@@ -21,6 +21,7 @@
  */
 #define UFS_VER_0004	4
 #define UFS_VER_0005	5
+#define UFS_VER_0006	6
 
 #define	PHY_CFG_NONE	0
 #define	PHY_PCS_COMN	1

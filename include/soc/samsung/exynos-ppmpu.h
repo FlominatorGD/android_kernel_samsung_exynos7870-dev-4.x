@@ -36,13 +36,9 @@
 
 #define PPMPU_NEED_FAIL_INFO_LOGGING			(0x1EED)
 #define PPMPU_SKIP_FAIL_INFO_LOGGING			(0x2419)
-#define PPMPU_NO_PPMPU_FAIL_INTERRUPT			(0x7017)
-
-#define PPMPU_HANDLE_INTERRUPT_THREAD			(1)
-#define PPMPU_DO_NOT_HANDLE_INTERRUPT_THREAD		(0)
 
 /* Flag whether fail read information is logged */
-#define PPMPU_STR_INFO_FLAG				(0x50504D50)	/* PPMP */
+#define STR_INFO_FLAG					(0x50504D50)	/* PPMP */
 
 /* Direction of illegal access */
 #define PPMPU_ILLEGAL_ACCESS_READ			(0)
@@ -68,16 +64,13 @@ struct ppmpu_info_data {
 
 	struct ppmpu_fail_info *fail_info;
 	dma_addr_t fail_info_pa;
-
 	unsigned int ch_num;
-	unsigned int tzc_ver;
 
 	unsigned int irq[MAX_NUM_OF_PPMPU_CHANNEL * 2];
 	unsigned int irqcnt;
 
 	unsigned int info_flag;
 	int need_log;
-	int need_handle;
 };
 #endif	/* __ASSEMBLY__ */
 #endif	/* __EXYNOS_PPMPU_H */

@@ -23,6 +23,7 @@
 #include <linux/suspend.h>
 #include <linux/tick.h>
 #include <trace/events/power.h>
+#include <linux/exynos-ucc.h>
 
 #include "cpuidle.h"
 
@@ -55,43 +56,17 @@ unsigned int cpuidle_get_target_residency(int cpu, int state)
 {
 	struct cpuidle_device *dev = per_cpu(cpuidle_devices, cpu);
 	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
+	struct cpuidle_state *s;
+	unsigned int target_residency = INT_MAX;
 
 	if (!drv)
-		return INT_MAX;
+		goto exit_func;
 
-	return drv->states[state].target_residency;
-}
+	s = &drv->states[state];
+	target_residency = s->target_residency;
 
-int cpuidle_get_state_size(void)
-{
-	struct cpuidle_device *dev = per_cpu(cpuidle_devices, 0);
-	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
-
-	if (!drv)
-		return INT_MAX;
-
-	return drv->state_count;
-}
-
-unsigned int cpuidle_get_exit_latency(int cpu, int state)
-{
-	struct cpuidle_device *dev = per_cpu(cpuidle_devices, cpu);
-	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
-
-	if (!drv)
-		return INT_MAX;
-
-	return drv->states[state].exit_latency;
-}
-
-bool cpuidle_check_state_enable(unsigned int cpu, int state)
-{
-	struct cpuidle_device *dev = per_cpu(cpuidle_devices, cpu);
-	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
-	struct cpuidle_state *s = &drv->states[state];
-	struct cpuidle_state_usage *su = &dev->states_usage[state];
-
-	return s->disabled || su->disable;
+exit_func:
+	return target_residency;
 }
 
 /**
@@ -254,9 +229,10 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 		broadcast = false;
 	}
 
+	index = filter_cstate(dev->cpu, index);
+
 	/* Take note of the planned idle state. */
 	sched_idle_set_state(target_state, index);
-
 	trace_cpu_idle_rcuidle(index, dev->cpu);
 	dbg_snapshot_cpuidle(drv->states[index].desc, index, 0, DSS_FLAG_IN);
 	time_start = ns_to_ktime(local_clock());

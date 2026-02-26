@@ -113,6 +113,19 @@ int pll_mmc_enable(int enable)
 	return ret;
 }
 
+int cal_pll_mmc_check(void)
+{
+       unsigned int reg;
+       bool ret = false;
+
+       reg = readl(cmu_base + PLL_CON1_PLL_MMC);
+
+       if (reg & (1 << SSCG_EN))
+               ret = true;
+
+       return ret;
+}
+
 int cal_pll_mmc_set_ssc(unsigned int mfr, unsigned int mrr, unsigned int ssc_on)
 {
 	unsigned int reg;
@@ -165,3 +178,4 @@ void exynos9810_cal_data_init(void)
 }
 
 void (*cal_data_init)(void) = exynos9810_cal_data_init;
+int (*cal_check_hiu_dvfs_id)(u32 id) = NULL;

@@ -129,7 +129,9 @@ int __init early_init_dt_scan_ect(unsigned long node, const char *uname,
 		return -1;
 
 	pr_info("[ECT] Address %x, Size %x\b", be32_to_cpu(*paddr), be32_to_cpu(*psize));
+	set_memsize_reserved_name("ECT_param");
 	memblock_reserve(be32_to_cpu(*paddr), be32_to_cpu(*psize));
+	unset_memsize_reserved_name();
 	ect_init(be32_to_cpu(*paddr), be32_to_cpu(*psize));
 
 	return 1;
@@ -233,9 +235,6 @@ static void __init setup_machine_fdt(phys_addr_t dt_phys)
 #if defined(CONFIG_ECT)
 	/* Scan dvfs paramter information, address that loaded on DRAM and size */
 	of_scan_flat_dt(early_init_dt_scan_ect, NULL);
-#endif
-#if defined(CONFIG_DEBUG_SNAPSHOT)
-	of_scan_flat_dt(dbg_snapshot_early_init_dt_scan_dpm, NULL);
 #endif
 }
 

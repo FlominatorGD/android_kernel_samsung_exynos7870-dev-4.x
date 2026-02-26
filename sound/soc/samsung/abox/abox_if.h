@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_if.h
+/* sound/soc/samsung/abox/abox_if.h
  *
  * ALSA SoC - Samsung Abox UAIF/DSIF driver
  *
@@ -30,12 +30,9 @@ struct abox_if_of_data {
 
 struct abox_if_data {
 	int id;
-	bool slave;
 	void __iomem *sfr_base;
 	struct clk *clk_bclk;
 	struct clk *clk_bclk_gate;
-	struct clk *clk_mux;
-	struct clk *clk_mclk;
 	struct snd_soc_component *cmpnt;
 	struct snd_soc_dai_driver *dai_drv;
 	struct abox_data *abox_data;

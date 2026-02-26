@@ -231,9 +231,6 @@ static int madera_wait_for_boot(struct madera *madera)
 	regmap_write(madera->regmap, MADERA_IRQ1_STATUS_1,
 		     MADERA_BOOT_DONE_EINT1);
 
-	if (ret)
-		dev_err(madera->dev, "Polling BOOT_DONE_STS failed: %d\n", ret);
-
 	pm_runtime_mark_last_busy(madera->dev);
 
 	return ret;
@@ -269,22 +266,33 @@ static void madera_disable_hard_reset(struct madera *madera)
 	}
 }
 
+static int madera_dcvdd_notify(struct notifier_block *nb,
+			       unsigned long action, void *data)
+{
+	struct madera *madera = container_of(nb, struct madera,
+					     dcvdd_notifier);
+
+	dev_dbg(madera->dev, "DCVDD notify %lx\n", action);
+
+	if (action & REGULATOR_EVENT_DISABLE)
+		msleep(20);
+
+	return NOTIFY_DONE;
+}
+
 #ifdef CONFIG_PM
 static int madera_runtime_resume(struct device *dev)
 {
 	struct madera *madera = dev_get_drvdata(dev);
 	int ret;
 
-	dev_dbg(dev, "Leaving sleep mode\n");
+	dev_info(dev, "Leaving sleep mode\n");
 
 	ret = regulator_enable(madera->dcvdd);
 	if (ret) {
 		dev_err(dev, "Failed to enable DCVDD: %d\n", ret);
 		return ret;
 	}
-
-	if (IS_ENABLED(CONFIG_REGULATOR_S2MPU09))
-		msleep(10);
 
 	regcache_cache_only(madera->regmap, false);
 	regcache_cache_only(madera->regmap_32bit, false);
@@ -319,7 +327,7 @@ static int madera_runtime_suspend(struct device *dev)
 {
 	struct madera *madera = dev_get_drvdata(dev);
 
-	dev_dbg(madera->dev, "Entering sleep mode\n");
+	dev_info(madera->dev, "Entering sleep mode\n");
 
 	regcache_cache_only(madera->regmap, true);
 	regcache_mark_dirty(madera->regmap);
@@ -452,9 +460,6 @@ static int madera_get_reset_gpio(struct madera *madera)
 		else
 			ret = 0;
 	}
-
-	/* Ensure period of reset asserted before we apply the supplies */
-	msleep(20);
 
 	if (ret == -EPROBE_DEFER)
 		return ret;
@@ -646,6 +651,27 @@ int madera_dev_init(struct madera *madera)
 
 	dev_set_drvdata(madera->dev, madera);
 
+	BLOCKING_INIT_NOTIFIER_HEAD(&madera->notifier);
+
+	if (dev_get_platdata(madera->dev)) {
+		memcpy(&madera->pdata, dev_get_platdata(madera->dev),
+		       sizeof(madera->pdata));
+	}
+
+	ret = madera_get_reset_gpio(madera);
+	if (ret)
+		return ret;
+
+	madera_prop_get_micbias(madera);
+
+	regcache_cache_only(madera->regmap, true);
+	regcache_cache_only(madera->regmap_32bit, true);
+
+	for (i = 0; i < ARRAY_SIZE(madera_core_supplies); i++)
+		madera->core_supplies[i].supply = madera_core_supplies[i];
+
+	madera->num_core_supplies = ARRAY_SIZE(madera_core_supplies);
+
 	/*
 	 * Pinctrl subsystem only configures pinctrls if all referenced pins
 	 * are registered. Create our pinctrl child now so that its pins exist
@@ -664,7 +690,7 @@ int madera_dev_init(struct madera *madera)
 	if (IS_ERR(pinctrl)) {
 		ret = PTR_ERR(pinctrl);
 		dev_err(madera->dev, "Failed to get pinctrl: %d\n", ret);
-		goto err_devs;
+		goto err_pinctrl_dev;
 	}
 
 	/* Use (optional) minimal config with only external pin bindings */
@@ -672,26 +698,12 @@ int madera_dev_init(struct madera *madera)
 	if (ret)
 		goto err_pinctrl;
 
-	BLOCKING_INIT_NOTIFIER_HEAD(&madera->notifier);
-
-	if (dev_get_platdata(madera->dev)) {
-		memcpy(&madera->pdata, dev_get_platdata(madera->dev),
-		       sizeof(madera->pdata));
-	}
-
-	ret = madera_get_reset_gpio(madera);
-	if (ret)
+	ret = devm_regulator_bulk_get(dev, madera->num_core_supplies,
+				      madera->core_supplies);
+	if (ret) {
+		dev_err(dev, "Failed to request core supplies: %d\n", ret);
 		goto err_pinctrl;
-
-	madera_prop_get_micbias(madera);
-
-	regcache_cache_only(madera->regmap, true);
-	regcache_cache_only(madera->regmap_32bit, true);
-
-	for (i = 0; i < ARRAY_SIZE(madera_core_supplies); i++)
-		madera->core_supplies[i].supply = madera_core_supplies[i];
-
-	madera->num_core_supplies = ARRAY_SIZE(madera_core_supplies);
+	}
 
 	switch (madera->type) {
 	case CS47L15:
@@ -719,13 +731,6 @@ int madera_dev_init(struct madera *madera)
 		goto err_pinctrl;
 	}
 
-	ret = devm_regulator_bulk_get(dev, madera->num_core_supplies,
-				      madera->core_supplies);
-	if (ret) {
-		dev_err(dev, "Failed to request core supplies: %d\n", ret);
-		goto err_pinctrl;
-	}
-
 	/*
 	 * Don't use devres here because the only device we have to get
 	 * against is the MFD device and DCVDD will likely be supplied by
@@ -739,11 +744,22 @@ int madera_dev_init(struct madera *madera)
 		goto err_pinctrl;
 	}
 
+	madera->dcvdd_notifier.notifier_call = madera_dcvdd_notify;
+	ret = regulator_register_notifier(madera->dcvdd,
+					  &madera->dcvdd_notifier);
+	if (ret) {
+		dev_err(dev, "Failed to register DCVDD notifier %d\n", ret);
+		goto err_dcvdd;
+	}
+
+	/* Ensure period of reset asserted before we apply the supplies */
+	msleep(20);
+
 	ret = regulator_bulk_enable(madera->num_core_supplies,
 				    madera->core_supplies);
 	if (ret) {
 		dev_err(dev, "Failed to enable core supplies: %d\n", ret);
-		goto err_dcvdd;
+		goto err_notifier;
 	}
 
 	ret = regulator_enable(madera->dcvdd);
@@ -751,9 +767,6 @@ int madera_dev_init(struct madera *madera)
 		dev_err(dev, "Failed to enable DCVDD: %d\n", ret);
 		goto err_enable;
 	}
-
-	if (IS_ENABLED(CONFIG_REGULATOR_S2MPU09))
-		msleep(10);
 
 	madera_disable_hard_reset(madera);
 
@@ -938,11 +951,13 @@ err_reset:
 err_enable:
 	regulator_bulk_disable(madera->num_core_supplies,
 			       madera->core_supplies);
+err_notifier:
+	regulator_unregister_notifier(madera->dcvdd, &madera->dcvdd_notifier);
 err_dcvdd:
 	regulator_put(madera->dcvdd);
 err_pinctrl:
 	pinctrl_put(pinctrl);
-err_devs:
+err_pinctrl_dev:
 	mfd_remove_devices(dev);
 
 	return ret;
@@ -961,6 +976,7 @@ int madera_dev_exit(struct madera *madera)
 	pm_runtime_disable(madera->dev);
 
 	regulator_disable(madera->dcvdd);
+	regulator_unregister_notifier(madera->dcvdd, &madera->dcvdd_notifier);
 	regulator_put(madera->dcvdd);
 
 	mfd_remove_devices(madera->dev);

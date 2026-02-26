@@ -18,7 +18,6 @@
 #include <linux/debugfs.h>
 #include <linux/oom.h>
 #include <linux/sort.h>
-#include <linux/slab.h>
 
 #include "ion.h"
 #include "ion_exynos.h"
@@ -286,11 +285,11 @@ static void ion_debug_buffer_for_heap(struct seq_file *s,
 {
 	struct rb_node *n;
 	struct ion_buffer *buffer;
-	size_t total = 0;
+	size_t total = 0, peak = 0;
 
-	ion_debug_print(s, "[  id] %15s %8s %5s %8s %16s(%5s) %16s(%5s)\n",
+	ion_debug_print(s, "[  id] %15s %8s %5s %8s : %s\n",
 			"heap", "heaptype", "flags", "size(kb)",
-			"task_comm", "pid", "thread_comm", "tid");
+			"iommu_mapped...");
 
 	mutex_lock(&dev->buffer_lock);
 	for (n = rb_first(&dev->buffers); n; n = rb_next(n)) {
@@ -301,12 +300,14 @@ static void ion_debug_buffer_for_heap(struct seq_file *s,
 				ARRAY_SIZE(heap_type_name)) ?
 				buffer->heap->type : 0;
 
-			ion_debug_print(s, "[%4d] %15s %8s %#5lx %8zu %16s(%5u) %16s(%5u)\n",
+			ion_debug_print(s, "[%4d] %15s %8s %#5lx %8zu %16s %16u (%16s %16u)",
 					buffer->id, buffer->heap->name,
 					heap_type_name[heaptype], buffer->flags,
 					buffer->size / SZ_1K,
 					buffer->task_comm, buffer->pid,
 					buffer->thread_comm, buffer->tid);
+
+			ion_debug_print(s, "\n");
 
 			total += buffer->size;
 		}
@@ -316,6 +317,11 @@ static void ion_debug_buffer_for_heap(struct seq_file *s,
 	total /= SZ_1K;
 
 	ion_debug_print(s, "TOTAL: %zu kb\n", total);
+
+	if (heap) {
+		peak = atomic_long_read(&heap->total_allocated_peak) / SZ_1K;
+		ion_debug_print(s, "PEAK : %zu kb\n", peak);
+	}
 }
 
 #define ion_debug_buffer_for_all_heap(s, dev) \
@@ -366,7 +372,7 @@ void ion_debug_heap_init(struct ion_heap *heap)
 
 		path = dentry_path(heap->dev->heaps_debug_root,
 				   buf, 256);
-		perrfn("failed to create %s/%s", path, debug_name);
+		perrfn("failed to create %s/%s", path, heap_file);
 	}
 }
 

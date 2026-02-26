@@ -128,7 +128,7 @@
 /* Bit definitions for ADC_V3 */
 #define ADC_V3_DAT_FLAG		(1u << 31)
 
-#define MAX_ADC_V3_CHANNELS		9
+#define MAX_ADC_V3_CHANNELS		10
 #define MAX_ADC_V2_CHANNELS		10
 #define MAX_ADC_V1_CHANNELS		8
 #define MAX_EXYNOS3250_ADC_CHANNELS	2
@@ -482,7 +482,7 @@ static void exynos_adc_v2_start_conv(struct exynos_adc *info,
 
 	con2 = readl(ADC_V2_CON2(info->regs));
 	con2 &= ~ADC_V2_CON2_ACH_MASK;
-	con2 |= ADC_V2_CON2_ACH_SEL(addr);
+	con2 |= (unsigned int)ADC_V2_CON2_ACH_SEL(addr);
 	writel(con2, ADC_V2_CON2(info->regs));
 
 	con1 = readl(ADC_V2_CON1(info->regs));
@@ -866,6 +866,7 @@ static const struct iio_chan_spec exynos_adc_iio_channels[] = {
 	ADC_CHANNEL(6, "adc6"),
 	ADC_CHANNEL(7, "adc7"),
 	ADC_CHANNEL(8, "adc8"),
+	ADC_CHANNEL(9, "adc9"),
 };
 
 static int exynos_adc_remove_devices(struct device *dev, void *c)

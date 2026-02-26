@@ -88,6 +88,16 @@ config DEVFREQ_GOV_PASSIVE
 	  through sysfs entries. The passive governor recommends that
 	  devfreq device uses the OPP table to get the frequency/voltage.
 
+config EXYNOS_ALT_DVFS
+	tristate "ALT(Active Load Tracing) DVFS"
+	depends on DEVFREQ_GOV_SIMPLE_INTERACTIVE
+	help
+	  Enable ALT-DVFS scheme for simpleinteractive governor.
+	  When ALT-DVFS is enabled, governor will start to trace and
+	  calculate memory load based on activated cycle. Simpleinteractive
+	  governor decides new frequency for DVFS by comparing current load
+	  and PM QoS requests.
+
 comment "DEVFREQ Drivers"
 
 config ARM_EXYNOS_DEVFREQ
@@ -142,13 +152,13 @@ config ARM_RK3399_DMC_DEVFREQ
 
 source "drivers/devfreq/event/Kconfig"
 
-config ARM_EXYNOS9610_BUS_DEVFREQ
-	bool "ARM Exynos9610 Memory Bus DEVFREQ Driver"
+config ARM_EXYNOS9810_BUS_DEVFREQ
+	bool "ARM Exynos9810 Memory Bus DEVFREQ Driver"
 	default y
 	depends on ARM_EXYNOS_DEVFREQ
-	depends on SOC_EXYNOS9610
+	depends on SOC_EXYNOS9810
 	select DEVFREQ_GOV_SIMPLE_INTERACTIVE
 	help
-	  This adds the DEVFREQ driver for Exynos9610 memory and int.
+	  This adds the DEVFREQ driver for Exynos8895 memory and int.
 
 endif # PM_DEVFREQ

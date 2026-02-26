@@ -22,6 +22,9 @@ struct plist_head kpp_list[STUNE_GROUP_COUNT];
 
 static bool kpp_en;
 
+bool ib_ems_initialized;
+EXPORT_SYMBOL(ib_ems_initialized);
+
 int kpp_status(int grp_idx)
 {
 	if (unlikely(!kpp_en))
@@ -79,7 +82,7 @@ static void __init init_kpp(void)
 	kpp_en = 1;
 }
 
-struct prefer_perf_service {
+struct prefer_perf {
 	int			boost;
 
 	unsigned int		light_threshold;
@@ -96,21 +99,19 @@ struct prefer_perf_service {
 	struct cpumask		*heavy_prefer_cpus;
 };
 
-static struct prefer_perf_service *services;
-static int service_count;
+static struct prefer_perf *prefer_perf_services;
+static int prefer_perf_service_count;
 
-static struct prefer_perf_service *find_service(int boost)
+static struct prefer_perf *find_prefer_perf(int boost)
 {
 	int i;
 
-	for (i = 0; i < service_count; i++)
-		if (services[i].boost == boost)
-			return &services[i];
+	for (i = 0; i < prefer_perf_service_count; i++)
+		if (prefer_perf_services[i].boost == boost)
+			return &prefer_perf_services[i];
 
 	return NULL;
 }
-
-#define cpu_selected(cpu)	(cpu >= 0)
 
 static int
 select_prefer_cpu(struct task_struct *p, int coregroup_count, struct cpumask *prefer_cpus)
@@ -150,14 +151,14 @@ select_prefer_cpu(struct task_struct *p, int coregroup_count, struct cpumask *pr
 				continue;
 			}
 
-			capacity_orig = capacity_cpu(cpu, p->sse);
+			capacity_orig = capacity_orig_of_sse(cpu, p->sse);
 
 			/* In case of over-capacity */
-			wake_util_with = ml_cpu_util_with(cpu, p);
+			wake_util_with = ml_task_attached_cpu_util(cpu, p);
 			if (capacity_orig < wake_util_with)
 				continue;
 
-			wake_util_without = ml_cpu_util_without(cpu, p);
+			wake_util_without = ml_cpu_util_wake(cpu, p);
 			if ((capacity_orig - wake_util_without) < max_spare_cap)
 				continue;
 
@@ -171,6 +172,8 @@ select_prefer_cpu(struct task_struct *p, int coregroup_count, struct cpumask *pr
 
 	rcu_read_unlock();
 
+	trace_ems_select_service_cpu(p, best_perf_cpu, backup_cpu);
+
 	if (best_perf_cpu == -1)
 		return backup_cpu;
 
@@ -179,140 +182,135 @@ select_prefer_cpu(struct task_struct *p, int coregroup_count, struct cpumask *pr
 
 int select_service_cpu(struct task_struct *p)
 {
-	struct prefer_perf_service *s;
+	struct prefer_perf *pp;
 	int boost, service_cpu;
 	unsigned long util, light_threshold, heavy_threshold;
 	char state[30];
 
-	if (!services)
+	if (!prefer_perf_services)
 		return -1;
 
 	boost = schedtune_prefer_perf(p);
 	if (boost <= 0)
 		return -1;
 
-	s = find_service(boost);
-	if (!s)
+	pp = find_prefer_perf(boost);
+	if (!pp)
 		return -1;
 
-	light_threshold = p->sse ? s->light_threshold_s : s->light_threshold;
-	heavy_threshold = p->sse ? s->heavy_threshold_s : s->heavy_threshold;
+	light_threshold = p->sse ? pp->light_threshold_s : pp->light_threshold;
+	heavy_threshold = p->sse ? pp->heavy_threshold_s : pp->heavy_threshold;
 
 	util = ml_task_util_est(p);
-	if (s->light_coregroup_count > 0 && util <= light_threshold) {
-		service_cpu = select_prefer_cpu(p, s->light_coregroup_count,
-							s->light_prefer_cpus);
+	if (pp->light_coregroup_count > 0 && util <= light_threshold) {
+		service_cpu = select_prefer_cpu(p, pp->light_coregroup_count,
+							pp->light_prefer_cpus);
 		if (cpu_selected(service_cpu)) {
 			strcpy(state, "light task");
 			goto out;
 		}
-	} else if (s->heavy_coregroup_count > 0 && util >= heavy_threshold) {
-		service_cpu = select_prefer_cpu(p, s->heavy_coregroup_count,
-							s->heavy_prefer_cpus);
+	} else if (pp->heavy_coregroup_count > 0 && util >= heavy_threshold) {
+		service_cpu = select_prefer_cpu(p, pp->heavy_coregroup_count,
+							pp->heavy_prefer_cpus);
 		if (cpu_selected(service_cpu)) {
 			strcpy(state, "heavy task");
 			goto out;
 		}
 	}
 
-	service_cpu = select_prefer_cpu(p, s->coregroup_count, s->prefer_cpus);
+	service_cpu = select_prefer_cpu(p, pp->coregroup_count, pp->prefer_cpus);
 	strcpy(state, "normal task");
 
 out:
-	trace_ems_service(p, util, service_cpu, state);
+	trace_ems_prefer_perf_service(p, util, service_cpu, state);
 	return service_cpu;
 }
 
-static int __init build_prefer_cpus(void)
+static void __init build_prefer_cpus(void)
 {
 	struct device_node *dn, *child;
 	int index = 0;
 
-	dn = of_find_node_by_path("/ems/service");
-	if (!dn) {
-		pr_info("Not support EMS service\n");
-		return -ENODEV;
-	}
+	dn = of_find_node_by_name(NULL, "ems");
+	dn = of_find_node_by_name(dn, "prefer-perf-service");
+	prefer_perf_service_count = of_get_child_count(dn);
 
-	service_count = of_get_child_count(dn);
-
-	services = kcalloc(service_count, sizeof(struct prefer_perf_service), GFP_KERNEL);
-	if (!services)
-		return -ENOMEM;
+	prefer_perf_services = kcalloc(prefer_perf_service_count,
+				sizeof(struct prefer_perf), GFP_KERNEL);
+	if (!prefer_perf_services)
+		return;
 
 	for_each_child_of_node(dn, child) {
 		const char *mask[NR_CPUS];
 		int i, proplen;
 
-		if (index >= service_count)
-			return 0;
+		if (index >= prefer_perf_service_count)
+			return;
 
 		of_property_read_u32(child, "boost",
-					&services[index].boost);
+					&prefer_perf_services[index].boost);
 
 		proplen = of_property_count_strings(child, "prefer-cpus");
 		if (proplen < 0)
 			goto next;
 
-		services[index].coregroup_count = proplen;
+		prefer_perf_services[index].coregroup_count = proplen;
 
 		of_property_read_string_array(child, "prefer-cpus", mask, proplen);
-		services[index].prefer_cpus = kcalloc(proplen,
+		prefer_perf_services[index].prefer_cpus = kcalloc(proplen,
 						sizeof(struct cpumask), GFP_KERNEL);
 
 		for (i = 0; i < proplen; i++)
-			cpulist_parse(mask[i], &services[index].prefer_cpus[i]);
+			cpulist_parse(mask[i], &prefer_perf_services[index].prefer_cpus[i]);
 
 		/* For light task processing */
 		if (of_property_read_u32(child, "light-task-threshold",
-				&services[index].light_threshold))
-			services[index].light_threshold = 0;
+				&prefer_perf_services[index].light_threshold))
+			prefer_perf_services[index].light_threshold = 0;
 		if (of_property_read_u32(child, "light-task-threshold-s",
-				&services[index].light_threshold_s))
-			services[index].light_threshold_s = 0;
+				&prefer_perf_services[index].light_threshold_s))
+			prefer_perf_services[index].light_threshold_s = 0;
 
 		proplen = of_property_count_strings(child, "light-prefer-cpus");
 		if (proplen < 0) {
-			services[index].light_coregroup_count = 0;
+			prefer_perf_services[index].light_coregroup_count = 0;
 			goto heavy;
 		}
 
-		services[index].light_coregroup_count = proplen;
+		prefer_perf_services[index].light_coregroup_count = proplen;
 
 		of_property_read_string_array(child, "light-prefer-cpus", mask, proplen);
-		services[index].light_prefer_cpus = kcalloc(proplen,
+		prefer_perf_services[index].light_prefer_cpus = kcalloc(proplen,
 						sizeof(struct cpumask), GFP_KERNEL);
 
 		for (i = 0; i < proplen; i++)
-			cpulist_parse(mask[i], &services[index].light_prefer_cpus[i]);
+			cpulist_parse(mask[i], &prefer_perf_services[index].light_prefer_cpus[i]);
 heavy:
 		/* For heavy task processing */
 		if (of_property_read_u32(child, "heavy-task-threshold",
-				&services[index].heavy_threshold))
-			services[index].heavy_threshold = UINT_MAX;
+				&prefer_perf_services[index].heavy_threshold))
+			prefer_perf_services[index].heavy_threshold = UINT_MAX;
 		if (of_property_read_u32(child, "heavy-task-threshold-s",
-				&services[index].heavy_threshold_s))
-			services[index].heavy_threshold_s = UINT_MAX;
+				&prefer_perf_services[index].heavy_threshold_s))
+			prefer_perf_services[index].heavy_threshold_s = UINT_MAX;
 
 		proplen = of_property_count_strings(child, "heavy-prefer-cpus");
 		if (proplen < 0) {
-			services[index].heavy_coregroup_count = 0;
+			prefer_perf_services[index].heavy_coregroup_count = 0;
 			goto next;
 		}
 
-		services[index].heavy_coregroup_count = proplen;
+		prefer_perf_services[index].heavy_coregroup_count = proplen;
 
 		of_property_read_string_array(child, "heavy-prefer-cpus", mask, proplen);
-		services[index].heavy_prefer_cpus = kcalloc(proplen,
+		prefer_perf_services[index].heavy_prefer_cpus = kcalloc(proplen,
 						sizeof(struct cpumask), GFP_KERNEL);
 
 		for (i = 0; i < proplen; i++)
-			cpulist_parse(mask[i], &services[index].heavy_prefer_cpus[i]);
+			cpulist_parse(mask[i], &prefer_perf_services[index].heavy_prefer_cpus[i]);
 next:
 		index++;
 	}
-
-	return 0;
 }
 
 static ssize_t show_kpp(struct kobject *kobj,
@@ -337,10 +335,10 @@ static ssize_t show_light_task_threshold(struct kobject *kobj,
 {
 	int i, ret = 0;
 
-	for (i = 0; i < service_count; i++)
+	for (i = 0; i < prefer_perf_service_count; i++)
 		ret += snprintf(buf + ret, 40, "boost=%d light-task-threshold=%d\n",
-				services[i].boost,
-				services[i].light_threshold);
+				prefer_perf_services[i].boost,
+				prefer_perf_services[i].light_threshold);
 
 	return ret;
 }
@@ -349,17 +347,18 @@ static ssize_t store_light_task_threshold(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf,
 		size_t count)
 {
-	int i, boost, threshold;
+	int i, boost, threshold, ret;
 
-	if (!sscanf(buf, "%d %d", &boost, &threshold))
+	ret = sscanf(buf, "%d %d", &boost, &threshold);
+	if (ret != 2)
 		return -EINVAL;
 
 	if (boost < 0 || threshold < 0)
 		return -EINVAL;
 
-	for (i = 0; i < service_count; i++)
-		if (services[i].boost == boost)
-			services[i].light_threshold = threshold;
+	for (i = 0; i < prefer_perf_service_count; i++)
+		if (prefer_perf_services[i].boost == boost)
+			prefer_perf_services[i].light_threshold = threshold;
 
 	return count;
 }
@@ -372,10 +371,10 @@ static ssize_t show_light_task_threshold_s(struct kobject *kobj,
 {
 	int i, ret = 0;
 
-	for (i = 0; i < service_count; i++)
+	for (i = 0; i < prefer_perf_service_count; i++)
 		ret += snprintf(buf + ret, 40, "boost=%d light-task-threshold-s=%d\n",
-				services[i].boost,
-				services[i].light_threshold_s);
+				prefer_perf_services[i].boost,
+				prefer_perf_services[i].light_threshold_s);
 
 	return ret;
 }
@@ -384,17 +383,18 @@ static ssize_t store_light_task_threshold_s(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf,
 		size_t count)
 {
-	int i, boost, threshold;
+	int i, boost, threshold, ret;
 
-	if (!sscanf(buf, "%d %d", &boost, &threshold))
+	ret = sscanf(buf, "%d %d", &boost, &threshold);
+	if (ret != 2)
 		return -EINVAL;
 
 	if (boost < 0 || threshold < 0)
 		return -EINVAL;
 
-	for (i = 0; i < service_count; i++)
-		if (services[i].boost == boost)
-			services[i].light_threshold_s = threshold;
+	for (i = 0; i < prefer_perf_service_count; i++)
+		if (prefer_perf_services[i].boost == boost)
+			prefer_perf_services[i].light_threshold_s = threshold;
 
 	return count;
 }
@@ -407,10 +407,10 @@ static ssize_t show_heavy_task_threshold(struct kobject *kobj,
 {
 	int i, ret = 0;
 
-	for (i = 0; i < service_count; i++)
+	for (i = 0; i < prefer_perf_service_count; i++)
 		ret += snprintf(buf + ret, 40, "boost=%d heavy-task-threshold=%d\n",
-				services[i].boost,
-				services[i].heavy_threshold);
+				prefer_perf_services[i].boost,
+				prefer_perf_services[i].heavy_threshold);
 
 	return ret;
 }
@@ -419,17 +419,18 @@ static ssize_t store_heavy_task_threshold(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf,
 		size_t count)
 {
-	int i, boost, threshold;
+	int i, boost, threshold, ret;
 
-	if (!sscanf(buf, "%d %d", &boost, &threshold))
+	ret = sscanf(buf, "%d %d", &boost, &threshold);
+	if (ret != 2)
 		return -EINVAL;
 
 	if (boost < 0 || threshold < 0)
 		return -EINVAL;
 
-	for (i = 0; i < service_count; i++)
-		if (services[i].boost == boost)
-			services[i].heavy_threshold = threshold;
+	for (i = 0; i < prefer_perf_service_count; i++)
+		if (prefer_perf_services[i].boost == boost)
+			prefer_perf_services[i].heavy_threshold = threshold;
 
 	return count;
 }
@@ -442,10 +443,10 @@ static ssize_t show_heavy_task_threshold_s(struct kobject *kobj,
 {
 	int i, ret = 0;
 
-	for (i = 0; i < service_count; i++)
+	for (i = 0; i < prefer_perf_service_count; i++)
 		ret += snprintf(buf + ret, 40, "boost=%d heavy-task-threshold-s=%d\n",
-				services[i].boost,
-				services[i].heavy_threshold_s);
+				prefer_perf_services[i].boost,
+				prefer_perf_services[i].heavy_threshold_s);
 
 	return ret;
 }
@@ -454,17 +455,18 @@ static ssize_t store_heavy_task_threshold_s(struct kobject *kobj,
 		struct kobj_attribute *attr, const char *buf,
 		size_t count)
 {
-	int i, boost, threshold;
+	int i, boost, threshold, ret;
 
-	if (!sscanf(buf, "%d %d", &boost, &threshold))
+	ret = sscanf(buf, "%d %d", &boost, &threshold);
+	if (ret != 2)
 		return -EINVAL;
 
 	if (boost < 0 || threshold < 0)
 		return -EINVAL;
 
-	for (i = 0; i < service_count; i++)
-		if (services[i].boost == boost)
-			services[i].heavy_threshold_s = threshold;
+	for (i = 0; i < prefer_perf_service_count; i++)
+		if (prefer_perf_services[i].boost == boost)
+			prefer_perf_services[i].heavy_threshold_s = threshold;
 
 	return count;
 }
@@ -493,8 +495,7 @@ static int __init init_service(void)
 
 	init_kpp();
 
-	if (build_prefer_cpus())
-		return 0;
+	build_prefer_cpus();
 
 	service_kobj = kobject_create_and_add("service", ems_kobj);
 	if (!service_kobj) {
@@ -508,6 +509,7 @@ static int __init init_service(void)
 		return ret;
 	}
 
+	ib_ems_initialized = true;
 	return 0;
 }
 late_initcall(init_service);

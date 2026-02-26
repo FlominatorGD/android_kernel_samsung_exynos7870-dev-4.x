@@ -10,13 +10,7 @@
 
 #include <linux/cpufreq.h>
 
-/*
- * Log2 of the number of scale size. The frequencies are scaled up or
- * down as the multiple of this number.
- */
-#define SCALE_SIZE			3
 #define EXYNOS_UFC_TYPE_NAME_LEN	16
-
 
 enum exynos_ufc_ctrl_type {
 	PM_QOS_MIN_LIMIT = 0,
@@ -31,19 +25,16 @@ enum exynos_ufc_execution_mode {
 	MODE_END,
 };
 
-struct exynos_ufc_info {
-	struct list_head	node;
-
-	int			ctrl_type;
-
-	int			exe_mode;
-
-	u32			**exynos_ufc_table;
-	unsigned int		exynos_ufc_table_row;
-	unsigned int		exynos_ufc_table_col;
+struct exynos_ufc_freq {
+	u32			master_freq;
+	u32			limit_freq;
+	u32			last_freq;
 };
 
-struct exynos_ufc {
-	struct list_head list;
-	struct exynos_ufc_info info;
+struct exynos_ufc_info {
+	struct list_head	node;
+	int			ctrl_type;
+	int			exe_mode;
+
+	struct exynos_ufc_freq *freq_table;
 };

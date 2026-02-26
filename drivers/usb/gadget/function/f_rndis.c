@@ -131,9 +131,9 @@ static struct usb_interface_descriptor rndis_control_intf = {
 	/* .bInterfaceNumber = DYNAMIC */
 	/* status endpoint is optional; this could be patched later */
 	.bNumEndpoints =	1,
-	.bInterfaceClass =	USB_CLASS_COMM,
-	.bInterfaceSubClass =   USB_CDC_SUBCLASS_ACM,
-	.bInterfaceProtocol =   USB_CDC_ACM_PROTO_VENDOR,
+	.bInterfaceClass =	USB_CLASS_WIRELESS_CONTROLLER,
+	.bInterfaceSubClass =	0x01,
+	.bInterfaceProtocol =	0x03,
 	/* .iInterface = DYNAMIC */
 };
 
@@ -192,9 +192,9 @@ rndis_iad_descriptor = {
 
 	.bFirstInterface =	0, /* XXX, hardcoded */
 	.bInterfaceCount = 	2,	// control + data
-	.bFunctionClass =	USB_CLASS_COMM,
-	.bFunctionSubClass =	USB_CDC_SUBCLASS_ETHERNET,
-	.bFunctionProtocol =	USB_CDC_PROTO_NONE,
+	.bFunctionClass =		USB_CLASS_WIRELESS_CONTROLLER,
+	.bFunctionSubClass =	0x01,
+	.bFunctionProtocol =	0x03,
 	/* .iFunction = DYNAMIC */
 };
 
@@ -466,6 +466,7 @@ static void rndis_response_complete(struct usb_ep *ep, struct usb_request *req)
 static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct f_rndis			*rndis = req->context;
+	struct usb_composite_dev	*cdev = rndis->port.func.config->cdev;
 	int				status;
 	rndis_init_msg_type		*buf;
 
@@ -483,7 +484,7 @@ static void rndis_command_complete(struct usb_ep *ep, struct usb_request *req)
 			rndis->port.multi_pkt_xfer = 1;
 		else
 			rndis->port.multi_pkt_xfer = 0;
-		printk("%s: MaxTransferSize: %d : Multi_pkt_txr: %s\n",
+		DBG(cdev, "%s: MaxTransferSize: %d : Multi_pkt_txr: %s\n",
 				__func__, buf->MaxTransferSize,
 				rndis->port.multi_pkt_xfer ? "enabled" :
 							    "disabled");
@@ -880,6 +881,22 @@ void rndis_borrow_net(struct usb_function_instance *f, struct net_device *net)
 }
 EXPORT_SYMBOL_GPL(rndis_borrow_net);
 
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+static int set_rndis_mac_addr(struct usb_function_instance *fi,
+		    u8 *ethaddr)
+{
+	struct f_rndis_opts *opts;
+	u8 mac_addr[ETH_ALEN*2+6] = {0,};
+
+	opts = container_of(fi, struct f_rndis_opts, func_inst);
+	snprintf(mac_addr, sizeof(mac_addr), "%pM", ethaddr);
+
+	gether_set_host_addr(opts->net, mac_addr);
+
+	return 0;
+}
+#endif
+
 static inline struct f_rndis_opts *to_f_rndis_opts(struct config_item *item)
 {
 	return container_of(to_config_group(item), struct f_rndis_opts,
@@ -957,6 +974,9 @@ static struct usb_function_instance *rndis_alloc_inst(void)
 
 	mutex_init(&opts->lock);
 	opts->func_inst.free_func_inst = rndis_free_inst;
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	opts->func_inst.set_inst_eth_addr = set_rndis_mac_addr;
+#endif
 	opts->net = gether_setup_name_default("rndis");
 	if (IS_ERR(opts->net)) {
 		struct net_device *net = opts->net;
@@ -1028,8 +1048,11 @@ static void rndis_unbind(struct usb_configuration *c, struct usb_function *f)
 		ERROR(cdev, "%s: failed to setup ethernet\n", f->name);
 		return;
 	}
-
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	gether_set_host_addr(opts->net, rndis->ethaddr);
+#else
 	gether_get_host_addr_u8(opts->net, rndis->ethaddr);
+#endif
 	rndis->port.ioport = netdev_priv(opts->net);
 
 	opts->bound = false;

@@ -237,6 +237,7 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno, int inum,
 						d->bEndpointAddress, d->bSynchAddress);
 				}
 			} else {
+
 				to_usb_device(ddev)->hwinfo.out_ep =
 					d->bEndpointAddress;
 				dev_info(ddev, " This is OUT ISO endpoint #0%x 0x%p\n",
@@ -814,18 +815,21 @@ void usb_destroy_configuration(struct usb_device *dev)
 		return;
 
 	if (dev->rawdescriptors) {
-		for (i = 0; i < dev->descriptor.bNumConfigurations; i++)
+		for (i = 0; i < dev->descriptor.bNumConfigurations &&
+			i < USB_MAXCONFIG; i++)
 			kfree(dev->rawdescriptors[i]);
 
 		kfree(dev->rawdescriptors);
 		dev->rawdescriptors = NULL;
 	}
 
-	for (c = 0; c < dev->descriptor.bNumConfigurations; c++) {
+	for (c = 0; c < dev->descriptor.bNumConfigurations &&
+		c < USB_MAXCONFIG; c++) {
 		struct usb_host_config *cf = &dev->config[c];
 
 		kfree(cf->string);
-		for (i = 0; i < cf->desc.bNumInterfaces; i++) {
+		for (i = 0; i < cf->desc.bNumInterfaces &&
+			i < USB_MAXINTERFACES; i++) {
 			if (cf->intf_cache[i])
 				kref_put(&cf->intf_cache[i]->ref,
 					  usb_release_interface_cache);
@@ -911,14 +915,6 @@ int usb_get_configuration(struct usb_device *dev)
 
 		if (dev->quirks & USB_QUIRK_DELAY_INIT)
 			msleep(200);
-
-#ifdef CONFIG_PM
-		dev->do_remote_wakeup =
-			(desc->bmAttributes & USB_CONFIG_ATT_WAKEUP) ? 1 : 0;
-		if (dev->do_remote_wakeup == 1) {
-			device_init_wakeup(ddev, 1);
-		}
-#endif
 
 		result = usb_get_descriptor(dev, USB_DT_CONFIG, cfgno,
 		    bigbuffer, length);

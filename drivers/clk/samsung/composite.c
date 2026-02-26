@@ -28,6 +28,8 @@
 #define to_usermux(_hw) container_of(_hw, struct clk_samsung_usermux, hw)
 #define to_vclk(_hw) container_of(_hw, struct samsung_vclk, hw)
 
+#define BIT32(nr)			(1 << (nr))
+
 static DEFINE_SPINLOCK(lock);
 
 #ifdef CONFIG_PM_SLEEP
@@ -58,7 +60,7 @@ struct samsung_clk_reg_dump *samsung_clk_alloc_reg_dump(
 	if (!rd)
 		return NULL;
 
-	for (i = 0; i < nr_rdump; ++i)
+	for (i = 0; i < (unsigned int)nr_rdump; ++i)
 		rd[i].offset = rdump[i];
 
 	return rd;
@@ -84,12 +86,12 @@ struct samsung_clk_provider *__init samsung_clk_init(struct device_node *np,
 	if (!clk_table)
 		panic("could not allocate clock lookup table\n");
 
-	for (i = 0; i < nr_clks; ++i)
+	for (i = 0; i < (unsigned int)nr_clks; ++i)
 		clk_table[i] = ERR_PTR(-ENOENT);
 
 	ctx->reg_base = base;
 	ctx->clk_data.clks = clk_table;
-	ctx->clk_data.clk_num = nr_clks;
+	ctx->clk_data.clk_num = (unsigned int)nr_clks;
 	spin_lock_init(&ctx->lock);
 
 	return ctx;
@@ -346,11 +348,11 @@ static int samsung_pll145xx_set_rate(struct clk_hw *hw, unsigned long drate,
 			(rate->pdiv << PLL145XX_PDIV_SHIFT) |
 			(rate->sdiv << PLL145XX_SDIV_SHIFT);
 	/* To prevent instable PLL operation, preset ENABLE bit with 0 */
-	pll_con &= ~BIT(31);
+	pll_con &= ~BIT32(31);
 	writel(pll_con, pll->con_reg);
 
 	/* Set enable bit */
-	pll_con |= BIT(31);
+	pll_con |= BIT32(31);
 	writel(pll_con, pll->con_reg);
 
 	do {
@@ -432,11 +434,11 @@ static int samsung_pll1460x_set_rate(struct clk_hw *hw, unsigned long drate,
 			(rate->pdiv << PLL1460X_PDIV_SHIFT) |
 			(rate->sdiv << PLL1460X_SDIV_SHIFT);
 	/* To prevent instable PLL operation, preset ENABLE bit with 0 */
-	pll_con0 &= ~BIT(31);
+	pll_con0 &= ~BIT32(31);
 	writel(pll_con0, pll->con_reg);
 
 	/* Set enable bit */
-	pll_con0 |= BIT(31);
+	pll_con0 |= BIT32(31);
 	writel(pll_con0, pll->con_reg);
 
 	/* Wait lock time */
@@ -582,11 +584,11 @@ static int samsung_pll255xx_set_rate(struct clk_hw *hw, unsigned long drate,
 			(rate->sdiv << PLL255XX_SDIV_SHIFT);
 
 	/* To prevent unstable PLL operation, preset enable bit with 0 */
-	pll_con &= ~BIT(31);
+	pll_con &= ~BIT32(31);
 	writel(pll_con, pll->con_reg);
 
 	/* Set enable bit */
-	pll_con |= BIT(31);
+	pll_con |= BIT32(31);
 	writel(pll_con, pll->con_reg);
 
 	do {
@@ -678,11 +680,11 @@ static int samsung_pll2650x_set_rate(struct clk_hw *hw, unsigned long drate,
 			(rate->sdiv << PLL2650X_SDIV_SHIFT);
 
 	/* To prevent unstable PLL operation, preset enable bit with 0 */
-	pll_con0 &= ~BIT(31);
+	pll_con0 &= ~BIT32(31);
 	writel(pll_con0, pll->con_reg);
 
 	/* Set enable bit */
-	pll_con0 |= BIT(31);
+	pll_con0 |= BIT32(31);
 	writel(pll_con0, pll->con_reg);
 
 	/*
@@ -783,7 +785,7 @@ static u8 samsung_mux_get_parent(struct clk_hw *hw)
 	u32 val;
 
 	val = readl(mux->sel_reg) >> mux->sel_bit;
-	val &= (BIT(mux->sel_width) - 1);
+	val &= (BIT32(mux->sel_width) - 1);
 
 	return (u8)val;
 }
@@ -799,7 +801,7 @@ static int samsung_mux_set_parent(struct clk_hw *hw, u8 index)
 		spin_lock_irqsave(mux->lock, flags);
 
 	val = readl(mux->sel_reg);
-	val &= ~((BIT(mux->sel_width) - 1) << mux->sel_bit);
+	val &= ~((BIT32(mux->sel_width) - 1) << mux->sel_bit);
 	val |= index << mux->sel_bit;
 	writel(val, mux->sel_reg);
 
@@ -816,7 +818,7 @@ static int samsung_mux_set_parent(struct clk_hw *hw, u8 index)
 				return -ETIMEDOUT;
 			}
 			val = readl(mux->stat_reg);
-			val &= ((BIT(mux->stat_width) - 1) << mux->stat_bit);
+			val &= ((BIT32(mux->stat_width) - 1) << mux->stat_bit);
 		} while (val != (index << mux->stat_bit));
 
 	if (mux->lock)
@@ -843,7 +845,7 @@ static int samsung_mux_set_parent_onchange(struct clk_hw *hw, u8 index)
 		spin_lock_irqsave(mux->lock, flags);
 
 	val = readl(mux->sel_reg);
-	val &= ~((BIT(mux->sel_width) - 1) << mux->sel_bit);
+	val &= ~((BIT32(mux->sel_width) - 1) << mux->sel_bit);
 	val |= index << mux->sel_bit;
 	writel(val, mux->sel_reg);
 
@@ -860,7 +862,7 @@ static int samsung_mux_set_parent_onchange(struct clk_hw *hw, u8 index)
 				return -ETIMEDOUT;
 			}
 			val = readl(mux->stat_reg);
-			val &= ((BIT(mux->stat_width) - 1) << mux->stat_bit);
+			val &= ((BIT32(mux->stat_width) - 1) << mux->stat_bit);
 		} while (val == PLL_STAT_CHANGE);
 
 	if (mux->lock)
@@ -940,13 +942,14 @@ static int samsung_divider_bestdiv(struct clk_hw *hw, unsigned long rate,
 {
 	struct samsung_composite_divider *divider = to_comp_divider(hw);
 	int i, bestdiv = 0;
-	unsigned long parent_rate, maxdiv, now, best = 0;
+	unsigned long parent_rate, now, best = 0;
 	unsigned long parent_rate_saved = *best_parent_rate;
+	int maxdiv;
 
 	if (!rate)
 		rate = 1;
 
-	maxdiv = ((unsigned long)(1UL << (divider->rate_width)) - 1UL) + 1UL;
+	maxdiv = ((1 << (divider->rate_width)) - 1) + 1;
 
 	if (!(clk_hw_get_flags(hw) & CLK_SET_RATE_PARENT)) {
 		parent_rate = *best_parent_rate;
@@ -956,7 +959,7 @@ static int samsung_divider_bestdiv(struct clk_hw *hw, unsigned long rate,
 		return bestdiv;
 	}
 
-	maxdiv = min(ULONG_MAX / rate, maxdiv);
+	maxdiv = min(UINT_MAX / (unsigned int)rate, (unsigned int)maxdiv);
 
 	for (i = 1; i <= maxdiv; i++) {
 		if (rate * i == parent_rate_saved) {
@@ -1035,7 +1038,7 @@ static int samsung_divider_set_rate(struct clk_hw *hw, unsigned long rate,
 				return -ETIMEDOUT;
 			}
 			val = readl(divider->stat_reg);
-			val &= BIT(divider->stat_width - 1) << divider->stat_bit;
+			val &= BIT32(divider->stat_width - 1) << divider->stat_bit;
 		} while (val);
 
 	if (divider->lock)
@@ -1220,7 +1223,7 @@ static int samsung_usermux_is_enabled(struct clk_hw *hw)
 	u32 val;
 
 	val = readl(usermux->sel_reg);
-	val &= BIT(usermux->sel_bit);
+	val &= BIT32(usermux->sel_bit);
 
 	return val ? 1 : 0;
 }
@@ -1251,7 +1254,7 @@ static int samsung_usermux_enable(struct clk_hw *hw)
 				return -ETIMEDOUT;
 			}
 			val = readl(usermux->stat_reg);
-			val &= BIT(2) << usermux->stat_bit;
+			val &= BIT32(2) << usermux->stat_bit;
 		} while (val);
 
 	if (usermux->lock)
@@ -1285,7 +1288,7 @@ static void samsung_usermux_disable(struct clk_hw *hw)
 				return;
 			}
 			val = readl(usermux->stat_reg);
-			val &= BIT(2) << usermux->stat_bit;
+			val &= BIT32(2) << usermux->stat_bit;
 		} while (val);
 
 	if (usermux->lock)

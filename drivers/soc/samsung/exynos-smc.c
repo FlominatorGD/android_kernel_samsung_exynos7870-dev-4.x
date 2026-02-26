@@ -45,7 +45,7 @@ struct esmc_log {
 struct esmc_log smc_log[NR_CPUS][EXYNOS_SMC_LOG_SIZE];
 static uint32_t smc_log_idx[NR_CPUS];
 
-static unsigned long esmc_log_threshold =
+static unsigned int esmc_log_threshold =
 		CONFIG_EXYNOS_SMC_LOG_THRESHOLD;
 
 static ssize_t esmc_log_threshold_show(struct kobject *kobj,
@@ -70,7 +70,7 @@ static ssize_t esmc_log_threshold_store(struct kobject *kobj,
 	if (err != 0) {
 		pr_err("can't read threshold value with err 0x%x\n", err);
 	} else {
-		esmc_log_threshold = val;
+		esmc_log_threshold = (unsigned int)val;
 		pr_info("threshold value : %lu\n", val);
 	}
 

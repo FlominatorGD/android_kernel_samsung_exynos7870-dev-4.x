@@ -297,7 +297,7 @@ static int build_dyn_power_table(struct gpufreq_cooling_device *gpufreq_cdev,
 
 		freq = gpu_dvfs_get_clock(num_opps - i - 1);
 
-		if (freq > gpu_dvfs_get_max_freq() || freq == 0)
+		if (freq > gpu_dvfs_get_max_freq())
 			continue;
 
 		voltage_mv = gpu_dvfs_get_voltage(freq) / 1000;
@@ -327,7 +327,7 @@ static int build_static_power_table(struct device_node *np, struct gpufreq_cooli
 	int i, j;
 	int ratio = 0, asv_group = 0, cal_id = 0, ret = 0;
 	void *gen_block;
-	struct ect_gen_param_table *volt_temp_param, *asv_param;
+	struct ect_gen_param_table *volt_temp_param = NULL, *asv_param = NULL;
 	int ratio_table[16] = { 0, 25, 29, 35, 41, 48, 57, 67, 79, 94, 110, 130, 151, 162, 162, 162};
 
 	ret = of_property_read_u32(np, "g3d_cmu_cal_id", &cal_id);
@@ -1035,7 +1035,7 @@ static int gpu_cooling_table_init(void)
 	for (i = 0; i < num_level; i++) {
 		freq = gpu_dvfs_get_clock(i);
 
-		if (freq > gpu_dvfs_get_max_freq() || freq == 0)
+		if (freq > gpu_dvfs_get_max_freq())
 			continue;
 
 		gpu_freq_table[count].flags = 0;

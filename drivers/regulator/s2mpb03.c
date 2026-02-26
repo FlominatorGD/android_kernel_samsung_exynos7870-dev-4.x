@@ -1,7 +1,7 @@
 /*
  * s2mpb03.c - Regulator driver for the Samsung s2mpb03
  *
- * Copyright (C) 2019 Samsung Electronics
+ * Copyright (C) 2016 Samsung Electronics
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

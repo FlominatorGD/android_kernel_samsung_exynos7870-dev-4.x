@@ -50,16 +50,14 @@ enum PCMMSG {
 	PCM_SET_BUFFER		= 20,
 	PCM_SYNCHRONIZE		= 21,
 	PCM_PLTDAI_ACK		= 22,
+	PCM_PLTDAI_CLOSED	= 23,
 	PCM_PLTDAI_REGISTER	= 50,
-	PCM_TX_BARGE_IN_DETECT  = 202,
-	PCM_TX_SEAMLESS_BUF_RDY = 203,
 };
 
 struct PCMTASK_HW_PARAMS {
 	int sample_rate;
 	int bit_depth;
 	int channels;
-	int packed; /* 24bit only */
 };
 
 struct PCMTASK_SET_BUFFER {
@@ -164,7 +162,7 @@ enum ABOX_ERAP_TYPE {
 };
 
 enum ABOX_USB_MSG {
-	IPC_USB_PCM_OPEN,       /* USB -> ABOX */
+	IPC_USB_PCM_OPEN,	/* USB -> ABOX */
 	IPC_USB_DESC,
 	IPC_USB_XHCI,
 	IPC_USB_L2,
@@ -173,7 +171,7 @@ enum ABOX_USB_MSG {
 	IPC_USB_SET_INTF,
 	IPC_USB_SAMPLE_RATE,
 	IPC_USB_PCM_BUF,
-	IPC_USB_TASK = 0x80,    /* ABOX -> USB */
+	IPC_USB_TASK = 0x80,	/* ABOX -> USB */
 	IPC_USB_STOP_DONE,
 };
 
@@ -199,10 +197,10 @@ struct ERAP_RAW_PARAM {
 
 struct ERAP_USB_AUDIO_PARAM {
 	enum ABOX_USB_MSG type;
-	int param1;
-	int param2;
-	int param3;
-	int param4;
+	unsigned int param1;
+	unsigned int param2;
+	unsigned int param3;
+	unsigned int param4;
 };
 
 struct IPC_ERAP_MSG {
@@ -220,46 +218,38 @@ struct IPC_ERAP_MSG {
 enum ABOX_CONFIGMSG {
 	SET_SIFS0_RATE = 1,
 	SET_SIFS1_RATE,
-        SET_SIFS2_RATE,
-        SET_PIFS1_RATE,
-        SET_SIFM0_RATE,
-        SET_SIFM1_RATE,
-        SET_SIFM2_RATE,
-        SET_SIFM3_RATE,
-        SET_SIFM4_RATE,
-        SET_SIFM5_RATE,
-        SET_SIFM6_RATE,
-        SET_SIFS3_RATE,
-        SET_SIFS4_RATE,
-        SET_SIFS5_RATE,
-        SET_PIFS0_RATE,
-        SET_SIFM7_RATE,
-        SET_SIFS0_FORMAT = 0x10,
-        SET_SIFS1_FORMAT,
-        SET_SIFS2_FORMAT,
-        SET_PIFS1_FORMAT,
-        SET_SIFM0_FORMAT,
-        SET_SIFM1_FORMAT,
-        SET_SIFM2_FORMAT,
-        SET_SIFM3_FORMAT,
-        SET_SIFM4_FORMAT,
-        SET_SIFM5_FORMAT,
-        SET_SIFM6_FORMAT,
-        SET_SIFS3_FORMAT,
-        SET_SIFS4_FORMAT,
-        SET_SIFS5_FORMAT,
-        SET_PIFS0_FORMAT,
-        SET_SIFM7_FORMAT,
-        SET_ASRC_FACTOR_CP = 0x30,
-        SET_ASRC_FACTOR_UAIF0,
-        SET_ASRC_FACTOR_UAIF1,
-        SET_ASRC_FACTOR_UAIF2,
-        SET_ASRC_FACTOR_UAIF3,
-        SET_ASRC_FACTOR_UAIF4,
-        SET_ASRC_FACTOR_UAIF5,
-        SET_ASRC_FACTOR_UAIF6,
-        SET_ASRC_FACTOR_USB,
-        SET_ASRC_FACTOR_BCLK_CP,
+	SET_SIFS2_RATE,
+	SET_PIFS1_RATE,
+	SET_SIFM0_RATE,
+	SET_SIFM1_RATE,
+	SET_SIFM2_RATE,
+	SET_SIFM3_RATE,
+	SET_SIFM4_RATE,
+	SET_SIFM5_RATE,
+	SET_SIFM6_RATE,
+	SET_SIFS3_RATE,
+	SET_SIFS4_RATE,
+	SET_PIFS0_RATE,
+	SET_SIFS0_FORMAT = 0x10,
+	SET_SIFS1_FORMAT,
+	SET_SIFS2_FORMAT,
+	SET_PIFS1_FORMAT,
+	SET_SIFM0_FORMAT,
+	SET_SIFM1_FORMAT,
+	SET_SIFM2_FORMAT,
+	SET_SIFM3_FORMAT,
+	SET_SIFM4_FORMAT,
+	SET_SIFM5_FORMAT,
+	SET_SIFM6_FORMAT,
+	SET_SIFS3_FORMAT,
+	SET_SIFS4_FORMAT,
+	SET_PIFS0_FORMAT,
+	SET_ASRC_FACTOR_CP = 0x30,
+	SET_ASRC_FACTOR_UAIF0,
+	SET_ASRC_FACTOR_UAIF1,
+	SET_ASRC_FACTOR_UAIF2,
+	SET_ASRC_FACTOR_UAIF3,
+	SET_ASRC_FACTOR_USB,
 };
 
 struct IPC_ABOX_CONFIG_MSG {
@@ -293,7 +283,6 @@ enum ABOX_SYSTEM_MSG {
 	ABOX_REQUEST_SYSCLK,
 	ABOX_REQUEST_L2C,
 	ABOX_CHANGED_GEAR,
-	ABOX_RELOAD_AREA,
 	ABOX_REPORT_LOG = 0x10,
 	ABOX_FLUSH_LOG,
 	ABOX_REPORT_DUMP = 0x20,
@@ -302,18 +291,17 @@ enum ABOX_SYSTEM_MSG {
 	ABOX_TRANSFER_DUMP,
 	ABOX_SET_MODE = 0x50,
 	ABOX_SET_TYPE = 0x60,
-	ABOX_SET_CALLINFO = 0x61,
 	ABOX_START_VSS = 0xA0,
 	ABOX_STOP_VSS,
-        ABOX_RESET_VSS,
-        ABOX_WATCHDOG_VSS,
+	ABOX_RESET_VSS,
+	ABOX_WATCHDOG_VSS,
 	ABOX_REPORT_COMPONENT = 0xC0,
 	ABOX_UPDATE_COMPONENT_CONTROL,
 	ABOX_REQUEST_COMPONENT_CONTROL,
 	ABOX_REPORT_COMPONENT_CONTROL,
 	ABOX_REQUEST_DEBUG = 0xDE,
 	ABOX_REPORT_FAULT = 0xFA,
-	ABOX_REPORT_CLK_DIFF_PPB = 0xc10c,
+	ABOX_REPORT_CLK_DIFF_PPB = 0xC10C,
 };
 
 struct IPC_SYSTEM_MSG {
@@ -336,9 +324,9 @@ struct ABOX_LOG_BUFFER {
 };
 
 enum ABOX_CONTROL_TYPE {
-        ABOX_CONTROL_INT,
-        ABOX_CONTROL_ENUM,
-        ABOX_CONTROL_BYTE,
+	ABOX_CONTROL_INT,
+	ABOX_CONTROL_ENUM,
+	ABOX_CONTROL_BYTE,
 };
 
 struct ABOX_COMPONENT_CONTROL {
@@ -347,11 +335,12 @@ struct ABOX_COMPONENT_CONTROL {
 	char name[16];
 	unsigned int count;
 	int min, max;
+	unsigned int is_volatile:1;
 	union {
-                 unsigned int aaddr;
-                 unsigned long long kaddr;
-                 const char *addr;
-        } texts; /* list of enumeration text delimited by ',' */
+		unsigned int aaddr;
+		unsigned long long kaddr;
+		const char *addr;
+	} texts; /* list of enumeration text delimited by ',' */
 };
 
 struct ABOX_COMPONENT_DESCRIPTIOR {
@@ -395,13 +384,13 @@ typedef struct {
 } ABOX_IPC_MSG;
 
 struct abox2host_hndshk_tag {
-        unsigned int suspend_wait_flag; /* boot init done */
-        unsigned int hndShkFlag1;
-        unsigned int hndShkFlag2;
-        unsigned int hndShkFlag3;
-        unsigned int hndShkFlag4;
-        unsigned int hndShkFlag5;
-        unsigned int hndShkFlag6;
-        unsigned int hndShkFlag7;
+	unsigned int suspend_wait_flag; /* boot init done */
+	unsigned int hndShkFlag1;
+	unsigned int hndShkFlag2;
+	unsigned int hndShkFlag3;
+	unsigned int hndShkFlag4;
+	unsigned int hndShkFlag5;
+	unsigned int hndShkFlag6;
+	unsigned int hndShkFlag7;
 };
 #endif /* __ABOX_IPC_H */

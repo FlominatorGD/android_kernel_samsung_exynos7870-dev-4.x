@@ -319,14 +319,14 @@ int mmc_of_parse(struct mmc_host *host)
 		host->caps2 |= MMC_CAP2_HS400_1_2V | MMC_CAP2_HS200_1_2V_SDR;
 	if (device_property_read_bool(dev, "mmc-hs400-enhanced-strobe"))
 		host->caps2 |= MMC_CAP2_HS400_ES;
+	if (device_property_read_bool(dev, "skip-init-mmc-scan"))
+		host->caps2 |= MMC_CAP2_SKIP_INIT_SCAN;
 	if (device_property_read_bool(dev, "no-sdio"))
 		host->caps2 |= MMC_CAP2_NO_SDIO;
 	if (device_property_read_bool(dev, "no-sd"))
 		host->caps2 |= MMC_CAP2_NO_SD;
 	if (device_property_read_bool(dev, "no-mmc"))
 		host->caps2 |= MMC_CAP2_NO_MMC;
-	if (device_property_read_bool(dev, "skip-init-no-tray"))
-		host->caps2 |= MMC_CAP2_SKIP_INIT_NOT_TRAY;
 
 	host->dsr_req = !device_property_read_u32(dev, "dsr", &host->dsr);
 	if (host->dsr_req && (host->dsr & ~0xffff)) {
@@ -374,6 +374,7 @@ struct mmc_host *mmc_alloc_host(int extra, struct device *dev)
 	host->class_dev.parent = dev;
 	host->class_dev.class = &mmc_host_class;
 	device_initialize(&host->class_dev);
+	device_enable_async_suspend(&host->class_dev);
 
 	if (mmc_gpio_alloc(host)) {
 		put_device(&host->class_dev);

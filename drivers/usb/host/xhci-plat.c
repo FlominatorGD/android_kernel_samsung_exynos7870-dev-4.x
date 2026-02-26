@@ -37,9 +37,9 @@ void __iomem		*usb3_portsc;
 static u32 pp_set_delayed;
 static u32 portsc_control_priority;
 static spinlock_t xhcioff_lock;
-//#if defined(CONFIG_USB_PORT_POWER_OPTIMIZATION)
+#if defined(CONFIG_USB_PORT_POWER_OPTIMIZATION)
 static int port_off_done;
-//#endif
+#endif
 #define PORTSC_OFFSET	0x430
 #define DIS_RX_DETECT	(1 << 9)
 
@@ -479,8 +479,8 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	/* Get USB3.0 PHY to tune the PHY */
 	if (parent) {
 		xhci->shared_hcd->phy = devm_phy_get(parent, "usb3-phy");
-		if (IS_ERR_OR_NULL(hcd->phy)) {
-			hcd->phy = NULL;
+		if (IS_ERR_OR_NULL(xhci->shared_hcd->phy)) {
+			xhci->shared_hcd->phy = NULL;
 			dev_err(&pdev->dev,
 				"%s: failed to get phy\n", __func__);
 		}
@@ -535,6 +535,9 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	device_enable_async_suspend(&pdev->dev);
 	pm_runtime_put_noidle(&pdev->dev);
 
+	device_set_wakeup_enable(&xhci->main_hcd->self.root_hub->dev, 1);
+	device_set_wakeup_enable(&xhci->shared_hcd->self.root_hub->dev, 1);
+
 	/*
 	 * Prevent runtime pm from being on as default, users should enable
 	 * runtime pm using power/control in sysfs.
@@ -573,28 +576,24 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct usb_hcd	*hcd = platform_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct clk *clk = xhci->clk;
-	struct usb_hcd *shared_hcd = xhci->shared_hcd;
-	int timeout = 0;
 
 	dev_info(&dev->dev, "XHCI PLAT REMOVE\n");
 
 	usb3_portsc = NULL;
 	pp_set_delayed = 0;
 
-	/*
-	 * Sometimes deadlock occurred in this function.
-	 * So, below waiting for completion of hub_event was added.
-	 */
-	while (xhci->shared_hcd->is_in_hub_event || hcd->is_in_hub_event) {
-		msleep(10);
-		timeout += 10;
-		if (timeout >= XHCI_HUB_EVENT_TIMEOUT) {
-			xhci_err(xhci,
-				"ERROR: hub_event completion timeout\n");
-			break;
-		}
+#if defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
+	pr_info("%s\n", __func__);
+	/* In order to prevent kernel panic */
+	if (!pm_runtime_suspended(&xhci->shared_hcd->self.root_hub->dev)) {
+		pr_info("%s, shared_hcd pm_runtime_forbid\n", __func__);
+		pm_runtime_forbid(&xhci->shared_hcd->self.root_hub->dev);
 	}
-	xhci_dbg(xhci, "%s: waited %dmsec", __func__, timeout);
+	if (!pm_runtime_suspended(&xhci->main_hcd->self.root_hub->dev)) {
+		pr_info("%s, main_hcd pm_runtime_forbid\n", __func__);
+		pm_runtime_forbid(&xhci->main_hcd->self.root_hub->dev);
+	}
+#endif
 
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 	xhci->xhci_alloc->offset = 0;
@@ -603,8 +602,8 @@ static int xhci_plat_remove(struct platform_device *dev)
 	wake_unlock(xhci->wakelock);
 	wake_lock_destroy(xhci->wakelock);
 
-	usb_remove_hcd(shared_hcd);
-	xhci->shared_hcd = NULL;
+	pr_info("%s %d xhci->main_hcd = %pS\n", __func__, __LINE__, xhci->main_hcd);
+	usb_remove_hcd(xhci->shared_hcd);
 	usb_phy_shutdown(hcd->usb_phy);
 
 	/*
@@ -617,7 +616,7 @@ static int xhci_plat_remove(struct platform_device *dev)
 		hcd->phy = NULL;
 
 	usb_remove_hcd(hcd);
-	usb_put_hcd(shared_hcd);
+	usb_put_hcd(xhci->shared_hcd);
 
 	if (!IS_ERR(clk))
 		clk_disable_unprepare(clk);

@@ -29,8 +29,8 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
-#include <linux/mfd/s2mpb02.h>
-#include <linux/mfd/s2mpb02-regulator.h>
+#include <linux/mfd/samsung/s2mpb02.h>
+#include <linux/mfd/samsung/s2mpb02-regulator.h>
 #include <linux/regulator/of_regulator.h>
 
 struct s2mpb02_data {
@@ -294,7 +294,7 @@ static int s2mpb02_pmic_dt_parse_pdata(struct s2mpb02_dev *iodev,
 {
 	struct device_node *pmic_np, *regulators_np, *reg_np;
 	struct s2mpb02_regulator_data *rdata;
-	unsigned int i;
+	unsigned long i;
 
 	pmic_np = iodev->dev->of_node;
 	if (!pmic_np) {
@@ -406,7 +406,8 @@ static int s2mpb02_pmic_probe(struct platform_device *pdev)
 		}
 	}
 
-	dev_info(&pdev->dev, "%s ended\n", __func__);
+	pr_info("%s : s2mpb02 probe ended!\n", __func__);
+
 	return 0;
  err:
 	pr_info("[%s:%d] err:\n", __FILE__, __LINE__);

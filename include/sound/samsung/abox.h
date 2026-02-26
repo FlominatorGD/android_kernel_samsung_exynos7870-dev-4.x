@@ -17,6 +17,11 @@
 #include <sound/soc.h>
 #include <sound/samsung/abox_ipc.h>
 
+#ifdef CONFIG_SND_SOC_SAMSUNG_AUDIO
+#define CHANGE_DEV_PRINT
+#include <sound/samsung/sec_audio_debug.h>
+#endif
+
 /**
  * abox ipc handler type definition
  * @param[in]	ipc_id	id of ipc
@@ -37,7 +42,7 @@ typedef irqreturn_t (*abox_ipc_handler_t)(int ipc_id, void *dev_id,
  */
 typedef abox_ipc_handler_t abox_irq_handler_t;
 
-#ifdef CONFIG_SND_SOC_SAMSUNG_ABOX_3830
+#ifdef CONFIG_SND_SOC_SAMSUNG_ABOX
 /**
  * Check ABOX is on
  * @return		true if A-Box is on, false on otherwise
@@ -204,14 +209,6 @@ extern int abox_show_gpr_min(char *buf, int len);
  */
 extern u32 abox_read_gpr(int core_id, int gpr_id);
 
-/**
- * query call state
- * @return		call state
- */
-extern bool abox_get_call_state(void);
-extern void abox_set_bclk_ratio(unsigned int rate);
-extern void abox_reset_bclk_ratio(void);
-
 #else /* !CONFIG_SND_SOC_SAMSUNG_ABOX */
 
 static inline bool abox_is_on(void)
@@ -259,7 +256,7 @@ static inline void abox_request_dram_on(struct device *dev, unsigned int id, boo
 }
 
 static inline int abox_iommu_map(struct device *dev, unsigned long iova,
-		phys_addr_t addr, size_t bytes, void *area)
+		phys_addr_t addr, size_t bytes, void *addr)
 {
 	return -ENODEV;
 }
@@ -293,10 +290,6 @@ static inline int abox_show_gpr_min(char *buf, int len)
 static inline u32 abox_read_gpr(int core_id, int gpr_id)
 {
 	return -ENODEV;
-}
-static bool __maybe_unused abox_get_call_state(void)
-{
-	return 0;
 }
 
 #endif /* !CONFIG_SND_SOC_SAMSUNG_ABOX */

@@ -191,6 +191,6 @@ struct tsmux_rtp_ts_info {
 #define TSMUX_IOCTL_SET_RTP_TS_INFO		\
 	_IOW('A', 0x20, struct tsmux_rtp_ts_info)
 #define TSMUX_IOCTL_GET_RTP_TS_INFO		\
-	_IOW('A', 0x21, struct tsmux_rtp_ts_info)
+	_IOR('A', 0x21, struct tsmux_rtp_ts_info)
 
 #endif /* TSMUX_H */

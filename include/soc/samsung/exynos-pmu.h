@@ -34,7 +34,7 @@ struct exynos_cpu_power_ops {
 extern struct exynos_cpu_power_ops exynos_cpu;
 
 #define phy_cluster(cpu)	MPIDR_AFFINITY_LEVEL(cpu_logical_map(cpu), 1)
-#define phy_cpu(cpu)		MPIDR_AFFINITY_LEVEL(cpu_logical_map(map), 0)
+#define phy_cpu(cpu)		MPIDR_AFFINITY_LEVEL(cpu_logical_map(cpu), 0)
 
 /**
  * The APIs to control the PMU

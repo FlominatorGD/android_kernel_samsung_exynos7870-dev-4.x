@@ -13,12 +13,32 @@
 #include <linux/regmap.h>
 #include <linux/mfd/syscon.h>
 #include <linux/platform_device.h>
+#include <linux/io.h>
 #include <soc/samsung/exynos-pmu.h>
 
 /**
  * "pmureg" has the mapped base address of PMU(Power Management Unit)
  */
 static struct regmap *pmureg;
+#ifdef CONFIG_SOC_EXYNOS9820
+static void __iomem *pmu_alive;
+static spinlock_t update_lock;
+#endif
+
+#ifdef CONFIG_SOC_EXYNOS9820
+/* Atomic operation for PMU_ALIVE registers. (offset 0~0x3FFF)
+   When the targer register can be accessed by multiple masters,
+   This functions should be used. */
+static inline void exynos_pmu_set_bit_atomic(unsigned int offset, unsigned int val)
+{
+	__raw_writel(val, pmu_alive + (offset | 0xc000));
+}
+
+static inline void exynos_pmu_clr_bit_atomic(unsigned int offset, unsigned int val)
+{
+	__raw_writel(val, pmu_alive + (offset | 0x8000));
+}
+#endif
 
 /**
  * No driver refers the "pmureg" directly, through the only exported API.
@@ -35,7 +55,28 @@ int exynos_pmu_write(unsigned int offset, unsigned int val)
 
 int exynos_pmu_update(unsigned int offset, unsigned int mask, unsigned int val)
 {
+#ifdef CONFIG_SOC_EXYNOS9820
+	int i;
+	unsigned long flags;
+
+	if (offset > 0x3fff) {
+		return regmap_update_bits(pmureg, offset, mask, val);
+	} else {
+		spin_lock_irqsave(&update_lock, flags);
+		for (i = 0; i < 32; i++) {
+			if (mask & (1 << i)) {
+				if (val & (1 << i))
+					exynos_pmu_set_bit_atomic(offset, i);
+				else
+					exynos_pmu_clr_bit_atomic(offset, i);
+			}
+		}
+		spin_unlock_irqrestore(&update_lock, flags);
+		return 0;
+	}
+#else
 	return regmap_update_bits(pmureg, offset, mask, val);
+#endif
 }
 
 struct regmap *exynos_get_pmu_regmap(void)
@@ -70,10 +111,10 @@ static int pmu_cpu_offset(unsigned int cpu)
 		offset = 0x180;
 		break;
 	case 4:
-		offset = 0x400;
+		offset = 0x300;
 		break;
 	case 5:
-		offset = 0x480;
+		offset = 0x380;
 		break;
 	case 6:
 		offset = 0x500;
@@ -207,7 +248,7 @@ static struct bus_type exynos_info_subsys = {
 	.dev_name = "exynos_info",
 };
 
-#define NR_CPUS_PER_CLUSTER		6
+#define NR_CPUS_PER_CLUSTER		4
 static ssize_t core_status_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
 {
@@ -220,16 +261,15 @@ static ssize_t core_status_show(struct kobject *kobj,
 		 * "cpu % NR_CPUS_PER_CLUSTER == 0" means that
 		 * the cpu is a first one of each cluster.
 		 */
-		if (0)
-			if (!(cpu % NR_CPUS_PER_CLUSTER)) {
-				n += scnprintf(buf + n, 26, "%s shared_cache : %d\n",
-					(!cpu) ? "boot" : "nonboot",
-					pmu_shared_cache_state(cpu));
-	
-				n += scnprintf(buf + n, 24, "%s Noncpu : %d\n",
-					(!cpu) ? "boot" : "nonboot",
-					pmu_noncpu_state(cpu));
-			}
+		if (!(cpu % NR_CPUS_PER_CLUSTER)) {
+			n += scnprintf(buf + n, 26, "%s shared_cache : %d\n",
+				(!cpu) ? "boot" : "nonboot",
+				pmu_shared_cache_state(cpu));
+
+			n += scnprintf(buf + n, 24, "%s Noncpu : %d\n",
+				(!cpu) ? "boot" : "nonboot",
+				pmu_noncpu_state(cpu));
+		}
 		n += scnprintf(buf + n, 24, "CPU%d : %d\n",
 				cpu, pmu_cpu_state(cpu));
 	}
@@ -257,6 +297,9 @@ static const struct attribute_group *cs_sysfs_groups[] = {
 static int exynos_pmu_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+#ifdef CONFIG_SOC_EXYNOS9820
+	struct resource *res;
+#endif
 
 	pmureg = syscon_regmap_lookup_by_phandle(dev->of_node,
 						"samsung,syscon-phandle");
@@ -264,6 +307,16 @@ static int exynos_pmu_probe(struct platform_device *pdev)
 		pr_err("Fail to get regmap of PMU\n");
 		return PTR_ERR(pmureg);
 	}
+
+#ifdef CONFIG_SOC_EXYNOS9820
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "pmu_alive");
+	pmu_alive = devm_ioremap_resource(dev, res);
+	if (IS_ERR(pmu_alive)) {
+		pr_err("Failed to get address of PMU_ALIVE\n");
+		return PTR_ERR(pmu_alive);
+	}
+	spin_lock_init(&update_lock);
+#endif
 
 	if (subsys_system_register(&exynos_info_subsys,
 					cs_sysfs_groups))

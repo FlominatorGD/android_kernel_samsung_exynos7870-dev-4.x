@@ -50,6 +50,32 @@
 
 #define DWC3_DEFAULT_AUTOSUSPEND_DELAY	5000 /* ms */
 
+/* for BC1.2 spec */
+int dwc3_set_vbus_current(int state)
+{
+	struct power_supply *psy;
+	union power_supply_propval pval = {0};
+
+	psy = power_supply_get_by_name("battery");
+	if (!psy) {
+		pr_err("%s: fail to get battery power_supply\n", __func__);
+		return -1;
+	}
+
+	pval.intval = state;
+	psy_do_property("battery", set, POWER_SUPPLY_EXT_PROP_USB_CONFIGURE, pval);
+	power_supply_put(psy);
+	return 0;
+}
+
+static void dwc3_exynos_set_vbus_current_work(struct work_struct *w)
+{
+	struct dwc3 *dwc = container_of(w, struct dwc3, set_vbus_current_work);
+
+	dwc3_set_vbus_current(dwc->vbus_current);
+}
+/* -------------------------------------------------------------------------- */
+
 /**
  * dwc3_get_dr_mode - Validates and sets dr_mode
  * @dwc: pointer to our context structure
@@ -249,15 +275,15 @@ void dwc3_core_config(struct dwc3 *dwc)
 	 */
 	reg = dwc3_readl(dwc->regs, DWC3_GUCTL);
 	reg |= (DWC3_GUCTL_USBHSTINAUTORETRYEN);
-
-	reg &= ~DWC3_GUCTL_REFCLKPER_MASK;
-	/* fix ITP interval time to 125us */
-	reg |= DWC3_GUCTL_REFCLKPER(0x14);
-
+	if (dwc->adj_sof_accuracy) {
+		reg &= ~DWC3_GUCTL_REFCLKPER_MASK;
+		/* fix ITP interval time to 125us */
+		reg |= DWC3_GUCTL_REFCLKPER(0xF);
+	}
 	if (dwc->dis_u2_freeclk_exists_quirk) {
 		reg &= ~DWC3_GUCTL_REFCLKPER_MASK;
 		/* fix ITP interval time to 125us */
-		reg |= DWC3_GUCTL_REFCLKPER(0x14);
+		reg |= DWC3_GUCTL_REFCLKPER(0xF);
 	}
 	if (dwc->sparse_transfer_control)
 		reg |= DWC3_GUCTL_SPRSCTRLTRANSEN;
@@ -1125,6 +1151,12 @@ int dwc3_core_init(struct dwc3 *dwc)
 		dwc3_writel(dwc->regs, DWC3_GUCTL1, reg);
 	}
 
+	if (dwc->revision >= DWC3_USB31_REVISION_170A) {
+		reg = dwc3_readl(dwc->regs, DWC3_GUCTL3);
+		reg |= DWC3_GUCTL3_USB20_RETRY_DISABLE;
+		dwc3_writel(dwc->regs, DWC3_GUCTL3, reg);
+	}
+
         dwc3_core_config(dwc);
 
 	reg = dwc3_readl(dwc->regs, DWC3_GFLADJ);
@@ -1478,6 +1510,7 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 		| (dwc->is_utmi_l1_suspend << 4);
 
 	dwc->imod_interval = 0;
+	dwc->max_cnt_link_info = 0;
 }
 
 /* check whether the core supports IMOD */
@@ -1640,6 +1673,7 @@ static int dwc3_probe(struct platform_device *pdev)
 	ret = pm_runtime_put(dev);
 	pr_info("%s, pm_runtime_put = %d\n",
 			__func__, ret);
+	INIT_WORK(&dwc->set_vbus_current_work, dwc3_exynos_set_vbus_current_work);
 
 	/* Disable LDO */
 	phy_conn(dwc->usb2_generic_phy, 0);
@@ -1775,7 +1809,6 @@ static int dwc3_resume_common(struct dwc3 *dwc)
 static int dwc3_suspend(struct device *dev)
 {
 	struct dwc3	*dwc = dev_get_drvdata(dev);
-	struct dwc3_otg	*dotg = dwc->dotg;
 	int		ret;
 
 	pr_info("[%s]\n", __func__);
@@ -1785,16 +1818,12 @@ static int dwc3_suspend(struct device *dev)
 
 	pinctrl_pm_select_sleep_state(dev);
 
-	if (dotg)
-		dotg->dwc3_suspended = 1;
-
 	return 0;
 }
 
 static int dwc3_resume(struct device *dev)
 {
 	struct dwc3	*dwc = dev_get_drvdata(dev);
-	struct dwc3_otg	*dotg = dwc->dotg;
 	int		ret;
 
 	pr_info("[%s]\n", __func__);
@@ -1810,11 +1839,6 @@ static int dwc3_resume(struct device *dev)
 
 	/* Compensate usage count incremented during prepare */
 	pm_runtime_put_sync(dev);
-
-	if (dotg) {
-		dotg->dwc3_suspended = 0;
-		complete(&dotg->resume_cmpl);
-	}
 
 	return 0;
 }

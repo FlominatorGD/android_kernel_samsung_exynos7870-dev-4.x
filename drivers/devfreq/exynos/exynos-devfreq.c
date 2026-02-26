@@ -22,16 +22,16 @@
 #include <linux/slab.h>
 #include <linux/reboot.h>
 #include <linux/suspend.h>
+#include <linux/debug-snapshot.h>
 #include <linux/io.h>
 #include <linux/sched/clock.h>
 #include <linux/clk.h>
 #include <soc/samsung/cal-if.h>
 #include <soc/samsung/bts.h>
 #include <linux/of_platform.h>
+#include <dt-bindings/soc/samsung/exynos9810-devfreq.h>
 #include "../../soc/samsung/cal-if/acpm_dvfs.h"
-#ifdef CONFIG_EXYNOS_PD
 #include <soc/samsung/exynos-pd.h>
-#endif
 
 #include <soc/samsung/exynos-devfreq.h>
 #include <soc/samsung/ect_parser.h>
@@ -45,14 +45,39 @@
 
 #include "../governor.h"
 
-#define CREATE_TRACE_POINTS
-#include <trace/events/exynos_devfreq.h>
+#include "exynos-ppc.h"
 
 static struct exynos_devfreq_data **devfreq_data;
 
 static u32 freq_array[6];
 static u32 boot_array[2];
 
+#ifdef CONFIG_EXYNOS_ALT_DVFS
+static struct srcu_notifier_head exynos_alt_notifier;
+
+void exynos_alt_call_chain(void)
+{
+	srcu_notifier_call_chain(&exynos_alt_notifier, 0, NULL);
+}
+
+static int exynos_alt_register_notifier(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_register(&exynos_alt_notifier, nb);
+}
+
+static int exynos_alt_unregister_notifier(struct notifier_block *nb)
+{
+	return srcu_notifier_chain_unregister(&exynos_alt_notifier, nb);
+}
+
+static int __init init_alt_notifier_list(void)
+{
+	srcu_init_notifier_head(&exynos_alt_notifier);
+	return 0;
+}
+pure_initcall(init_alt_notifier_list);
+
+#endif
 #ifdef CONFIG_EXYNOS_DVFS_MANAGER
 static unsigned int ect_find_constraint_freq(struct ect_minlock_domain *ect_domain,
 					unsigned int freq)
@@ -80,7 +105,7 @@ static int exynos_constraint_parse(struct exynos_devfreq_data *data,
 #ifdef CONFIG_EXYNOS_DVFS_MANAGER
 	struct exynos_dm_freq *const_table;
 #endif
-	np = of_get_child_by_name(data->dev->of_node, "skew");
+	np = of_find_node_by_name(data->dev->of_node, "skew");
 	if (!np)
 		return 0;
 	num_child = of_get_child_count(np);
@@ -161,7 +186,6 @@ static int exynos_constraint_parse(struct exynos_devfreq_data *data,
 	return 0;
 }
 
-#ifdef CONFIG_EXYNOS_ACPM
 static int exynos_devfreq_update_fvp(struct exynos_devfreq_data *data, u32 min_freq, u32 max_freq)
 {
 	int ret, ch_num, size, i, use_level = 0;
@@ -239,13 +263,6 @@ static int exynos_devfreq_update_fvp(struct exynos_devfreq_data *data, u32 min_f
 
 	return 0;
 }
-#else
-static inline int exynos_devfreq_update_fvp(struct exynos_devfreq_data *data,
-					    u32 min_freq, u32 max_freq)
-{
-	return 0;
-}
-#endif /* CONFIG_EXYNOS_ACPM */
 
 static int exynos_devfreq_reboot(struct exynos_devfreq_data *data)
 {
@@ -260,14 +277,13 @@ static int exynos_devfreq_get_freq(struct device *dev, u32 *cur_freq,
 		struct clk *clk, struct exynos_devfreq_data *data)
 {
 	if (data->pm_domain) {
-#ifdef CONFIG_EXYNOS_PD
 		if (!exynos_pd_status(data->pm_domain)) {
 			dev_err(dev, "power domain %s is offed\n", data->pm_domain->name);
 			*cur_freq = 0;
 			return -EINVAL;
 		}
-#endif
 	}
+
 	*cur_freq = (u32)cal_dfs_get_rate(data->dfs_id);
 	if (*cur_freq == 0) {
 		dev_err(dev, "failed get frequency from CAL\n");
@@ -280,19 +296,16 @@ static int exynos_devfreq_get_freq(struct device *dev, u32 *cur_freq,
 static int exynos_devfreq_set_freq(struct device *dev, u32 new_freq,
 		struct clk *clk, struct exynos_devfreq_data *data)
 {
-#ifdef CONFIG_EXYNOS_BTS
 	if (data->bts_update) {
 		if (data->new_freq < data->old_freq)
 			bts_update_scen(BS_MIF_CHANGE, data->new_freq);
 	}
-#endif
+
 	if (data->pm_domain) {
-#ifdef CONFIG_EXYNOS_PD
 		if (!exynos_pd_status(data->pm_domain)) {
 			dev_err(dev, "power domain %s is offed\n", data->pm_domain->name);
 			return -EINVAL;
 		}
-#endif
 	}
 
 	if (cal_dfs_set_rate(data->dfs_id, (unsigned long)new_freq)) {
@@ -301,12 +314,10 @@ static int exynos_devfreq_set_freq(struct device *dev, u32 new_freq,
 		return -EINVAL;
 	}
 
-#ifdef CONFIG_EXYNOS_BTS
 	if (data->bts_update) {
 		if (data->new_freq > data->old_freq)
 			bts_update_scen(BS_MIF_CHANGE, data->new_freq);
 	}
-#endif
 
 	return 0;
 }
@@ -601,6 +612,48 @@ static ssize_t store_exynos_devfreq_disable_pm_qos(struct device *dev,
 
 	return count;
 }
+
+static ssize_t show_alt_dvfs_info(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+	struct device *parent = dev->parent;
+	struct platform_device *pdev = container_of(parent,
+						    struct platform_device,
+						    dev);
+	struct exynos_devfreq_data *data = platform_get_drvdata(pdev);
+	ssize_t count = 0;
+	int i;
+
+	mutex_lock(&data->devfreq->lock);
+
+	for (i = 0; i < data->simple_interactive_data.alt_data.num_target_load; i++) {
+		count += snprintf(buf + count, PAGE_SIZE, "%d%s",
+				  data->simple_interactive_data.alt_data.target_load[i],
+				  (i == data->simple_interactive_data.alt_data.num_target_load - 1) ?
+				  "" : (i % 2) ? ":" : " ");
+	}
+	count += snprintf(buf + count, PAGE_SIZE, "\n");
+	/* Parameters */
+	count += snprintf(buf + count, PAGE_SIZE, "MIN SAMPLE TIME: %u\n",
+				data->simple_interactive_data.alt_data.min_sample_time);
+	count += snprintf(buf + count, PAGE_SIZE, "HOLD SAMPLE TIME: %u\n",
+				data->simple_interactive_data.alt_data.hold_sample_time);
+	count += snprintf(buf + count, PAGE_SIZE, "HISPEED LOAD: %u\n",
+				data->simple_interactive_data.alt_data.hispeed_load);
+	count += snprintf(buf + count, PAGE_SIZE, "HISPEED FREQ: %u\n",
+				data->simple_interactive_data.alt_data.hispeed_freq);
+
+	mutex_unlock(&data->devfreq->lock);
+
+	return count;
+#else
+	return 0;
+#endif
+}
+
+static DEVICE_ATTR(alt_dvfs_info, 0640, show_alt_dvfs_info, NULL);
+
 static DEVICE_ATTR(exynos_devfreq_info, 0640, show_exynos_devfreq_info, NULL);
 static DEVICE_ATTR(exynos_devfreq_get_freq, 0640, show_exynos_devfreq_get_freq, NULL);
 static DEVICE_ATTR(exynos_devfreq_cmu_dump, 0640, show_exynos_devfreq_cmu_dump, NULL);
@@ -617,6 +670,7 @@ static struct attribute *exynos_devfreq_sysfs_entries[] = {
 	&dev_attr_debug_scaling_devfreq_min.attr,
 	&dev_attr_debug_scaling_devfreq_max.attr,
 	&dev_attr_disable_pm_qos.attr,
+	&dev_attr_alt_dvfs_info.attr,
 	NULL,
 };
 
@@ -793,12 +847,108 @@ static ssize_t store_delay_time(struct device *dev,
 	return count;
 }
 
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+static ssize_t show_target_load(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct device *parent = dev->parent;
+	struct platform_device *pdev = container_of(parent,
+						    struct platform_device,
+						    dev);
+	struct exynos_devfreq_data *data = platform_get_drvdata(pdev);
+	ssize_t count = 0;
+	int i;
+
+	mutex_lock(&data->devfreq->lock);
+	for (i = 0; i < data->simple_interactive_data.alt_data.num_target_load; i++) {
+		count += snprintf(buf + count, PAGE_SIZE, "%d%s",
+				  data->simple_interactive_data.alt_data.target_load[i],
+				  (i == data->simple_interactive_data.alt_data.num_target_load - 1) ?
+				  "" : (i % 2) ? ":" : " ");
+	}
+	count += snprintf(buf + count, PAGE_SIZE, "\n");
+	mutex_unlock(&data->devfreq->lock);
+	return count;
+}
+
+static ssize_t store_target_load(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	struct device *parent = dev->parent;
+	struct platform_device *pdev = container_of(parent,
+						    struct platform_device,
+						    dev);
+	struct exynos_devfreq_data *data = platform_get_drvdata(pdev);
+	int ntokens;
+	int *new_target_load = NULL;
+
+	new_target_load = get_tokenized_data(buf , &ntokens);
+	if (IS_ERR(new_target_load))
+		return PTR_RET(new_target_load);
+
+	mutex_lock(&data->devfreq->lock);
+	kfree(data->simple_interactive_data.alt_data.target_load);
+	data->simple_interactive_data.alt_data.target_load = new_target_load;
+	data->simple_interactive_data.alt_data.num_target_load = ntokens;
+	mutex_unlock(&data->devfreq->lock);
+
+	return count;
+}
+
+static ssize_t show_hold_sample_time(struct device *dev, struct device_attribute *attr,
+			    char *buf)
+{
+	struct device *parent = dev->parent;
+	struct platform_device *pdev = container_of(parent,
+						    struct platform_device,
+						    dev);
+	struct exynos_devfreq_data *data = platform_get_drvdata(pdev);
+	ssize_t count = 0;
+
+	mutex_lock(&data->devfreq->lock);
+	count += snprintf(buf, PAGE_SIZE, "%u\n",
+			  data->simple_interactive_data.alt_data.hold_sample_time);
+	mutex_unlock(&data->devfreq->lock);
+	return count;
+}
+
+static ssize_t store_hold_sample_time(struct device *dev,
+			     struct device_attribute *attr, const char *buf,
+			     size_t count)
+{
+	struct device *parent = dev->parent;
+	struct platform_device *pdev = container_of(parent,
+						    struct platform_device,
+						    dev);
+	struct exynos_devfreq_data *data = platform_get_drvdata(pdev);
+	int ret;
+
+	mutex_lock(&data->devfreq->lock);
+	ret = sscanf(buf, "%u", &data->simple_interactive_data.alt_data.hold_sample_time);
+	mutex_unlock(&data->devfreq->lock);
+	if (ret != 1)
+		return -EINVAL;
+
+	return count;
+}
+#endif
+
+
 static DEVICE_ATTR(use_delay_time, 0640, show_use_delay_time, store_use_delay_time);
 static DEVICE_ATTR(delay_time, 0640, show_delay_time, store_delay_time);
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+static DEVICE_ATTR(target_load, 0640, show_target_load, store_target_load);
+static DEVICE_ATTR(hold_sample_time, 0640, show_hold_sample_time, store_hold_sample_time);
+#endif
 
 static struct attribute *devfreq_interactive_sysfs_entries[] = {
 	&dev_attr_use_delay_time.attr,
 	&dev_attr_delay_time.attr,
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+	&dev_attr_target_load.attr,
+	&dev_attr_hold_sample_time.attr,
+#endif
 	NULL,
 };
 
@@ -867,6 +1017,7 @@ static int exynos_devfreq_parse_ect(struct exynos_devfreq_data *data, const char
 static int exynos_devfreq_parse_dt(struct device_node *np, struct exynos_devfreq_data *data)
 {
 	const char *use_acpm, *bts_update;
+	const char *use_get_dev;
 #if defined(CONFIG_ECT)
 	const char *devfreq_domain_name;
 #endif
@@ -876,6 +1027,9 @@ static int exynos_devfreq_parse_dt(struct device_node *np, struct exynos_devfreq
 	const char *update_fvp;
 	int ntokens;
 	int not_using_ect = true;
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+	struct devfreq_alt_dvfs_data *alt_data;
+#endif
 
 	if (!np)
 		return -ENODEV;
@@ -904,12 +1058,7 @@ static int exynos_devfreq_parse_dt(struct device_node *np, struct exynos_devfreq
 		data->pm_domain = NULL;
 	} else {
 		dev_info(data->dev, "power domain: %s\n", pd_name);
-#ifdef CONFIG_EXYNOS_PD
 		data->pm_domain = exynos_pd_lookup_name(pd_name);
-#else
-		dev_info(data->dev, "pd_name is existed, but runtimePM feature disable\n");
-		data->pm_domain = NULL;
-#endif
 	}
 
 
@@ -983,6 +1132,22 @@ static int exynos_devfreq_parse_dt(struct device_node *np, struct exynos_devfreq
 			of_property_match_string(np, "clock-names", buf))
 		return -ENODEV;
 
+	if (!of_property_read_string(np, "use_get_dev", &use_get_dev)) {
+		if (!strcmp(use_get_dev, "true")) {
+			data->use_get_dev = true;
+		} else if (!strcmp(use_get_dev, "false")) {
+			data->use_get_dev = false;
+		} else {
+			dev_err(data->dev, "invalid use_get_dev string (%s)\n", use_get_dev);
+			return -EINVAL;
+		}
+	} else {
+		dev_info(data->dev, "Operation function get_dev_status will not be registed.\n");
+		data->use_get_dev = false;
+	}
+
+	of_property_read_u32(np, "polling_ms", &data->devfreq_profile.polling_ms);
+
 	if (data->gov_type == SIMPLE_INTERACTIVE) {
 		if (of_property_read_string(np, "use_delay_time", &use_delay_time))
 			return -ENODEV;
@@ -1020,6 +1185,92 @@ static int exynos_devfreq_parse_dt(struct device_node *np, struct exynos_devfreq
 				data->simple_interactive_data.ndelay_time = ntokens;
 			}
 		}
+
+		/* Polling ms must be registered */
+		/*	 */
+		if (data->use_get_dev) {
+			/* Register um_data and um_list for tracing load */
+			int i;
+
+			if (of_property_read_u32(np, "um_count", &data->um_data.um_count))
+				return -ENODEV;
+
+			data->um_data.pa_base = kzalloc(sizeof(u32) *
+							data->um_data.um_count, GFP_KERNEL);
+
+			if (data->um_data.pa_base == NULL) {
+				dev_err(data->dev, "failed to allocate memory for PA base\n");
+				return -ENOMEM;
+			}
+
+			if (of_property_read_u32_array(np, "um_list",
+							(u32 *)data->um_data.pa_base,
+							(size_t)(data->um_data.um_count)))
+				return -ENODEV;
+
+			data->um_data.va_base = kzalloc(sizeof(void __iomem *) *
+							data->um_data.um_count, GFP_KERNEL);
+
+			if (data->um_data.va_base == NULL) {
+				dev_err(data->dev, "failed to allocate memory for va base");
+				kfree(data->um_data.pa_base);
+				return -ENOMEM;
+			}
+
+			for (i = 0; i < data->um_data.um_count; i++) {
+				data->um_data.va_base[i] =
+					ioremap(data->um_data.pa_base[i], SZ_4K);
+			}
+		} else {
+			dev_info(data->dev, "Not registed UM monitor data\n");
+		}
+
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+		/* Parse ALT-DVFS related parameters */
+		if (of_property_read_bool(np, "use_alt_dvfs")) {
+
+			alt_data = &(data->simple_interactive_data.alt_data);
+
+			if (!of_property_read_string(np, "target_load", &buf)) {
+				/* Parse target load table */
+				alt_data->target_load =
+					get_tokenized_data(buf, &ntokens);
+				alt_data->num_target_load = ntokens;
+			} else {
+				/* Fix target load as defined ALTDVFS_TARGET_LOAD */
+				alt_data->target_load =
+					kmalloc(sizeof(unsigned int), GFP_KERNEL);
+				if(!alt_data->target_load) {
+					dev_err(data->dev, "Failed to allocate memory\n");
+					return -ENOMEM;
+				}
+				*(alt_data->target_load) = ALTDVFS_TARGET_LOAD;
+				alt_data->num_target_load = ALTDVFS_NUM_TARGET_LOAD;
+			}
+
+			if (of_property_read_u32(np, "min_sample_time", &alt_data->min_sample_time))
+				alt_data->min_sample_time = ALTDVFS_MIN_SAMPLE_TIME;
+			if (of_property_read_u32(np, "hold_sample_time", &alt_data->hold_sample_time))
+				alt_data->hold_sample_time = ALTDVFS_HOLD_SAMPLE_TIME;
+			if (of_property_read_u32(np, "hispeed_load", &alt_data->hispeed_load))
+				alt_data->hispeed_load = ALTDVFS_HISPEED_LOAD;
+			if (of_property_read_u32(np, "hispeed_freq", &alt_data->hispeed_freq))
+				alt_data->hispeed_freq = ALTDVFS_HISPEED_FREQ;
+			if (of_property_read_u32(np, "tolerance", &alt_data->tolerance))
+				alt_data->tolerance = ALTDVFS_TOLERANCE;
+
+			/* Initial buffer and load setup */
+			alt_data->front = alt_data->buffer;
+			alt_data->rear = alt_data->buffer;
+			alt_data->min_load = 100;
+
+			/* Initial governor freq setup */
+			data->simple_interactive_data.governor_freq = 0;
+
+		} else {
+			dev_info(data->dev, "ALT-DVFS is not declared by device tree.\n");
+		}
+#endif
 	} else {
 		dev_err(data->dev, "not support governor type %u\n", data->gov_type);
 		return -EINVAL;
@@ -1097,6 +1348,25 @@ static int exynos_devfreq_reboot_notifier(struct notifier_block *nb, unsigned lo
 	return NOTIFY_OK;
 }
 
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+static int exynos_devfreq_notifier(struct notifier_block *nb, unsigned long val, void *v)
+{
+	struct devfreq_notifier_block *um_nb = container_of(nb, struct devfreq_notifier_block, nb);
+	int err;
+
+	mutex_lock(&um_nb->df->lock);
+	err = update_devfreq(um_nb->df);
+	if (err && err != -EAGAIN) {
+		dev_err(&um_nb->df->dev, "devfreq failed with (%d) error\n", err);
+		mutex_unlock(&um_nb->df->lock);
+		return NOTIFY_BAD;
+	}
+	mutex_unlock(&um_nb->df->lock);
+
+	return NOTIFY_OK;
+}
+
+#endif
 static int exynos_devfreq_target(struct device *dev, unsigned long *target_freq, u32 flags)
 {
 	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
@@ -1142,9 +1412,8 @@ static int exynos_devfreq_target(struct device *dev, unsigned long *target_freq,
 	dev_dbg(dev, "LV_%d, %uKhz, %uuV ======> LV_%d, %uKhz, %uuV\n",
 		data->old_idx, data->old_freq, data->old_volt,
 		data->new_idx, data->new_freq, data->new_volt);
-#ifdef CONFIG_DEBUG_SNAPSHOT
+
 	dbg_snapshot_freq(data->ess_flag, data->old_freq, data->new_freq, DSS_FLAG_IN);
-#endif
 	do_gettimeofday(&before_setfreq);
 
 	ret = exynos_devfreq_set_freq(dev, data->new_freq, data->clk, data);
@@ -1155,11 +1424,7 @@ static int exynos_devfreq_target(struct device *dev, unsigned long *target_freq,
 	}
 
 	do_gettimeofday(&after_setfreq);
-#ifdef CONFIG_DEBUG_SNAPSHOT
 	dbg_snapshot_freq(data->ess_flag, data->old_freq, data->new_freq, DSS_FLAG_OUT);
-#endif
-
-	trace_exynos_devfreq(data->old_freq, data->new_freq, dev_name(data->dev));
 
 	data->old_freq = data->new_freq;
 	data->old_idx = data->new_idx;
@@ -1240,6 +1505,10 @@ static int exynos_devfreq_suspend(struct device *dev)
 	if (exynos_devfreq_get_freq(data->dev, &get_freq, data->clk, data))
 		dev_err(data->dev, "failed get freq\n");
 
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+	exynos_devfreq_um_exit(data);
+#endif
+
 	dev_info(data->dev, "Suspend_frequency is %u\n", get_freq);
 
 	return ret;
@@ -1301,6 +1570,12 @@ static int exynos_devfreq_resume(struct device *dev)
 	if (!data->use_acpm && pm_qos_request_active(&data->default_pm_qos_min))
 		pm_qos_update_request(&data->default_pm_qos_min, data->default_qos);
 
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+	ret = exynos_devfreq_um_init(data);
+	if (ret)
+		dev_err(data->dev, "failed to restart um\n");
+#endif
+
 	return ret;
 }
 
@@ -1313,6 +1588,7 @@ static int exynos_devfreq_probe(struct platform_device *pdev)
 #ifdef CONFIG_EXYNOS_DVFS_MANAGER
 	int nr_constraint;
 #endif
+
 	data = kzalloc(sizeof(struct exynos_devfreq_data), GFP_KERNEL);
 	if (data == NULL) {
 		dev_err(&pdev->dev, "failed to allocate devfreq data\n");
@@ -1333,6 +1609,9 @@ static int exynos_devfreq_probe(struct platform_device *pdev)
 
 	data->devfreq_profile.max_state = data->max_state;
 	data->devfreq_profile.target = exynos_devfreq_target;
+	/* Register device tracing for ALT-DVFS */
+	if (data->use_get_dev)
+		register_get_dev_status(data);
 	if (data->gov_type == SIMPLE_INTERACTIVE) {
 		data->simple_interactive_data.pm_qos_class = data->pm_qos_class;
 		data->simple_interactive_data.pm_qos_class_max = data->pm_qos_class_max;
@@ -1421,6 +1700,36 @@ static int exynos_devfreq_probe(struct platform_device *pdev)
 	pm_qos_add_request(&data->boot_pm_qos, (int)data->pm_qos_class,
 			   data->devfreq_profile.initial_freq);
 
+	/* Initialize ALT-DVFS */
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+	if (data->use_get_dev) {
+		/* if polling_ms is 0, update_devfreq function is called by um */
+		if (data->devfreq_profile.polling_ms == 0) {
+			data->um_nb = kzalloc(sizeof(struct devfreq_notifier_block), GFP_KERNEL);
+			if (data->um_nb == NULL) {
+				dev_err(data->dev, "failed to allocate notifier block\n");
+				ret = -ENOMEM;
+				goto err_um_nb;
+			}
+
+			data->um_nb->df = data->devfreq;
+			data->um_nb->nb.notifier_call = exynos_devfreq_notifier;
+			exynos_alt_register_notifier(&data->um_nb->nb);
+			data->last_monitor_time = sched_clock();
+		}
+
+		/*
+		 * UM data should be register.
+		 * And if polling_ms is 0, um notifier should be register in callback.
+		 */
+		ret = exynos_devfreq_um_init(data);
+		if (ret) {
+			dev_err(data->dev, "failed register um\n");
+			goto err_um;
+		}
+	}
+
+#endif
 	ret = devfreq_register_opp_notifier(data->dev, data->devfreq);
 	if (ret) {
 		dev_err(data->dev, "failed register opp notifier\n");
@@ -1454,12 +1763,10 @@ static int exynos_devfreq_probe(struct platform_device *pdev)
 		pm_qos_update_request_timeout(&data->boot_pm_qos, data->boot_freq,
 					data->boot_qos_timeout * USEC_PER_SEC);
 	} else {
-#ifdef CONFIG_EXYNOS_PD
 		pm_runtime_enable(&pdev->dev);
 		pm_runtime_get_sync(&pdev->dev);
 		pm_qos_update_request(&data->boot_pm_qos, data->default_qos);
 		pm_runtime_put_sync(&pdev->dev);
-#endif
 	}
 
 	dev_info(data->dev, "devfreq is initialized!!\n");
@@ -1479,6 +1786,14 @@ err_opp_noti:
 #endif
 	pm_qos_remove_request(&data->sys_pm_qos_min);
 	devfreq_remove_device(data->devfreq);
+#ifdef CONFIG_EXYNOS_ALT_DVFS
+err_um:
+	if (data->um_nb) {
+		exynos_alt_unregister_notifier(&data->um_nb->nb);
+		kfree(data->um_nb);
+	}
+err_um_nb:
+#endif
 err_devfreq:
 #ifdef CONFIG_EXYNOS_DVFS_MANAGER
 	for (; nr_constraint >= 0; nr_constraint--) {
@@ -1527,6 +1842,10 @@ static int exynos_devfreq_remove(struct platform_device *pdev)
 	pm_qos_remove_request(&data->debug_pm_qos_max);
 #endif
 	pm_qos_remove_request(&data->sys_pm_qos_min);
+#if defined(CONFIG_EXYNOS_ALT_DVFS)
+	exynos_alt_unregister_notifier(&data->um_nb->nb);
+	exynos_devfreq_um_exit(data);
+#endif
 	devfreq_remove_device(data->devfreq);
 #ifdef CONFIG_EXYNOS_DVFS_MANAGER
 	for (nr_constraint = 0; nr_constraint < data->nr_constraint; nr_constraint++) {

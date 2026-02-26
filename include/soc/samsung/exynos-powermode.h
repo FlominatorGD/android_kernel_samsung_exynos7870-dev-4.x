@@ -13,8 +13,6 @@
 #define __EXYNOS_POWERMODE_H __FILE__
 #include <soc/samsung/cal-if.h>
 
-#ifdef CONFIG_EXYNOS_PM
-
 extern int exynos_prepare_sys_powerdown(enum sys_powerdown mode);
 extern void exynos_wakeup_sys_powerdown(enum sys_powerdown mode, bool early_wakeup);
 extern void exynos_prepare_cp_call(void);
@@ -31,9 +29,8 @@ extern void exynos_system_idle_exit(int cancel);
 #ifdef CONFIG_PINCTRL_EXYNOS
 extern u64 exynos_get_eint_wake_mask(void);
 #else
-static inline u64 exynos_get_eint_wake_mask(void) { return 0xffffffffL; }
-#endif
+static inline u64 exynos_get_eint_wake_mask(void) { return ULLONG_MAX; }
 
-#endif /* CONFIG_EXYNOS_PM */
+#endif
 
 #endif /* __EXYNOS_POWERMODE_H */

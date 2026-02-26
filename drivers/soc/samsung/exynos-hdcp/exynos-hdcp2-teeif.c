@@ -212,7 +212,7 @@ int teei_generate_master_key(uint32_t lk_type, uint8_t *emkey, size_t emkey_len)
 		return ret;
 
 	/* copy encrypted mkey & wrapped mkey to hdcp ctx */
-	memcpy(emkey, hci->genmkey.emkey, hci->genmkey.emkey_len);
+	memcpy(emkey, hci->genmkey.emkey, emkey_len);
 
 	/* check returned message from SWD */
 
@@ -391,7 +391,7 @@ int teei_generate_skey(uint32_t lk_type,
 		return ret;
 
 	/* copy encrypted mkey & wrapped mkey to hdcp ctx */
-	memcpy(eskey, hci->genskey.eskey, hci->genskey.eskey_len);
+	memcpy(eskey, hci->genskey.eskey, eskey_len);
 
 	/* todo: check returned message from SWD */
 
@@ -491,14 +491,12 @@ int teei_verify_m_prime(uint8_t *m_prime, uint8_t *input, size_t input_len)
 {
 	int ret = 0;
 	struct hci_message *hci = hctx.msg;
-	uint32_t input_len_t;
 
-	input_len_t = (uint32_t)input_len;
 	hci->cmd_id = HDCP_TEEI_VERIFY_M_PRIME;
 	memcpy(hci->verifymprime.m_prime, m_prime, HDCP_RP_HMAC_M_LEN);
-	if (input && input_len_t < sizeof(hci->verifymprime.strmsg)) {
-		memcpy(hci->verifymprime.strmsg, input, input_len_t);
-		hci->verifymprime.str_len = (uint32_t)input_len_t;
+	if (input && input_len < sizeof(hci->verifymprime.strmsg)) {
+		memcpy(hci->verifymprime.strmsg, input, input_len);
+		hci->verifymprime.str_len = input_len;
 	}
 
 	ret = hdcp_tee_comm(hci);

@@ -51,6 +51,7 @@
 #include <mali_kbase_reset_gpu.h>
 #include <backend/gpu/mali_kbase_device_internal.h>
 #include "mali_kbase_ioctl.h"
+#include "mali_kbase_kinstr_jm.h"
 #include "mali_kbase_hwcnt_context.h"
 #include "mali_kbase_hwcnt_virtualizer.h"
 #include "mali_kbase_hwcnt_legacy.h"
@@ -853,6 +854,11 @@ static int kbase_api_mem_free(struct kbase_context *kctx,
 	return kbase_mem_free(kctx, free->gpu_addr);
 }
 
+static int kbase_api_kinstr_jm_fd(struct kbase_context *kctx)
+{
+	return kbase_kinstr_jm_fd(kctx->kinstr_jm);
+}
+
 static int kbase_api_hwcnt_reader_setup(struct kbase_context *kctx,
 		struct kbase_ioctl_hwcnt_reader_setup *setup)
 {
@@ -1555,6 +1561,11 @@ static long kbase_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 	/* Instrumentation. */
+	case KBASE_IOCTL_KINSTR_JM_FD:
+		KBASE_HANDLE_IOCTL(KBASE_IOCTL_KINSTR_JM_FD,
+				kbase_api_kinstr_jm_fd,
+				kctx);
+		break;
 	case KBASE_IOCTL_HWCNT_READER_SETUP:
 		KBASE_HANDLE_IOCTL_IN(KBASE_IOCTL_HWCNT_READER_SETUP,
 				kbase_api_hwcnt_reader_setup,
@@ -4327,8 +4338,9 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 		return err;
 	}
 	kbdev->inited_subsys |= inited_hwcnt_gpu_virt;
-
-	err = kbase_vinstr_init(kbdev->hwcnt_gpu_virt, &kbdev->vinstr_ctx);
+//SRUK-START
+	err = kbase_vinstr_init(kbdev, kbdev->hwcnt_gpu_virt, &kbdev->vinstr_ctx);
+//SRUK-END
 	if (err) {
 		dev_err(kbdev->dev,
 			"Virtual instrumentation initialization failed\n");

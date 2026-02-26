@@ -88,11 +88,29 @@ static inline u32 acpm_get_early_wakeup_count(void)
 #endif
 
 #ifdef CONFIG_USB_DWC3_EXYNOS
-extern bool otg_is_connect(void);
+extern u32 otg_is_connect(void);
 #else
-static inline bool otg_is_connect(void)
+static inline u32 otg_is_connect(void)
 {
 	return 0;
 }
 #endif
+
+#if defined(CONFIG_SEC_DEBUG)
+enum ids_info {
+	tg,
+	lg,
+	mg,
+	bg,
+	g3dg,
+	mifg,
+	lids,
+	mids,
+	bids,
+	gids,
+};
+
+extern int asv_ids_information(enum ids_info id);
+#endif
+
 #endif /* __EXYNOS_PM_H */

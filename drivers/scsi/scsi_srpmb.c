@@ -49,7 +49,6 @@ static void dump_packet(u8 *data, int len)
 static void swap_packet(u8 *p, u8 *d)
 {
 	int i;
-
 	for (i = 0; i < RPMB_PACKET_SIZE; i++)
 		d[i] = p[RPMB_PACKET_SIZE - 1 - i];
 }
@@ -74,18 +73,18 @@ static void srpmb_worker(struct work_struct *data)
 
 	if (!data) {
 		dev_err(&sr_pdev->dev, "rpmb work_struct data invalid\n");
-		return;
+		return ;
 	}
 	rpmb_ctx = container_of(data, struct rpmb_irq_ctx, work);
 	if (!rpmb_ctx->dev) {
 		dev_err(&sr_pdev->dev, "rpmb_ctx->dev invalid\n");
-		return;
+		return ;
 	}
 	sdp = to_scsi_device(rpmb_ctx->dev);
 
 	if (!rpmb_ctx->vir_addr) {
 		dev_err(&sr_pdev->dev, "rpmb_ctx->vir_addr invalid\n");
-		return;
+		return ;
 	}
 	req = (Rpmb_Req *)rpmb_ctx->vir_addr;
 
@@ -315,7 +314,7 @@ int init_wsm(struct device *dev)
 
 	if (rpmb_ctx->vir_addr && rpmb_ctx->phy_addr) {
 		dev_info(dev, "srpmb dma addr: virt_pK(%pK), phy(%llx)\n",
-			(uint64_t)rpmb_ctx->vir_addr, (uint64_t)rpmb_ctx->phy_addr);
+			rpmb_ctx->vir_addr, (uint64_t)rpmb_ctx->phy_addr);
 
 		rpmb_ctx->irq = irq_of_parse_and_map(sr_pdev->dev.of_node, 0);
 		if (rpmb_ctx->irq <= 0) {
@@ -354,7 +353,7 @@ int init_wsm(struct device *dev)
 		ret = register_pm_notifier(&rpmb_ctx->pm_notifier);
 		if (ret) {
 			dev_err(&sr_pdev->dev, "Failed to setup pm notifier\n");
-			goto out_srpmb_init_fail;
+			goto out_srpmb_free_irq_req;
 		}
 
 		ret = exynos_smc(SMC_SRPMB_WSM, rpmb_ctx->phy_addr, hwirq, 0);
@@ -376,11 +375,13 @@ int init_wsm(struct device *dev)
 
 out_srpmb_unregister_pm:
 	unregister_pm_notifier(&rpmb_ctx->pm_notifier);
+out_srpmb_free_irq_req:
+	free_irq(rpmb_ctx->irq, rpmb_ctx);
 out_srpmb_init_fail:
 	if (rpmb_ctx->srpmb_queue)
 		destroy_workqueue(rpmb_ctx->srpmb_queue);
 
-	dma_free_coherent(&sr_pdev->dev, sizeof(Rpmb_Req) + RPMB_BUF_MAX_SIZE,
+	dma_free_coherent(&sr_pdev->dev, RPMB_BUF_MAX_SIZE,
 			rpmb_ctx->vir_addr, rpmb_ctx->phy_addr);
 
 out_srpmb_dma_alloc_fail:
@@ -393,7 +394,6 @@ out_srpmb_ctx_alloc_fail:
 static int srpmb_probe(struct platform_device *pdev)
 {
 	sr_pdev = pdev;
-	dma_set_mask(&pdev->dev, DMA_BIT_MASK(36));
 
 	return 0;
 }

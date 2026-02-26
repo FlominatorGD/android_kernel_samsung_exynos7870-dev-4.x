@@ -13,11 +13,12 @@
 #define _UFS_EXYNOS_H_
 
 #include <linux/pm_qos.h>
-#include "ufs-cal-9630.h"
 #include <crypto/smu.h>
+#include "ufs-cal-9820.h"
 
 #define UFS_VER_0004	4
 #define UFS_VER_0005	5
+#define UFS_VER_0006	6
 
 /*
  * Exynos's Vendor specific registers for UFSHCI
@@ -95,6 +96,8 @@
 #define HCI_DMA0_MONITOR_CNT		0xCC
 #define HCI_DMA1_MONITOR_STATE		0xD0
 #define HCI_DMA1_MONITOR_CNT		0xD4
+#define HCI_DMA0_DOORBELL_DEBUG		0xD8
+#define HCI_DMA1_DOORBELL_DEBUG		0xDC
 
 #define HCI_UFS_AXI_DMA_IF_CTRL		0xF8
 #define HCI_UFS_ACG_DISABLE		0xFC
@@ -103,18 +106,27 @@
  #define HCI_IOP_ACG_DISABLE_EN		BIT(0)
 #define HCI_MPHY_REFCLK_SEL		0x108
  #define MPHY_REFCLK_SEL		BIT(0)
-#define HCI_SMU_ABORT_MATCH_INFO		0x10C
+#define HCI_SMU_RD_ABORT_MATCH_INFO		0x118
+#define HCI_SMU_WR_ABORT_MATCH_INFO		0x11C
 #define HCI_DBR_DUPLICATION_INFO		0x120
+#define HCI_INVALID_PRDT_CTRL		0x130
 
 #define HCI_DBR_TIMER_CONFIG		0x140
-#define HCI_DBR_TIMER_ENABLE		0x144
-#define HCI_DBR_TIMER_STATUS		0x148
+#define HCI_UTRL_DBR_TIMER_ENABLE		0x144
+#define HCI_UTRL_DBR_TIMER_STATUS		0x148
+#define HCI_UTMRL_DBR_TIMER_ENABLE		0x14C
+#define HCI_UTMRL_DBR_TIMER_STATUS		0x150
 
-#define HCI_UTRL_DBR_3_0_TIMER_EXPIRED_VALUE		0x150
-#define HCI_UTRL_DBR_7_4_TIMER_EXPIRED_VALUE		0x154
-#define HCI_UTRL_DBR_11_8_TIMER_EXPIRED_VALUE		0x158
-#define HCI_UTRL_DBR_15_12_TIMER_EXPIRED_VALUE		0x15C
-#define HCI_UTMRL_DBR_3_0_TIMER_EXPIRED_VALUE		0x160
+#define HCI_UTRL_DBR_3_0_TIMER_EXPIRED_VALUE		0x160
+#define HCI_UTRL_DBR_7_4_TIMER_EXPIRED_VALUE		0x164
+#define HCI_UTRL_DBR_11_8_TIMER_EXPIRED_VALUE		0x168
+#define HCI_UTRL_DBR_15_12_TIMER_EXPIRED_VALUE		0x16C
+#define HCI_UTRL_DBR_19_16_TIMER_EXPIRED_VALUE		0x170
+#define HCI_UTRL_DBR_23_20_TIMER_EXPIRED_VALUE		0x174
+#define HCI_UTRL_DBR_27_24_TIMER_EXPIRED_VALUE		0x178
+#define HCI_UTRL_DBR_31_28_TIMER_EXPIRED_VALUE		0x17C
+
+#define HCI_UTMRL_DBR_3_0_TIMER_EXPIRED_VALUE		0x180
 
 /* Device fatal error */
 #define DFES_ERR_EN	BIT(31)
@@ -375,6 +387,8 @@ enum {
 #define PHY_PMA_COMN_ADDR(reg)		(reg)
 #define PHY_PMA_TRSV_ADDR(reg, lane)	((reg) + (0x140 * (lane)))
 
+#define EXYNOS_PMU_UFS_PHY_OFFSET	0x0724
+
 /*
  * Driver specific definitions
  */
@@ -459,8 +473,31 @@ struct ufs_phy_cfg {
 	u32 lyr;
 };
 
+struct exynos_ufs_soc {
+	struct ufs_phy_cfg *tbl_phy_init;
+	struct ufs_phy_cfg *tbl_post_phy_init;
+	struct ufs_phy_cfg *tbl_calib_of_pwm;
+	struct ufs_phy_cfg *tbl_calib_of_hs_rate_a;
+	struct ufs_phy_cfg *tbl_calib_of_hs_rate_b;
+	struct ufs_phy_cfg *tbl_post_calib_of_pwm;
+	struct ufs_phy_cfg *tbl_post_calib_of_hs_rate_a;
+	struct ufs_phy_cfg *tbl_post_calib_of_hs_rate_b;
+	struct ufs_phy_cfg *tbl_lpa_restore;
+	struct ufs_phy_cfg *tbl_pre_clk_off;
+	struct ufs_phy_cfg *tbl_post_clk_on;
+	struct ufs_phy_cfg *tbl_lane1_sq_off;
+};
+
 struct exynos_ufs_phy {
 	void __iomem *reg_pma;
+	struct exynos_ufs_soc *soc;
+};
+
+#define NUM_OF_SYSREG 1
+struct exynos_ufs_sys {
+	void __iomem *reg_sys[NUM_OF_SYSREG];
+	u32 mask[NUM_OF_SYSREG];
+	u32 bits[NUM_OF_SYSREG];
 };
 
 struct exynos_ufs_clk_info {
@@ -497,12 +534,7 @@ struct exynos_ufs_debug {
 	struct exynos_ufs_sfr_log* sfr;
 	struct exynos_ufs_attr_log* attr;
 	struct exynos_ufs_misc_log misc;
-};
-
-struct exynos_access_cxt {
-	u32 offset;
-	u32 mask;
-	u32 val;
+	void __iomem *reg_cport;
 };
 
 struct exynos_ufs {
@@ -512,9 +544,6 @@ struct exynos_ufs {
 	void __iomem *reg_hci;
 	void __iomem *reg_unipro;
 	void __iomem *reg_ufsp;
-
-	struct regmap *pmureg;
-	struct regmap *sysreg;
 
 	struct clk *clk_hci;
 	struct clk *pclk;
@@ -529,7 +558,7 @@ struct exynos_ufs {
 	int num_tx_lanes;
 
 	struct exynos_ufs_phy phy;
-	struct notifier_block tcxo_nb;
+	struct exynos_ufs_sys sys;
 	struct uic_pwr_mode req_pmd_parm;
 	struct uic_pwr_mode act_pmd_parm;
 
@@ -554,16 +583,13 @@ struct exynos_ufs {
 
 	u32 hw_rev;
 
-	u32 tcxo_ex_ctrl;			/* TCXO exclusive control */
-	struct exynos_access_cxt cxt_iso;	/* phy isolation */
-	struct exynos_access_cxt cxt_coherency;	/* io coherency */
-
 	struct pm_qos_request	pm_qos_int;
 	s32			pm_qos_int_value;
 	struct pm_qos_request	pm_qos_fsys0;
 	s32			pm_qos_fsys0_value;
 	bool lane1_poweroff;
 	struct ufs_cal_param	*cal_param;
+	bool enable_tw;
 };
 
 static inline struct exynos_ufs *to_exynos_ufs(struct ufs_hba *hba)
@@ -627,7 +653,7 @@ struct ufs_cmd_logging_category {
 struct ufs_cmd_info {
 	int 	first;
 	int 	last;
-	struct ufs_cmd_logging_category *addr_per_tag[16];
+	struct ufs_cmd_logging_category *addr_per_tag[32];
 	struct ufs_cmd_logging_category  data[MAX_CMD_LOGS];
 
 };
@@ -635,16 +661,11 @@ struct ufs_cmd_info {
 extern void exynos_ufs_get_uic_info(struct ufs_hba *hba);
 extern void exynos_ufs_dump_uic_info(struct ufs_hba *hba);
 extern int exynos_ufs_init_dbg(struct ufs_hba *hba);
+extern void exynos_ufs_ctrl_cport_log(struct exynos_ufs *ufs, bool en, int log_type);
+extern void exynos_ufs_dump_cport_log(struct ufs_hba *hba);
 extern void exynos_ufs_show_uic_info(struct ufs_hba *hba);
 extern void exynos_ufs_cmd_log_start(struct ufs_hba *hba, struct scsi_cmnd *cmd);
 extern void exynos_ufs_cmd_log_end(struct ufs_hba *hba, int tag);
-
-/* TCXO UFS */
-enum shared_resource_owner {
-        OWNER_FIRST,
-        OWNER_SECOND,
-        OWNER_MAX,
-};
 
 #ifndef __EXYNOS_UFS_VS_DEBUG__
 #define __EXYNOS_UFS_VS_DEBUG__

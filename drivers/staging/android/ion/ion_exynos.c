@@ -49,7 +49,6 @@ bool ion_hwrender_dmabuf(struct dma_buf *dmabuf)
 	return !!(buffer->flags & ION_FLAG_MAY_HWRENDER);
 }
 
-#if defined(CONFIG_EXYNOS_IOVMM)
 static struct ion_iovm_map *ion_buffer_iova_create(struct ion_buffer *buffer,
 						   struct device *dev,
 						   enum dma_data_direction dir,
@@ -137,6 +136,9 @@ dma_addr_t ion_iovmm_map(struct dma_buf_attachment *attachment,
 	    (buffer->flags & ION_FLAG_PROTECTED)) {
 		struct ion_buffer_prot_info *prot = buffer->priv_virt;
 
+		if (!prot)
+			return -EINVAL;
+
 		iova = prot->dma_addr;
 	} else {
 		iova = __ion_iovmm_map(attachment, offset, size,
@@ -157,6 +159,9 @@ dma_addr_t ion_iovmm_map_attr(struct dma_buf_attachment *attachment,
 	if (IS_ENABLED(CONFIG_EXYNOS_CONTENT_PATH_PROTECTION) &&
 	    (map_attr & IOMMU_EXYNOS_SECURE)) {
 		struct ion_buffer_prot_info *prot = buffer->priv_virt;
+
+		if (!prot)
+			return -EINVAL;
 
 		if (!(buffer->flags & ION_FLAG_PROTECTED))
 			perrfndev(attachment->dev,
@@ -235,7 +240,7 @@ void ion_iovmm_unmap_attr(struct dma_buf_attachment *attachment,
 		__ion_iovmm_unmap(attachment, iova);
 	}
 }
-#endif
+
 #define MAX_BUFFER_IDS 2048
 static DEFINE_IDA(ion_buffer_ida);
 static int last_buffer_id;
@@ -428,15 +433,8 @@ int ion_exynos_dma_buf_begin_cpu_access(struct dma_buf *dmabuf,
 					enum dma_data_direction direction)
 {
 	struct ion_buffer *buffer = dmabuf->priv;
-	void *vaddr;
 
 	ion_event_begin();
-
-	if (buffer->heap->ops->map_kernel) {
-		mutex_lock(&buffer->lock);
-		vaddr = ion_buffer_kmap_get(buffer);
-		mutex_unlock(&buffer->lock);
-	}
 
 	if (!ion_buffer_cached(buffer))
 		return 0;
@@ -463,12 +461,6 @@ int ion_exynos_dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 	struct ion_buffer *buffer = dmabuf->priv;
 
 	ion_event_begin();
-
-	if (buffer->heap->ops->map_kernel) {
-		mutex_lock(&buffer->lock);
-		ion_buffer_kmap_put(buffer);
-		mutex_unlock(&buffer->lock);
-	}
 
 	if (!ion_buffer_cached(buffer))
 		return 0;

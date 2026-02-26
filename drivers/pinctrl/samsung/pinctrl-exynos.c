@@ -44,6 +44,15 @@ struct exynos_irq_chip {
 	u32 eint_pend;
 };
 
+#ifdef CONFIG_SOC_EXYNOS9820_EVT0
+static unsigned int smpl_irq;
+
+unsigned int get_smpl_irq_num(void)
+{
+	return smpl_irq;
+}
+#endif
+
 static inline struct exynos_irq_chip *to_exynos_irq_chip(struct irq_chip *chip)
 {
 	return container_of(chip, struct exynos_irq_chip, chip);
@@ -57,6 +66,11 @@ static void exynos_irq_mask(struct irq_data *irqd)
 	unsigned long reg_mask = our_chip->eint_mask + bank->eint_offset;
 	unsigned long mask;
 	unsigned long flags;
+
+#ifdef CONFIG_SOC_EXYNOS9820_EVT0
+	if (!strncmp(bank->name, "gpp3", 4) && (irqd->hwirq == 4))
+		return ;
+#endif
 
 	spin_lock_irqsave(&bank->slock, flags);
 
@@ -359,6 +373,11 @@ int exynos_eint_gpio_init(struct samsung_pinctrl_drv_data *d)
 		/* There is no filter selection register except for alive block */
 		/* Except for alive block, digital filter is default setting */
 		exynos_eint_flt_config(EXYNOS_EINT_FLTCON_EN, 0, 0, d, bank);
+
+#ifdef CONFIG_SOC_EXYNOS9820_EVT0
+		if (!strncmp(bank->name, "gpp3", 4))
+			smpl_irq = d->irq;
+#endif
 	}
 
 	return 0;

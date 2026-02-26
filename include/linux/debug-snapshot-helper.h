@@ -16,7 +16,6 @@
 #ifndef DEBUG_SNAPSHOT_HELPER_H
 #define DEBUG_SNAPSHOT_HELPER_H
 
-#ifdef CONFIG_DEBUG_SNAPSHOT
 struct dbg_snapshot_helper_ops {
 	void (*soc_early_panic)(void *);
 
@@ -42,24 +41,35 @@ struct dbg_snapshot_helper_ops {
 	void (*soc_stop_watchdog)(void *);
 	void (*soc_kick_watchdog)(void *);
 
-	int (*soc_is_power_cpu)(void *);
+	int (*soc_is_power_cpu)(unsigned int);
 	int (*soc_smc_call)(unsigned long, unsigned long, unsigned long, unsigned long);
-
-	void (*soc_do_dpm_policy)(void *);
 };
 
 extern void dbg_snapshot_register_soc_ops(struct dbg_snapshot_helper_ops *ops);
-extern void dbg_snapshot_scratch_reg(unsigned int val);
 extern bool dbg_snapshot_is_scratch(void);
 
-extern void dbg_snapshot_set_debug_test_buffer_addr(u64 paddr, unsigned int cpu);
-extern unsigned int dbg_snapshot_get_debug_test_buffer_addr(unsigned int cpu);
-
-#else
-#define dbg_snapshot_register_soc_ops(a)	do { } while(0)
-#define dbg_snapshot_scratch_reg(a)		do { } while(0)
-#define dbg_snapshot_is_scratch()		do { } while(0)
-#endif
+extern void dbg_snapshot_set_debug_test_reg(unsigned int val);
+extern bool dbg_snapshot_debug_test_enabled(void);
+extern void dbg_snapshot_set_debug_test_case(unsigned int val);
+extern unsigned int dbg_snapshot_get_debug_test_case(void);
+extern void dbg_snapshot_set_debug_test_next(unsigned int val);
+extern unsigned int dbg_snapshot_get_debug_test_next(void);
+extern void dbg_snapshot_set_debug_test_panic(unsigned int val);
+extern unsigned int dbg_snapshot_get_debug_test_panic(void);
+extern void dbg_snapshot_set_debug_test_wdt(unsigned int val);
+extern unsigned int dbg_snapshot_get_debug_test_wdt(void);
+extern void dbg_snapshot_set_debug_test_wtsr(unsigned int val);
+extern unsigned int dbg_snapshot_get_debug_test_wtsr(void);
+extern void dbg_snapshot_set_debug_test_smpl(unsigned int val);
+extern unsigned int dbg_snapshot_get_debug_test_smpl(void);
+extern void dbg_snapshot_set_debug_test_curr(unsigned int val);
+extern unsigned int dbg_snapshot_get_debug_test_curr(void);
+extern void dbg_snapshot_set_debug_test_total(unsigned int val);
+extern unsigned int dbg_snapshot_get_debug_test_total(void);
+extern void dbg_snapshot_set_debug_test_run(unsigned int test_id, unsigned int var);
+extern unsigned int dbg_snapshot_get_debug_test_run(unsigned int test_id);
+extern void dbg_snapshot_clear_debug_test_runflag(void);
+extern unsigned int dbg_snapshot_get_debug_test_runflag(void);
 
 #ifdef CONFIG_ARM64
 struct dbg_snapshot_mmu_reg {

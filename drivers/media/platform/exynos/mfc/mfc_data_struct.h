@@ -17,17 +17,10 @@
 #define CONFIG_MFC_USE_BUS_DEVFREQ
 #endif
 
-#ifdef CONFIG_EXYNOS_BTS
-#define CONFIG_MFC_USE_BTS
-#ifdef CONFIG_EXYNOS9610_BTS
-#define CONFIG_MFC_NO_RENEWAL_BTS
-#endif
-#endif
-
 #ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 #include <linux/pm_qos.h>
 #endif
-#ifdef CONFIG_MFC_USE_BTS
+#ifdef CONFIG_EXYNOS_BTS
 #include <soc/samsung/bts.h>
 #endif
 #include <linux/videodev2.h>
@@ -43,7 +36,7 @@
 
 #define MFC_NUM_CONTEXTS		32
 #define MFC_MAX_PLANES			3
-#define MFC_MAX_DPBS			64
+#define MFC_MAX_DPBS			32
 #define MFC_MAX_BUFFERS			32
 #define MFC_MAX_EXTRA_BUF		10
 #define MFC_SFR_LOGGING_COUNT_SET0	10
@@ -51,7 +44,6 @@
 #define MFC_SFR_LOGGING_COUNT_SET2	32
 #define MFC_LOGGING_DATA_SIZE		950
 #define MFC_MAX_DEFAULT_PARAM		100
-#define MFC_NUM_EXTRA_DPB		5
 
 /* OTF */
 #define HWFC_MAX_BUF			10
@@ -75,15 +67,6 @@
 #define MAX_NUM_CLUSTER			3
 #define MAX_NUM_MFC_BPS			2
 #define MAX_NUM_MFC_FREQ		10
-
-/* MFC FMT FLAG */
-#define MFC_FMT_FLAG_SBWCL_50		0x0001
-#define MFC_FMT_FLAG_SBWCL_60		0x0002
-#define MFC_FMT_FLAG_SBWCL_75		0x0004
-#define MFC_FMT_FLAG_SBWCL_80		0x0008
-
-/* MFC meminfo */
-#define MFC_MEMINFO_MAX_NUM		10
 
 /*
  *  MFC region id for smc
@@ -208,16 +191,9 @@ enum mfc_vb_flag {
 	MFC_FLAG_HDR_VIDEO_SIGNAL_TYPE	= 4,
 	MFC_FLAG_BLACKBAR_DETECT	= 5,
 	MFC_FLAG_HDR_PLUS		= 6,
-	MFC_FLAG_DISP_RES_CHANGE	= 7,
-	MFC_FLAG_UNCOMP			= 8,
 	MFC_FLAG_CSD			= 29,
 	MFC_FLAG_EMPTY_DATA		= 30,
 	MFC_FLAG_LAST_FRAME		= 31,
-};
-
-enum mfc_do_cache_flush {
-	MFC_NO_CACHEFLUSH		= 0,
-	MFC_CACHEFLUSH			= 1,
 };
 
 enum mfc_idle_mode {
@@ -225,31 +201,6 @@ enum mfc_idle_mode {
 	MFC_IDLE_MODE_RUNNING	= 1,
 	MFC_IDLE_MODE_IDLE	= 2,
 	MFC_IDLE_MODE_CANCEL	= 3,
-};
-
-enum mfc_nal_q_stop_cause {
-	/* nal_q stop check cause */
-	NALQ_STOP_DRM			= 0,
-	NALQ_STOP_NO_RUNNING		= 1,
-	NALQ_STOP_OTF			= 2,
-	NALQ_STOP_BPG			= 3,
-	NALQ_STOP_LAST_FRAME		= 4,
-	NALQ_STOP_MULTI_FRAME		= 5,
-	NALQ_STOP_DPB_FULL		= 6,
-	NALQ_STOP_INTERLACE		= 7,
-	NALQ_STOP_BLACK_BAR		= 8,
-	NALQ_STOP_INTER_DRC		= 9,
-	NALQ_STOP_SLICE_MODE		= 10,
-	NALQ_STOP_RC_MODE		= 11,
-	NALQ_STOP_NO_STRUCTURE		= 12,
-	/* nal_q exception cause */
-	NALQ_EXCEPTION_DRC		= 25,
-	NALQ_EXCEPTION_NEED_DPB		= 26,
-	NALQ_EXCEPTION_INTER_DRC	= 27,
-	NALQ_EXCEPTION_SBWC_INTERLACE	= 28,
-	NALQ_EXCEPTION_INTERLACE	= 29,
-	NALQ_EXCEPTION_MULTI_FRAME	= 30,
-	NALQ_EXCEPTION_ERROR		= 31,
 };
 
 struct mfc_ctx;
@@ -269,7 +220,7 @@ enum mfc_debug_cause {
 	MFC_CAUSE_FAIL_WAKEUP			= 10,
 	MFC_CAUSE_FAIL_RISC_ON			= 11,
 	MFC_CAUSE_FAIL_DPB_FLUSH		= 12,
-	MFC_CAUSE_FAIL_CACHE_FLUSH		= 13,
+	MFC_CAUSE_FAIL_CHACHE_FLUSH		= 13,
 	/* last information */
 	MFC_LAST_INFO_BLACK_BAR                 = 26,
 	MFC_LAST_INFO_NAL_QUEUE                 = 27,
@@ -277,6 +228,18 @@ enum mfc_debug_cause {
 	MFC_LAST_INFO_POWER                     = 29,
 	MFC_LAST_INFO_SHUTDOWN                  = 30,
 	MFC_LAST_INFO_DRM                       = 31,
+};
+
+enum mfc_real_time {
+	/* real-time */
+	MFC_RT                  = 0,
+	/* low-priority real-time */
+	MFC_RT_LOW              = 1,
+	/* constrained real-time */
+	MFC_RT_CON              = 2,
+	/* non real-time */
+	MFC_NON_RT              = 3,
+	MFC_RT_UNDEFINED        = 4,
 };
 
 struct mfc_debug {
@@ -304,7 +267,7 @@ struct mfc_debug {
 	u8	power_cnt;
 	u8	clock_cnt;
 	/* for decoder only */
-	u64	dynamic_used;
+	u32	dynamic_used;
 	u32	last_src_addr;
 	u32	last_dst_addr[MFC_MAX_PLANES];
 	/* total logging data */
@@ -321,7 +284,6 @@ struct mfc_buf {
 	dma_addr_t addr[MAX_NUM_IMAGES_IN_VB][MFC_MAX_PLANES];
 	struct dma_buf *dmabufs[MAX_NUM_IMAGES_IN_VB][MFC_MAX_PLANES];
 	struct dma_buf_attachment *attachments[MAX_NUM_IMAGES_IN_VB][MFC_MAX_PLANES];
-	int dpb_index;
 	int next_index;
 	int done_index;
 	int used;
@@ -411,16 +373,6 @@ enum mfc_sfr_dump_type {
 	MFC_DUMP_WARN_INT		= (1 << 7),
 };
 
-enum mfc_feature_option {
-	MFC_OPTION_NONE			= 0,
-	MFC_OPTION_RECON_SBWC_DISABLE	= (1 << 0),
-};
-
-enum mfc_get_img_size {
-	MFC_GET_RESOL_SIZE		= 0,
-	MFC_GET_RESOL_DPB_SIZE		= 1,
-};
-
 struct mfc_debugfs {
 	struct dentry *root;
 	struct dentry *mfc_info;
@@ -440,12 +392,7 @@ struct mfc_debugfs {
 	struct dentry *sfr_dump;
 	struct dentry *mmcache_dump;
 	struct dentry *mmcache_disable;
-	struct dentry *llc_disable;
 	struct dentry *perf_boost_mode;
-	struct dentry *drm_predict_disable;
-	struct dentry *meminfo_enable;
-	struct dentry *meminfo;
-	struct dentry *feature_option;
 };
 
 /**
@@ -464,30 +411,7 @@ struct mfc_special_buf {
 	size_t				size;
 };
 
-struct mfc_mem {
-	struct list_head	list;
-	dma_addr_t		addr;
-	size_t			size;
-};
-
-enum mfc_meminfo_type {
-	MFC_MEMINFO_FW			= 0,
-	MFC_MEMINFO_INTERNAL		= 1,
-	MFC_MEMINFO_INPUT		= 2,
-	MFC_MEMINFO_OUTPUT		= 3,
-	MFC_MEMINFO_CTX_ALL		= 4,
-	MFC_MEMINFO_CTX_MAX		= 5,
-	MFC_MEMINFO_DEV_ALL		= 6,
-};
-
-struct mfc_meminfo {
-	enum mfc_meminfo_type	type;
-	const char		*name;
-	unsigned int		count;
-	size_t			size;
-	size_t			total;
-};
-
+#ifdef CONFIG_EXYNOS_BTS
 struct mfc_bw_data {
 	unsigned int	peak;
 	unsigned int	read;
@@ -510,7 +434,9 @@ struct mfc_bw_info {
 	struct mfc_bw_data bw_dec_vp9_10bit;
 	struct mfc_bw_data bw_dec_mpeg4;
 };
+#endif
 
+#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 /*
  * threshold_mb - threshold of total MB(macroblock) count
  * Total MB count can be calculated by
@@ -525,8 +451,6 @@ struct mfc_qos {
 	unsigned int mo_10bit_value;
 	unsigned int mo_uhd_enc60_value;
 	unsigned int time_fw;
-	unsigned int bts_scen_idx;
-	const char *name;
 };
 
 struct mfc_qos_boost {
@@ -535,8 +459,6 @@ struct mfc_qos_boost {
 	unsigned int freq_int;
 	unsigned int freq_mif;
 	unsigned int freq_cluster[MAX_NUM_CLUSTER];
-	unsigned int bts_scen_idx;
-	const char *name;
 };
 
 struct mfc_qos_weight {
@@ -552,6 +474,7 @@ struct mfc_qos_weight {
 	unsigned int weight_num_of_tile;
 	unsigned int weight_super64_bframe;
 };
+#endif
 
 struct mfc_feature {
 	unsigned int support;
@@ -567,29 +490,25 @@ struct mfc_platdata {
 	unsigned int share_sysmmu;
 	unsigned int axid_mask;
 	unsigned int mfc_fault_num;
-	unsigned int trans_info_offset;
-	/* Default 10bit format for decoding and dithering for display */
+	/* Default 10bit format for decoding */
 	unsigned int P010_decoding;
-	unsigned int dithering_enable;
 	/* Formats */
 	unsigned int support_10bit;
 	unsigned int support_422;
 	unsigned int support_rgb;
-	/* SBWC */
-	unsigned int support_sbwc;
-	unsigned int support_sbwcl;
 	/* HDR10+ */
 	unsigned int max_hdr_win;
+#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	/* QoS */
-	unsigned int num_default_qos_steps;
-	unsigned int num_encoder_qos_steps;
+	unsigned int num_qos_steps;
+	unsigned int max_qos_steps;
 	unsigned int max_mb;
 	unsigned int mfc_freq_control;
 	unsigned int mo_control;
 	unsigned int bw_control;
-	struct mfc_qos *default_qos_table;
-	struct mfc_qos *encoder_qos_table;
+	struct mfc_qos *qos_table;
 	struct mfc_qos_boost *qos_boost_table;
+#endif
 	int num_mfc_freq;
 	unsigned int mfc_freqs[MAX_NUM_MFC_FREQ];
 	unsigned int max_Kbps[MAX_NUM_MFC_BPS];
@@ -605,21 +524,25 @@ struct mfc_platdata {
 	struct mfc_feature color_aspect_enc;
 	struct mfc_feature static_info_enc;
 	struct mfc_feature hdr10_plus;
-	struct mfc_feature vp9_stride_align;
-	struct mfc_feature sbwc_uncomp;
-	struct mfc_feature mem_clear;
-	struct mfc_feature wait_fw_status;
-	struct mfc_feature drm_switch_predict;
+	struct mfc_feature enc_ts_delta;
+
+	/*
+	 * new variables should be added above
+	 * ============ boundary line ============
+	 * The following variables are excluded from the MFC log dumps
+	 */
 
 	/* Encoder default parameter */
 	unsigned int enc_param_num;
 	unsigned int enc_param_addr[MFC_MAX_DEFAULT_PARAM];
 	unsigned int enc_param_val[MFC_MAX_DEFAULT_PARAM];
 
+#ifdef CONFIG_EXYNOS_BTS
 	struct mfc_bw_info mfc_bw_info;
-	struct mfc_bw_info mfc_bw_info_sbwc;
-	unsigned int mfc_bw_index;
+#endif
+#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	struct mfc_qos_weight qos_weight;
+#endif
 };
 
 /************************ NAL_Q data structure ************************/
@@ -695,7 +618,12 @@ typedef struct __EncoderInputStr {
 	int WeightUpper;
 	int RcMode;
 	int St2094_40sei[30];
-} EncoderInputStr; /* 81*4 = 324 bytes */
+	int SourcePlaneStride[3];
+	int SourcePlane2BitStride[2];
+	int MVHorRange;
+	int MVVerRange;
+	int TimeStampDelta;
+} EncoderInputStr; /* 89*4 = 356 bytes */
 
 typedef struct __DecoderOutputStr {
 	int StartCode; /* 0xAAAAAAAA; Decoder output structure marker */
@@ -759,12 +687,7 @@ typedef struct __DecoderOutputStr {
 	int FirstPlaneDpbSize;
 	int SecondPlaneDpbSize;
 	int St2094_40sei[30];
-	int Vp9Info;
-	unsigned int MfcHwCycle;
-	unsigned int MfcProcessingCycle;
-	unsigned int DpbStrideSize[3];
-	unsigned int Dpb2bitStrideSize[2];
-} DecoderOutputStr; /* 102*4 = 408 bytes */
+} DecoderOutputStr; /* 94*4 =  376 bytes */
 
 typedef struct __EncoderOutputStr {
 	int StartCode; /* 0xBBBBBBBB; Encoder output structure marker */
@@ -897,7 +820,6 @@ struct mfc_dev {
 	void __iomem		*sysmmu0_base;
 	void __iomem		*sysmmu1_base;
 	void __iomem		*hwfc_base;
-	/* for MMCACHE */
 	void __iomem		*cmu_busc_base;
 	void __iomem		*cmu_mif0_base;
 	void __iomem		*cmu_mif1_base;
@@ -914,7 +836,8 @@ struct mfc_dev {
 	struct mfc_debug	*logging_data;
 
 	int num_inst;
-	int num_otf_inst;
+
+	unsigned long otf_inst_bits;
 
 	struct mutex mfc_mutex;
 
@@ -928,10 +851,7 @@ struct mfc_dev {
 	bool has_2sysmmu;
 	bool has_hwfc;
 	bool has_mmcache;
-	bool has_cmu;
-
-	int has_llc;
-	int llc_on_status;
+	bool has_cmu;	
 
 	struct mfc_special_buf common_ctx_buf;
 	struct mfc_special_buf drm_common_ctx_buf;
@@ -960,29 +880,26 @@ struct mfc_dev {
 	struct workqueue_struct *mfc_idle_wq;
 	struct work_struct mfc_idle_work;
 
-	unsigned int nal_q_stop_cause;
-
 	/* for DRM */
 	int curr_ctx_is_drm;
 	int num_drm_inst;
-	int cache_flush_flag;
-	int last_cmd_has_cache_flush;
 	struct mfc_special_buf fw_buf;
 	struct mfc_special_buf drm_fw_buf;
 
 	struct workqueue_struct *butler_wq;
 	struct work_struct butler_work;
 
+#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	struct list_head qos_queue;
 	atomic_t qos_req_cur;
-#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	struct pm_qos_request qos_req_mfc;
 	struct pm_qos_request qos_req_int;
 	struct pm_qos_request qos_req_mif;
 	struct pm_qos_request qos_req_cluster[MAX_NUM_CLUSTER];
-#endif
+	int qos_has_enc_ctx;
 	struct mutex qos_mutex;
 	int mfc_freq_by_bps;
+#endif
 	struct mfc_bitrate_table bitrate_table[MAX_NUM_MFC_FREQ];
 	int bps_ratio;
 
@@ -1007,7 +924,6 @@ struct mfc_dev {
 
 #ifdef CONFIG_EXYNOS_BTS
 	struct bts_bw mfc_bw;
-	unsigned int prev_bts_scen_idx;
 #endif
 
 	struct mfc_debugfs debugfs;
@@ -1030,8 +946,6 @@ struct mfc_dev {
 	char *reg_buf;
 	unsigned int *reg_val;
 	unsigned int reg_cnt;
-
-	struct mfc_meminfo meminfo[MFC_MEMINFO_DEV_ALL + 1];
 };
 
 /**
@@ -1112,6 +1026,7 @@ struct mfc_mpeg4_enc_params {
 	u8 rc_min_qp_b;
 	u8 rc_max_qp_b;
 	u8 rc_p_frame_qp;
+	u16 vop_time_res;
 	u16 vop_frm_delta;
 };
 
@@ -1378,6 +1293,15 @@ struct mfc_ctrls_ops {
 			struct list_head *head);
 };
 
+struct stored_dpb_info {
+	int fd[MFC_MAX_PLANES];
+};
+
+struct dec_dpb_ref_info {
+	int index;
+	struct stored_dpb_info dpb[MFC_MAX_DPBS];
+};
+
 struct temporal_layer_info {
 	unsigned int temporal_layer_count;
 	unsigned int temporal_layer_bitrate[VIDEO_MAX_TEMPORAL_LAYERS];
@@ -1395,6 +1319,7 @@ struct mfc_user_shared_handle {
 	int fd;
 	struct dma_buf *dma_buf;
 	void *vaddr;
+	size_t data_size;
 };
 
 struct mfc_raw_info {
@@ -1482,17 +1407,6 @@ struct mfc_bitrate {
 	int bytesused;
 };
 
-struct dpb_table {
-	dma_addr_t addr[MFC_MAX_PLANES];
-	size_t size;
-	int fd[MFC_MAX_PLANES];
-	int mapcnt;
-	int ref;
-	int queued;
-	struct dma_buf *dmabufs[MFC_MAX_PLANES];
-	struct dma_buf_attachment *attach[MFC_MAX_PLANES];
-};
-
 struct mfc_dec {
 	int total_dpb_count;
 
@@ -1507,8 +1421,6 @@ struct mfc_dec {
 	int is_interlaced;
 	int is_dts_mode;
 	int stored_tag;
-	int inter_res_change;
-	int disp_res_change;
 
 	int crc_enable;
 	int crc_luma0;
@@ -1531,13 +1443,26 @@ struct mfc_dec {
 	/* For dynamic DPB */
 	int is_dynamic_dpb;
 	int is_dpb_full;
-	int display_index;
 	unsigned long available_dpb;
-	unsigned long queued_dpb;
-	unsigned long dynamic_set;
-	unsigned long dynamic_used;
+	unsigned int dynamic_set;
+	unsigned int dynamic_used;
+
+	struct dec_dpb_ref_info *ref_info;
+	int assigned_fd[MFC_MAX_DPBS];
+	struct mfc_user_shared_handle sh_handle_dpb;
+	struct mfc_user_shared_handle sh_handle_hdr;
+	struct hdr10_plus_meta *hdr10_plus_info;
+
+	struct dma_buf *assigned_dmabufs[MFC_MAX_DPBS][2][MFC_MAX_PLANES];
+	struct dma_buf_attachment *assigned_attach[MFC_MAX_DPBS][2][MFC_MAX_PLANES];
+	dma_addr_t assigned_addr[MFC_MAX_DPBS][2][MFC_MAX_PLANES];
+	int assigned_refcnt[MFC_MAX_DPBS];
+	struct mutex dpb_mutex;
 
 	int has_multiframe;
+
+	unsigned int err_reuse_flag;
+	unsigned int dec_only_release_flag;
 
 	unsigned int num_of_tile_over_4;
 	unsigned int super64_bframe;
@@ -1546,17 +1471,14 @@ struct mfc_dec {
 	unsigned int color_space;
 
 	unsigned int decoding_order;
+	/*
+	 * new variables should be added above
+	 * ============ boundary line ============
+	 * The following variables are excluded from the MFC log dumps
+	 */
 
-	unsigned int uncomp_pixfmt;
-
-	/* for Dynamic DPB */
-	struct dpb_table dpb[MFC_MAX_DPBS];
-	struct mutex dpb_mutex;
-	unsigned long dpb_table_used;
-
-	/* for HDR10+ */
-	struct mfc_user_shared_handle sh_handle_hdr;
-	struct hdr10_plus_meta *hdr10_plus_info;
+	/* for DRM ASP */
+	struct mfc_buf *assigned_dpb[MFC_MAX_DPBS];
 
 	/* for debugging about black bar detection */
 	void *frame_vaddr[3][30];
@@ -1585,18 +1507,20 @@ struct mfc_enc {
 	unsigned int in_slice;
 	unsigned int buf_full;
 
-	int sbwc_option;
-
 	int stored_tag;
+	struct mfc_user_shared_handle sh_handle_svc;
+	struct mfc_user_shared_handle sh_handle_roi;
+	struct mfc_user_shared_handle sh_handle_hdr;
 	int roi_index;
 	struct mfc_special_buf roi_buf[MFC_MAX_EXTRA_BUF];
 	struct mfc_enc_roi_info roi_info[MFC_MAX_EXTRA_BUF];
 
+	/*
+	 * new variables should be added above
+	 * ============ boundary line ============
+	 * The following variables are excluded from the MFC log dumps
+	 */
 	struct mfc_enc_params params;
-
-	struct mfc_user_shared_handle sh_handle_svc;
-	struct mfc_user_shared_handle sh_handle_roi;
-	struct mfc_user_shared_handle sh_handle_hdr;
 };
 
 struct mfc_fmt {
@@ -1622,6 +1546,9 @@ struct mfc_ctx {
 	int int_reason;
 	unsigned int int_err;
 
+	int prio;
+	enum mfc_real_time rt;
+
 	struct mfc_fmt *src_fmt;
 	struct mfc_fmt *dst_fmt;
 
@@ -1644,10 +1571,8 @@ struct mfc_ctx {
 	int crop_top;
 	int dpb_count;
 	int buf_stride;
-	int rgb_bpp;
 
 	int min_dpb_size[3];
-	int min_dpb_size_2bits[3];
 
 	struct mfc_raw_info raw_buf;
 
@@ -1665,10 +1590,8 @@ struct mfc_ctx {
 
 	/* Extra Buffers */
 	int codec_buffer_allocated;
-	int scratch_buffer_allocated;
 	struct mfc_special_buf codec_buf;
 	struct mfc_special_buf instance_ctx_buf;
-	struct mfc_special_buf scratch_buf;
 
 	size_t mv_size;
 	size_t scratch_buf_size;
@@ -1679,11 +1602,6 @@ struct mfc_ctx {
 	int is_10bit;
 	int is_422;
 
-	/* SBWC */
-	int is_sbwc;
-	int is_sbwc_lossy;
-	int sbwcl_ratio;
-
 	/* for DRM */
 	int is_drm;
 
@@ -1693,10 +1611,13 @@ struct mfc_ctx {
 
 	unsigned long framerate;
 	unsigned long last_framerate;
+	unsigned long operating_framerate;
 	unsigned int qos_ratio;
 
+#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	int qos_req_step;
 	struct list_head qos_list;
+#endif
 
 	struct mfc_timestamp ts_array[MAX_TIME_INDEX];
 	struct list_head ts_list;
@@ -1714,6 +1635,9 @@ struct mfc_ctx {
 
 	int buf_process_type;
 
+	unsigned long raw_protect_flag;
+	unsigned long stream_protect_flag;
+
 	int frame_cnt;
 	u32 last_src_addr;
 	u32 last_dst_addr[MFC_MAX_PLANES];
@@ -1722,10 +1646,17 @@ struct mfc_ctx {
 	bool check_dump;
 	bool mem_type_10bit;
 
-	/* external structure */
-	struct v4l2_fh fh;
 	struct vb2_queue vq_src;
 	struct vb2_queue vq_dst;
+
+	/*
+	 * new variables should be added above
+	 * ============ boundary line ============
+	 * The following variables are excluded from the MFC log dumps
+	 */
+
+	/* external structure */
+	struct v4l2_fh fh;
 
 	/* per buffer controls */
 	struct mfc_ctrls_ops *c_ops;
@@ -1736,13 +1667,6 @@ struct mfc_ctx {
 	/* wait queue */
 	wait_queue_head_t cmd_wq;
 	struct mfc_listable_wq hwlock_wq;
-
-	/* mem info */
-	struct mfc_buf_queue	meminfo_inbuf_q;
-	struct mfc_buf_queue	meminfo_outbuf_q;
-	spinlock_t		meminfo_queue_lock;
-	struct mfc_meminfo	meminfo[MFC_MEMINFO_MAX_NUM];
-	size_t			meminfo_size[MFC_MEMINFO_CTX_MAX + 1];
 };
 
 #endif /* __MFC_DATA_STRUCT_H */

@@ -127,11 +127,12 @@ struct fmp_test_data *fmp_test_init(struct exynos_fmp *fmp)
 		pr_err("%s: Invalid exynos fmp struct\n", __func__);
 		return NULL;
 	}
+
+	dev = fmp->dev;
 	data = kmalloc(sizeof(struct fmp_test_data), GFP_KERNEL);
 	if (!data)
 		return NULL;
 
-	dev = fmp->dev;
 	ret = get_fmp_host_type(dev, data);
 	if (ret) {
 		dev_err(dev, "%s: Fail to get host type. ret(%d)", __func__,

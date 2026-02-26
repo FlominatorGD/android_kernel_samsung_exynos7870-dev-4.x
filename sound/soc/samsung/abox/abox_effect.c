@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_effect.c
+/* sound/soc/samsung/abox/abox_effect.c
  *
  * ALSA SoC Audio Layer - Samsung Abox Effect driver
  *
@@ -128,9 +128,9 @@ static const struct snd_kcontrol_new abox_effect_controls[] = {
 	DECLARE_ABOX_CTL_EQ_SWITCH("MSP data", MYSPACE),
 	DECLARE_ABOX_CTL_EQ_SWITCH("ESA BBoost data", BB),
 	DECLARE_ABOX_CTL_EQ_SWITCH("ESA EQ data", EQ),
-	DECLARE_ABOX_CTL_EQ_SWITCH("Offload BDL data", NXPBDL),
-	DECLARE_ABOX_CTL_EQ_SWITCH("Offload RVB ctx data", NXPRVB_CTX),
-	DECLARE_ABOX_CTL_EQ_SWITCH("Offload RVB param data", NXPRVB_PARAM),
+	DECLARE_ABOX_CTL_EQ_SWITCH("NXP BDL data", NXPBDL),
+	DECLARE_ABOX_CTL_EQ_SWITCH("NXP RVB ctx data", NXPRVB_CTX),
+	DECLARE_ABOX_CTL_EQ_SWITCH("NXP RVB param data", NXPRVB_PARAM),
 	DECLARE_ABOX_CTL_EQ_SWITCH("SB rotation", SB),
 	DECLARE_ABOX_CTL_EQ_SWITCH("UPSCALER", UPSCALER),
 	DECLARE_ABOX_CTL_EQ_SWITCH("DA data", DA_DATA),

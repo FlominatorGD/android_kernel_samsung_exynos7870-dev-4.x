@@ -69,3 +69,12 @@ config ION_DEBUG_EVENT_RECORD
 	bool "Ion event debug support"
 	default y
 	depends on ION_EXYNOS
+
+config ION_RBIN_HEAP
+	bool "ION RBIN Heap"
+	default y
+	depends on ION && RBIN && ION_EXYNOS && CLEANCACHE
+	help
+	  Provides ION RBIN heap which utilizes RBIN memory.
+	  While RBIN heap is similar with CMA heap, it assumes that an ION buffer
+	  can be composed of multiple free chunks.

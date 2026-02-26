@@ -26,7 +26,6 @@
 #include <soc/samsung/exynos-pm.h>
 #include <soc/samsung/exynos-pmu.h>
 #include <soc/samsung/exynos-powermode.h>
-#include <soc/samsung/exynos-flexpmu-dbg.h>
 
 #define WAKEUP_STAT_EINT                (1 << 12)
 #define WAKEUP_STAT_RTC_ALARM           (1 << 0)
@@ -39,20 +38,13 @@
 extern u32 exynos_eint_to_pin_num(int eint);
 #define EXYNOS_EINT_PEND(b, x)      ((b) + 0xA00 + (((x) >> 3) * 4))
 
-#ifdef CONFIG_PM_WAKELOCKS
-extern int pm_wake_lock(const char *buf);
-#else
-inline int pm_wake_lock(const char *buf)
-{
-	return 0;
-}
-#endif
-
-#define WAKEUP_STAT_SYSINT_MASK		~ (1 << 12)
+#ifdef CONFIG_SEC_PM_DEBUG
+#define WAKEUP_STAT_SYSINT_MASK		~(1 << 12)
 
 struct wakeup_stat_name {
 	const char *name[32];
 };
+#endif /* CONFIG_SEC_PM_DEBUG */
 
 struct exynos_pm_info {
 	void __iomem *eint_base;		/* GPIO_ALIVE base to check wkup reason */
@@ -64,26 +56,20 @@ struct exynos_pm_info {
 	unsigned int suspend_mode_idx;		/* power mode to be used in suspend scenario */
 	unsigned int suspend_psci_idx;		/* psci index to be used in suspend scenario */
 	unsigned int *wakeup_stat;		/* wakeup stat SFRs offset */
-	unsigned int apdn_cnt_prev;		/* sleep apsoc down sequence prev count */
-	unsigned int apdn_cnt;			/* sleep apsoc down sequence count */
 
 	unsigned int usbl2_suspend_available;
 	unsigned int usbl2_suspend_mode_idx;	/* power mode to be used in suspend scenario */
 	u8 num_wakeup_stat;			/* Total number of wakeup_stat */
 	u32 (*usb_is_connect)(void);
+#ifdef CONFIG_SEC_PM_DEBUG
 	struct wakeup_stat_name *ws_names;	/* Names of each bits of wakeup_stat */
+#endif
 };
 static struct exynos_pm_info *pm_info;
 
 struct exynos_pm_dbg {
 	u32 test_early_wakeup;
 	u32 test_usbl2_suspend;
-
-	unsigned int mifdn_early_wakeup_prev;
-	unsigned int mifdn_early_wakeup_cnt;
-	unsigned int mifdn_cnt_prev;
-	unsigned int mifdn_cnt;
-	unsigned int mif_req;
 };
 static struct exynos_pm_dbg *pm_dbg;
 
@@ -142,6 +128,7 @@ static void exynos_show_wakeup_registers(unsigned int wakeup_stat)
 		pr_info("0x%02x ", __raw_readl(EXYNOS_EINT_PEND(pm_info->eint_base, i)));
 }
 
+#ifdef CONFIG_SEC_PM_DEBUG
 static void exynos_show_wakeup_reason_sysint(unsigned int stat,
 					struct wakeup_stat_name *ws_names)
 {
@@ -151,6 +138,7 @@ static void exynos_show_wakeup_reason_sysint(unsigned int stat,
 
 	for_each_set_bit(bit, &lstat, 32) {
 		name = ws_names->name[bit];
+		pm_system_wakeup_without_irq_num = true;
 
 		if (!name)
 			continue;
@@ -183,6 +171,7 @@ static void exynos_show_wakeup_reason_detail(unsigned int wakeup_stat)
 		exynos_show_wakeup_reason_sysint(wss, &pm_info->ws_names[i]);
 	}
 }
+#endif /* CONFIG_SEC_PM_DEBUG */
 
 static void exynos_show_wakeup_reason(bool sleep_abort)
 {
@@ -210,17 +199,22 @@ static void exynos_show_wakeup_reason(bool sleep_abort)
 	exynos_pmu_read(pm_info->wakeup_stat[0], &wakeup_stat);
 	exynos_show_wakeup_registers(wakeup_stat);
 
+#ifdef CONFIG_SEC_PM_DEBUG
 	exynos_show_wakeup_reason_detail(wakeup_stat);
-
+#else
 	if (wakeup_stat & WAKEUP_STAT_RTC_ALARM)
 		pr_info("%s Resume caused by RTC alarm\n", EXYNOS_PM_PREFIX);
+	else if (wakeup_stat & WAKEUP_STAT_EINT)
+		exynos_show_wakeup_reason_eint();
 	else {
 		for (i = 0; i < pm_info->num_wakeup_stat; i++) {
 			exynos_pmu_read(pm_info->wakeup_stat[i], &wakeup_stat);
 			pr_info("%s Resume caused by wakeup%d_stat 0x%08x\n",
 					EXYNOS_PM_PREFIX, i + 1, wakeup_stat);
+
 		}
 	}
+#endif /* !CONFIG_SEC_PM_DEBUG */
 }
 
 #ifdef CONFIG_CPU_IDLE
@@ -277,6 +271,11 @@ int exynos_pm_notify(enum exynos_pm_event event)
 EXPORT_SYMBOL_GPL(exynos_pm_notify);
 #endif /* CONFIG_CPU_IDLE */
 
+#if defined(CONFIG_SOC_EXYNOS8895)
+#define SLEEP_VTS_ON   9
+#define SLEEP_AUD_ON   10
+#endif
+
 static int exynos_pm_syscore_suspend(void)
 {
 	if (!exynos_check_cp_status()) {
@@ -301,56 +300,11 @@ static int exynos_pm_syscore_suspend(void)
 				EXYNOS_PM_PREFIX,__func__, pm_info->suspend_mode_idx);
 	}
 
-	/* Send an IPI if test_early_wakeup flag is set */
-	if (pm_dbg->test_early_wakeup)
-		arch_send_call_function_single_ipi(0);
-
-	pm_dbg->mifdn_cnt_prev = acpm_get_mifdn_count();
-	pm_info->apdn_cnt_prev = acpm_get_apsocdn_count();
-	pm_dbg->mif_req = acpm_get_mif_request();
-
-	pm_dbg->mifdn_early_wakeup_prev = acpm_get_early_wakeup_count();
-
-	pr_info("%s: prev mif_count:%d, apsoc_count:%d, seq_early_wakeup_count:%d\n",
-			EXYNOS_PM_PREFIX, pm_dbg->mifdn_cnt_prev,
-			pm_info->apdn_cnt_prev, pm_dbg->mifdn_early_wakeup_prev);
-
-	exynos_flexpmu_dbg_suspend_mif_req();
-
 	return 0;
 }
 
 static void exynos_pm_syscore_resume(void)
 {
-	pm_dbg->mifdn_cnt = acpm_get_mifdn_count();
-	pm_info->apdn_cnt = acpm_get_apsocdn_count();
-	pm_dbg->mifdn_early_wakeup_cnt = acpm_get_early_wakeup_count();
-
-	pr_info("%s: post mif_count:%d, apsoc_count:%d, seq_early_wakeup_count:%d\n",
-			EXYNOS_PM_PREFIX, pm_dbg->mifdn_cnt,
-			pm_info->apdn_cnt, pm_dbg->mifdn_early_wakeup_cnt);
-
-	if (pm_info->apdn_cnt == pm_info->apdn_cnt_prev)
-		pm_info->is_early_wakeup = true;
-	else
-		pm_info->is_early_wakeup = false;
-
-	if (pm_info->is_early_wakeup)
-		pr_info("%s %s: return to originator\n",
-				EXYNOS_PM_PREFIX, __func__);
-
-	if (pm_dbg->mifdn_early_wakeup_cnt != pm_dbg->mifdn_early_wakeup_prev)
-		pr_debug("%s: Sequence early wakeup\n", EXYNOS_PM_PREFIX);
-
-	if (pm_dbg->mifdn_cnt == pm_dbg->mifdn_cnt_prev)
-		pr_info("%s: MIF blocked. MIF request Mster was  0x%x\n",
-				EXYNOS_PM_PREFIX, pm_dbg->mif_req);
-	else
-		pr_info("%s: MIF down. cur_count: %d, acc_count: %d\n",
-				EXYNOS_PM_PREFIX, pm_dbg->mifdn_cnt - pm_dbg->mifdn_cnt_prev, pm_dbg->mifdn_cnt);
-
-	exynos_flexpmu_dbg_resume_mif_req();
-
 	if (pm_info->is_usbl2_suspend || pm_dbg->test_usbl2_suspend)
 		exynos_wakeup_sys_powerdown(pm_info->usbl2_suspend_mode_idx, pm_info->is_early_wakeup);
 	else
@@ -366,6 +320,71 @@ static void exynos_pm_syscore_resume(void)
 static struct syscore_ops exynos_pm_syscore_ops = {
 	.suspend	= exynos_pm_syscore_suspend,
 	.resume		= exynos_pm_syscore_resume,
+};
+
+#ifdef CONFIG_SEC_GPIO_DVS
+extern void gpio_dvs_check_sleepgpio(void);
+#endif
+
+static int exynos_pm_enter(suspend_state_t state)
+{
+	unsigned int psci_index;
+	unsigned int prev_mif = 0, post_mif = 0;
+	unsigned int prev_apsoc = 0, post_apsoc = 0;
+	unsigned int prev_seq_early_wakeup = 0, post_seq_early_wakeup = 0;
+	unsigned int prev_req;
+
+#ifdef CONFIG_SEC_GPIO_DVS
+	/************************ Caution !!! ****************************/
+	/* This function must be located in appropriate SLEEP position
+	 * in accordance with the specification of each BB vendor.
+	 */
+	/************************ Caution !!! ****************************/
+	gpio_dvs_check_sleepgpio();
+#endif /* CONFIG_SEC_GPIO_DVS */
+
+	psci_index = pm_info->suspend_psci_idx;
+
+	/* Send an IPI if test_early_wakeup flag is set */
+	if (pm_dbg->test_early_wakeup)
+		arch_send_call_function_single_ipi(0);
+
+	prev_mif = acpm_get_mifdn_count();
+	prev_apsoc = acpm_get_apsocdn_count();
+	prev_seq_early_wakeup = acpm_get_early_wakeup_count();
+	prev_req = acpm_get_mif_request();
+
+	pr_info("%s: prev mif_count:%d, apsoc_count:%d, seq_early_wakeup_count:%d\n",
+			EXYNOS_PM_PREFIX, prev_mif, prev_apsoc, prev_seq_early_wakeup);
+	/* This will also act as our return point when
+	 * we resume as it saves its own register state and restores it
+	 * during the resume. */
+	pm_info->is_early_wakeup = (bool)arm_cpuidle_suspend(psci_index);
+	if (pm_info->is_early_wakeup)
+		pr_info("%s %s: return to originator\n",
+				EXYNOS_PM_PREFIX, __func__);
+
+	post_mif = acpm_get_mifdn_count();
+	post_apsoc = acpm_get_apsocdn_count();
+	post_seq_early_wakeup = acpm_get_early_wakeup_count();
+	pr_info("%s: post mif_count:%d, apsoc_count:%d, seq_early_wakeup_count:%d\n",
+			EXYNOS_PM_PREFIX, post_mif, post_apsoc, post_seq_early_wakeup);
+
+	if (post_seq_early_wakeup != prev_seq_early_wakeup)
+		pr_info("%s: Sequence early wakeup!\n", EXYNOS_PM_PREFIX);
+
+	if (post_mif == prev_mif)
+		pr_info("%s: MIF blocked. MIF request Mster was  0x%x\n", EXYNOS_PM_PREFIX, prev_req);
+	else
+		pr_info("%s: MIF down. cur_count: %d, acc_count: %d\n",
+				EXYNOS_PM_PREFIX, post_mif - prev_mif, post_mif);
+
+	return pm_info->is_early_wakeup;
+}
+
+static const struct platform_suspend_ops exynos_pm_ops = {
+	.enter		= exynos_pm_enter,
+	.valid		= suspend_valid_only_mem,
 };
 
 int register_usb_is_connect(u32 (*func)(void))
@@ -417,6 +436,28 @@ static void __init exynos_pm_debugfs_init(void)
 }
 #endif
 
+#if defined(CONFIG_SEC_FACTORY)
+static ssize_t show_asv_info(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	int count = 0;
+
+	/* Set asv group info to buf */
+	count += sprintf(&buf[count], "%d ", asv_ids_information(tg));
+	count += sprintf(&buf[count], "%03x ", asv_ids_information(bg));
+	count += sprintf(&buf[count], "%03x ", asv_ids_information(g3dg));
+	count += sprintf(&buf[count], "%u ", asv_ids_information(bids));
+	count += sprintf(&buf[count], "%u ", asv_ids_information(gids));
+	count += sprintf(&buf[count], "\n");
+
+	return count;
+}
+
+static DEVICE_ATTR(asv_info, 0664, show_asv_info, NULL);
+#endif /* CONFIG_SEC_FACTORY */
+
+#ifdef CONFIG_SEC_PM_DEBUG
 static void parse_dt_wakeup_stat_names(struct device_node *np)
 {
 	struct device_node *root, *child;
@@ -454,6 +495,7 @@ static void parse_dt_wakeup_stat_names(struct device_node *np)
 		idx++;
 	}
 }
+#endif /* CONFIG_SEC_PM_DEBUG */
 
 static __init int exynos_pm_drvinit(void)
 {
@@ -475,7 +517,6 @@ static __init int exynos_pm_drvinit(void)
 
 	if (of_have_populated_dt()) {
 		struct device_node *np;
-		unsigned int wake_lock = 0;
 		np = of_find_compatible_node(NULL, NULL, "samsung,exynos-pm");
 		if (!np) {
 			pr_err("%s %s: unabled to find compatible node (%s)\n",
@@ -548,24 +589,26 @@ static __init int exynos_pm_drvinit(void)
 			pm_info->wakeup_stat = kzalloc(sizeof(unsigned int) * ret, GFP_KERNEL);
 			of_property_read_u32_array(np, "wakeup_stat", pm_info->wakeup_stat, ret);
 		}
-
-		ret = of_property_read_u32(np, "wake_lock", &wake_lock);
-		if (ret)
-			pr_info("%s %s: unabled to get wake_lock from DT\n",
-					EXYNOS_PM_PREFIX, __func__);
-
-		if (wake_lock)
-			pm_wake_lock("exynos-pm_wake_lock");
+#ifdef CONFIG_SEC_PM_DEBUG
 		parse_dt_wakeup_stat_names(np);
+#endif /* CONFIG_SEC_PM_DEBUG */
 	} else {
 		pr_err("%s %s: failed to have populated device tree\n",
 					EXYNOS_PM_PREFIX, __func__);
 		BUG();
 	}
 
+	suspend_set_ops(&exynos_pm_ops);
 	register_syscore_ops(&exynos_pm_syscore_ops);
 #ifdef CONFIG_DEBUG_FS
 	exynos_pm_debugfs_init();
+#endif
+
+#if defined(CONFIG_SEC_FACTORY)
+	/* create sysfs group */
+	ret = sysfs_create_file(power_kobj, &dev_attr_asv_info.attr);
+	if (ret)
+		pr_err("%s: failed to create exynos9820 asv attribute file\n", __func__);
 #endif
 
 	return 0;

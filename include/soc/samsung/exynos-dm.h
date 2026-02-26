@@ -20,6 +20,41 @@
 #define EXYNOS_DM_RELATION_L		0
 #define EXYNOS_DM_RELATION_H		1
 
+enum exynos_dm_type {
+	DM_CPU_CL0 = 0,
+	DM_CPU_CL1,
+	DM_CPU_CL2,
+	DM_MIF,
+	DM_INT,
+	DM_INTCAM,
+	DM_CAM,
+	DM_IVA,
+	DM_SCORE,
+	DM_DISP,
+	DM_AUD,
+	DM_MFC,
+	DM_NPU,
+	DM_GPU,
+	DM_TYPE_END
+};
+
+static const char dm_type_name[DM_TYPE_END][EXYNOS_DM_TYPE_NAME_LEN] = {
+	"dm_cpu_cl0",
+	"dm_cpu_cl1",
+	"dm_cpu_cl2",
+	"dm_mif",
+	"dm_int",
+	"dm_intcam",
+	"dm_cam",
+	"dm_iva",
+	"dm_score",
+	"dm_disp",
+	"dm_aud",
+	"dm_mfc",
+	"dm_npu",
+	"dm_gpu",
+};
+
 enum exynos_constraint_type {
 	CONSTRAINT_MIN = 0,
 	CONSTRAINT_MAX,

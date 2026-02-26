@@ -59,8 +59,12 @@
 #endif
 #include <soc/samsung/exynos-cpuhp.h>
 
+#ifdef CONFIG_SEC_PM
+#include <linux/sec_class.h>
+#endif
+
 /* Exynos generic registers */
-#if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS3830)
+#if defined(CONFIG_SOC_EXYNOS9810)
 /* Exynos9810 */
 #define EXYNOS_TMU_REG_TRIMINFO7_0(p)	(((p) - 0) * 4)
 #define EXYNOS_TMU_REG_TRIMINFO15_8(p)	(((p) - 8) * 4 + 0x400)
@@ -150,35 +154,6 @@
 
 #define EXYNOS_GPU_THERMAL_ZONE_ID		(3)
 /* Exynos9820 */
-#elif defined(CONFIG_SOC_EXYNOS9630)
-/* Exynos9630 */
-#define EXYNOS_TMU_REG_TRIMINFO(p)		(((p) - 0) * 4)
-#define EXYNOS_TMU_REG_CONTROL			(0x50)
-#define EXYNOS_TMU_REG_CONTROL1			(0x54)
-#define EXYNOS_TMU_REG_STATUS			(0x80)
-#define EXYNOS_TMU_REG_CURRENT_TEMP1_0		(0x84)
-
-#define EXYNOS_TMU_REG_THD_TEMP0		(0xD0)
-#define EXYNOS_TMU_REG_INTEN0			(0xF0)
-#define EXYNOS_TMU_REG_INTPEND0			(0xF8)
-#define EXYNOS_TMU_REG_SENSOR_OFFSET		(0x50)
-
-#define EXYNOS_TMU_REG_THD(p)			(EXYNOS_TMU_REG_THD_TEMP0 + p * EXYNOS_TMU_REG_SENSOR_OFFSET)
-#define EXYNOS_TMU_REG_INTPEND(p)		(EXYNOS_TMU_REG_INTPEND0 + p * EXYNOS_TMU_REG_SENSOR_OFFSET)
-#define EXYNOS_TMU_REG_INTEN(p)			(EXYNOS_TMU_REG_INTEN0 + p * EXYNOS_TMU_REG_SENSOR_OFFSET)
-
-#define EXYNOS_TMU_REG_TRIM0			(0x5C)
-#define EXYNOS_TMU_REG_EMUL_CON			(0xB0)
-
-#define EXYNOS_TMU_REG_AVG_CON			(0x58)
-#define EXYNOS_TMU_REG_COUNTER_VALUE0		(0x74)
-#define EXYNOS_TMU_REG_COUNTER_VALUE1		(0x78)
-
-#define EXYNOS_TMU_TEMP_SHIFT			(16)
-
-#define EXYNOS_GPU_THERMAL_ZONE_ID		(3)
-/* Exynos9630 */
-
 #endif
 #include "linux/mcu_ipc.h"
 
@@ -271,12 +246,6 @@
 #define PMUREG_AUD_STATUS_MASK			0xF
 #elif defined(CONFIG_SOC_EXYNOS9820)
 #define PMUREG_AUD_STATUS			0x1904
-#define PMUREG_AUD_STATUS_MASK			0x1
-#elif defined(CONFIG_SOC_EXYNOS9630)
-#define PMUREG_AUD_STATUS			0x1984
-#define PMUREG_AUD_STATUS_MASK			0x1
-#elif defined(CONFIG_SOC_EXYNOS3830)
-#define PMUREG_AUD_STATUS			0x2084
 #define PMUREG_AUD_STATUS_MASK			0x1
 #endif
 static struct acpm_tmu_cap cap;
@@ -769,6 +738,33 @@ static int exynos_get_temp(void *p, int *temp)
 	return 0;
 }
 
+#ifdef CONFIG_SEC_BOOTSTAT
+void sec_bootstat_get_thermal(int *temp)
+{
+	struct exynos_tmu_data *data;
+
+	list_for_each_entry(data, &dtm_dev_list, node) {
+		if (!strncasecmp(data->tmu_name, "BIG", THERMAL_NAME_LENGTH)) {
+			exynos_get_temp(data, &temp[0]);
+			temp[0] /= 1000;
+		} else if (!strncasecmp(data->tmu_name, "MID", THERMAL_NAME_LENGTH)) {
+			exynos_get_temp(data, &temp[1]);
+			temp[1] /= 1000;
+		} else if (!strncasecmp(data->tmu_name, "LITTLE", THERMAL_NAME_LENGTH)) {
+			exynos_get_temp(data, &temp[2]);
+			temp[2] /= 1000;
+		} else if (!strncasecmp(data->tmu_name, "G3D", THERMAL_NAME_LENGTH)) {
+			exynos_get_temp(data, &temp[3]);
+			temp[3] /= 1000;
+		} else if (!strncasecmp(data->tmu_name, "ISP", THERMAL_NAME_LENGTH)) {
+			exynos_get_temp(data, &temp[4]);
+			temp[4] /= 1000;
+		} else
+			continue;
+	}
+}
+#endif
+
 static int exynos_get_trend(void *p, int trip, enum thermal_trend *trend)
 {
 	struct exynos_tmu_data *data = p;
@@ -835,7 +831,6 @@ static bool cpufreq_limited;
 static struct pm_qos_request thermal_cpu_limit_request;
 #endif
 
-#if defined(CONFIG_EXYNOS_ACPM_THERMAL) || defined(CONFIG_SOC_EXYNOS9810)
 static int exynos98X0_tmu_read(struct exynos_tmu_data *data)
 {
 	int temp = 0, stat = 0;
@@ -859,12 +854,6 @@ static int exynos98X0_tmu_read(struct exynos_tmu_data *data)
 #endif
 	return temp;
 }
-#else
-static inline int exynos98X0_tmu_read(struct exynos_tmu_data *data)
-{
-	return 0;
-}
-#endif
 
 static void exynos_tmu_work(struct work_struct *work)
 {
@@ -980,8 +969,6 @@ static int exynos_tmu_boost_callback(unsigned int cpu)
 static const struct of_device_id exynos_tmu_match[] = {
 	{ .compatible = "samsung,exynos9810-tmu", },
 	{ .compatible = "samsung,exynos9820-tmu", },
-	{ .compatible = "samsung,exynos9630-tmu", },
-	{ .compatible = "samsung,exynos3830-tmu", },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, exynos_tmu_match);
@@ -992,10 +979,6 @@ static int exynos_of_get_soc_type(struct device_node *np)
 		return SOC_ARCH_EXYNOS9810;
 	if (of_device_is_compatible(np, "samsung,exynos9820-tmu"))
 		return SOC_ARCH_EXYNOS9820;
-	if (of_device_is_compatible(np, "samsung,exynos9630-tmu"))
-		return SOC_ARCH_EXYNOS9630;
-	if (of_device_is_compatible(np, "samsung,exynos3830-tmu"))
-		return SOC_ARCH_EXYNOS3830;
 
 	return -EINVAL;
 }
@@ -1122,8 +1105,6 @@ static int exynos_map_dt_data(struct platform_device *pdev)
 	switch (data->soc) {
 	case SOC_ARCH_EXYNOS9810:
 	case SOC_ARCH_EXYNOS9820:
-	case SOC_ARCH_EXYNOS9630:
-	case SOC_ARCH_EXYNOS3830:
 		data->tmu_initialize = exynos98X0_tmu_initialize;
 		data->tmu_control = exynos98X0_tmu_control;
 		data->tmu_read = exynos98X0_tmu_read;
@@ -1175,7 +1156,6 @@ static const struct thermal_zone_of_device_ops exynos_hotplug_sensor_ops = {
 	.get_temp = exynos_get_temp,
 	.set_emul_temp = exynos_tmu_set_emulation,
 	.throttle_cpu_hotplug = exynos_throttle_cpu_hotplug,
-	.get_trend = exynos_get_trend,
 };
 
 static const struct thermal_zone_of_device_ops exynos_sensor_ops = {
@@ -1227,7 +1207,7 @@ all_temp_show(struct device *dev, struct device_attribute *devattr,
 	u32 temp_code, temp_cel;
 
 	for (i = 0; i < data->num_of_sensors; i++) {
-#if defined(CONFIG_SOC_EXYNOS9810) || defined(CONFIG_SOC_EXYNOS3830)
+#if defined(CONFIG_SOC_EXYNOS9810)
 		if (data->sensor_info[i].sensor_num < 2) {
 			reg_offset = 0;
 			bit_offset = EXYNOS_TMU_TEMP_SHIFT * data->sensor_info[i].sensor_num;
@@ -1563,8 +1543,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	}
 
 #if defined(CONFIG_ECT)
-	if (!of_property_read_bool(pdev->dev.of_node, "ect_nouse"))
-		exynos_tmu_parse_ect(data);
+	exynos_tmu_parse_ect(data);
 #endif
 
 	data->num_probe = (readl(data->base + EXYNOS_TMU_REG_CONTROL1) >> EXYNOS_TMU_NUM_PROBE_SHIFT)
@@ -1600,9 +1579,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 
 	mutex_lock(&data->lock);
 	list_add_tail(&data->node, &dtm_dev_list);
-#ifdef CONFIG_EXYNOS_ACPM_THERMAL
 	num_of_devices++;
-#endif
 	mutex_unlock(&data->lock);
 
 	if (list_is_singular(&dtm_dev_list)) {
@@ -1649,9 +1626,7 @@ static int exynos_tmu_remove(struct platform_device *pdev)
 	list_for_each_entry(devnode, &dtm_dev_list, node) {
 		if (devnode->id == data->id) {
 			list_del(&devnode->node);
-#ifdef EXYNOS_ACPM_THERMAL
 			num_of_devices--;
-#endif
 			break;
 		}
 	}
@@ -1868,6 +1843,80 @@ static int exynos_thermal_create_debugfs(void)
 	return 0;
 }
 arch_initcall(exynos_thermal_create_debugfs);
+
+#ifdef CONFIG_SEC_PM
+
+#define NR_THERMAL_SENSOR_MAX	10
+
+static ssize_t exynos_tmu_curr_temp(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	struct exynos_tmu_data *data;
+	int temp[NR_THERMAL_SENSOR_MAX] = {0, };
+	int i, id_max = 0;
+	ssize_t ret = 0;
+
+	list_for_each_entry(data, &dtm_dev_list, node) {
+		if (data->id < NR_THERMAL_SENSOR_MAX) {
+			exynos_get_temp(data, &temp[data->id]);
+			temp[data->id] /= 1000;
+
+			if (id_max < data->id)
+				id_max = data->id;
+		} else {
+			pr_err("%s: id:%d %s\n", __func__, data->id,
+					data->tmu_name);
+			continue;
+		}
+	}
+
+	for (i = 0; i <= id_max; i++)
+		ret += sprintf(buf + ret, "%d,", temp[i]);
+
+	sprintf(buf + ret - 1, "\n");
+
+	return ret;
+}
+
+static DEVICE_ATTR(curr_temp, 0444, exynos_tmu_curr_temp, NULL);
+
+static struct attribute *exynos_tmu_sec_pm_attributes[] = {
+	&dev_attr_curr_temp.attr,
+	NULL
+};
+
+static const struct attribute_group exynos_tmu_sec_pm_attr_grp = {
+	.attrs = exynos_tmu_sec_pm_attributes,
+};
+
+static int __init exynos_tmu_sec_pm_init(void)
+{
+	int ret = 0;
+	struct device *dev;
+
+	dev = sec_device_create(NULL, "exynos_tmu");
+
+	if (IS_ERR(dev)) {
+		pr_err("%s: failed to create device\n", __func__);
+		return PTR_ERR(dev);
+	}
+
+	ret = sysfs_create_group(&dev->kobj, &exynos_tmu_sec_pm_attr_grp);
+	if (ret) {
+		pr_err("%s: failed to create sysfs group(%d)\n", __func__, ret);
+		goto err_create_sysfs;
+	}
+
+	return ret;
+
+err_create_sysfs:
+	sec_device_destroy(dev->devt);
+
+	return ret;
+}
+
+late_initcall(exynos_tmu_sec_pm_init);
+#endif /* CONFIG_SEC_PM */
 
 MODULE_DESCRIPTION("EXYNOS TMU Driver");
 MODULE_AUTHOR("Donggeun Kim <dg77.kim@samsung.com>");

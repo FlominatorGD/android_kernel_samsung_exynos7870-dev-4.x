@@ -64,6 +64,7 @@ static struct cpu_freqs *all_freqs[NR_CPUS];
 
 static unsigned int next_offset;
 
+
 /* Caller must hold rcu_read_lock() */
 static struct uid_entry *find_uid_entry_rcu(uid_t uid)
 {

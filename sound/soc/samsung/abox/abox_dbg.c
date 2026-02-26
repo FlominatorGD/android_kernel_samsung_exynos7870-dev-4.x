@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_dbg.c
+/* sound/soc/samsung/abox/abox_dbg.c
  *
  * ALSA SoC Audio Layer - Samsung Abox Debug driver
  *
@@ -90,6 +90,7 @@ struct abox_dbg_dump_min {
 
 static struct abox_dbg_dump (*p_abox_dbg_dump)[ABOX_DBG_DUMP_COUNT];
 static struct abox_dbg_dump_min (*p_abox_dbg_dump_min)[ABOX_DBG_DUMP_COUNT];
+static struct reserved_mem *abox_rmem;
 
 static void *abox_rmem_vmap(struct reserved_mem *rmem)
 {
@@ -117,19 +118,6 @@ out:
 	return vaddr;
 }
 
-static struct reserved_mem *abox_slog;
-
-static int __init abox_slog_setup(struct reserved_mem *rmem)
-{
-	pr_info("%s: base=%pa, size=%pa\n", __func__, &rmem->base, &rmem->size);
-	abox_slog = rmem;
-	return 0;
-}
-
-RESERVEDMEM_OF_DECLARE(abox_slog, "exynos,abox_slog", abox_slog_setup);
-
-static struct reserved_mem *abox_rmem;
-
 static int __init abox_rmem_setup(struct reserved_mem *rmem)
 {
 	pr_info("%s: base=%pa, size=%pa\n", __func__, &rmem->base, &rmem->size);
@@ -148,9 +136,11 @@ static void *abox_dbg_alloc_mem_atomic(struct device *dev,
 	struct page **tmp;
 	gfp_t alloc_gfp_flag = GFP_ATOMIC;
 
-	p_dump->pages = kcalloc(npages, sizeof(struct page *), alloc_gfp_flag);
-	if (!p_dump->pages)
+	p_dump->pages = kzalloc(sizeof(struct page *) * npages, alloc_gfp_flag);
+	if (!p_dump->pages) {
+		dev_info(dev, "Failed to allocate array of struct pages\n");
 		return NULL;
+	}
 
 	tmp = p_dump->pages;
 	for (i = 0; i < npages; i++, tmp++) {
@@ -455,49 +445,21 @@ static ssize_t calliope_dram_read(struct file *file, struct kobject *kobj,
 	return size;
 }
 
-static ssize_t calliope_log_read(struct file *file, struct kobject *kobj,
+static ssize_t calliope_priv_read(struct file *file, struct kobject *kobj,
 		struct bin_attribute *battr, char *buf,
 		loff_t off, size_t size)
 {
 	return calliope_dram_read(file, kobj, battr, buf, off, size);
-}
-
-static ssize_t calliope_slog_read(struct file *file, struct kobject *kobj,
-		struct bin_attribute *battr, char *buf,
-		loff_t off, size_t size)
-{
-	return calliope_dram_read(file, kobj, battr, buf, off, size);
-}
-
-static ssize_t gicd_read(struct file *file, struct kobject *kobj,
-		struct bin_attribute *battr, char *buf,
-		loff_t off, size_t size)
-{
-	struct device *dev = kobj_to_dev(kobj);
-	struct device *dev_abox = dev->parent;
-	struct abox_data *data = dev_get_drvdata(dev_abox);
-
-	dev_dbg(dev, "%s(%lld, %zu)\n", __func__, off, size);
-
-	pm_runtime_get(dev_abox);
-	abox_gicd_dump(data->dev_gic, buf, off, size);
-	pm_runtime_put(dev_abox);
-
-	return size;
 }
 
 /* size will be updated later */
 static BIN_ATTR_RO(calliope_sram, 0);
 static BIN_ATTR_RO(calliope_dram, DRAM_FIRMWARE_SIZE);
-static BIN_ATTR_RO(calliope_log, SZ_1M);
-static BIN_ATTR_RO(calliope_slog, 0);
-static BIN_ATTR_RO(gicd, SZ_4K);
+static BIN_ATTR_RO(calliope_priv, PRIVATE_SIZE);
 static struct bin_attribute *calliope_bin_attrs[] = {
 	&bin_attr_calliope_sram,
 	&bin_attr_calliope_dram,
-	&bin_attr_calliope_log,
-	&bin_attr_calliope_slog,
-	&bin_attr_gicd,
+	&bin_attr_calliope_priv,
 };
 
 static ssize_t gpr_show(struct device *dev,
@@ -518,18 +480,9 @@ static int samsung_abox_debug_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device *abox_dev = dev->parent;
 	struct abox_data *data = dev_get_drvdata(abox_dev);
-	int ret;
-	size_t i;
+	int i, ret;
 
 	dev_dbg(dev, "%s\n", __func__);
-
-	if (abox_slog) {
-		data->slog_base_phys = abox_slog->base;
-		data->slog_size = abox_slog->size;
-		data->slog_base = abox_rmem_vmap(abox_slog);
-		abox_iommu_map(abox_dev, IOVA_SILENT_LOG, data->slog_base_phys,
-				data->slog_size, data->slog_base);
-	}
 
 	if (abox_rmem) {
 		if (sizeof(*p_abox_dbg_dump) <= abox_rmem->size) {
@@ -557,11 +510,7 @@ static int samsung_abox_debug_probe(struct platform_device *pdev)
 	bin_attr_calliope_sram.size = data->sram_size;
 	bin_attr_calliope_sram.private = data->sram_base;
 	bin_attr_calliope_dram.private = data->dram_base;
-	bin_attr_calliope_log.private = data->dram_base + 0xb00000;
-	bin_attr_calliope_slog.size = data->slog_size - 0x900000;
-	bin_attr_calliope_slog.private = data->slog_base + 0x900000;
-	bin_attr_calliope_slog.size = data->slog_size;
-	bin_attr_calliope_slog.private = data->slog_base;
+	bin_attr_calliope_priv.private = data->priv_base;
 	for (i = 0; i < ARRAY_SIZE(calliope_bin_attrs); i++) {
 		struct bin_attribute *battr = calliope_bin_attrs[i];
 
@@ -587,10 +536,9 @@ static int samsung_abox_debug_remove(struct platform_device *pdev)
 			vm_unmap_ram(p_abox_dbg_dump_min[i]->dram,
 			    DRAM_FIRMWARE_SIZE);
 		if (tmp) {
-			unsigned long j;
+			int j;
 
-			for (j = 0; j < DRAM_FIRMWARE_SIZE / PAGE_SIZE;
-					j++, tmp++)
+			for (j = 0; j < DRAM_FIRMWARE_SIZE / PAGE_SIZE; j++, tmp++)
 				__free_pages(*tmp, 0);
 			kfree(p_abox_dbg_dump_min[i]->pages);
 			p_abox_dbg_dump_min[i]->pages = NULL;

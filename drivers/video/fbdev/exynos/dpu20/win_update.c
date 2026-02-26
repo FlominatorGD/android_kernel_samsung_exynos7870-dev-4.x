@@ -14,9 +14,6 @@
 #include "decon.h"
 #include "dpp.h"
 #include "dsim.h"
-#if defined(CONFIG_EXYNOS_DECON_DQE)
-#include "dqe.h"
-#endif
 
 static void win_update_adjust_region(struct decon_device *decon,
 		struct decon_win_config *win_config,
@@ -28,15 +25,17 @@ static void win_update_adjust_region(struct decon_device *decon,
 	struct decon_win_config *update_config = &win_config[DECON_WIN_UPDATE_IDX];
 	struct decon_win_config *config;
 	struct decon_frame adj_region;
-	struct v4l2_subdev *sd;
-	struct dpp_restriction res;
-	u32 min_src_w, min_src_h;
-	int sz_align = 1;
 
 	regs->need_update = false;
 	DPU_FULL_RECT(&regs->up_region, decon->lcd_info);
 
+	/* disable partial update */
+	return;
+
 	if (!decon->win_up.enabled)
+		return;
+
+	if (IS_DECON_DOZE_STATE(decon))
 		return;
 
 	if (update_config->state != DECON_WIN_STATE_UPDATE)
@@ -78,28 +77,8 @@ static void win_update_adjust_region(struct decon_device *decon,
 	r2.bottom = div_h * decon->win_up.rect_h - 1;
 
 	/* TODO: Now, 4 slices must be used. This will be modified */
-	if (decon->lcd_info->dsc_enabled) {
-		r2.left = 0;
-		r2.right = decon->lcd_info->xres - 1;
-	} else {
-		sd = decon->dpp_sd[0];
-		v4l2_subdev_call(sd, core, ioctl, DPP_GET_RESTRICTION, &res);
-
-		min_src_w = res.src_f_w.min * sz_align;
-		min_src_h = res.src_f_h.min * sz_align;
-
-		if (decon->lcd_info->xres - r2.left < min_src_w)
-			r2.left = ((r1.left - min_src_w) / decon->win_up.rect_w) *
-			decon->win_up.rect_w;
-		if (decon->lcd_info->yres - r2.top < min_src_h)
-			r2.top = ((r1.top - min_src_h) / decon->win_up.rect_h) *
-			decon->win_up.rect_h;
-
-		if (decon->lcd_info->xres < r2.right)
-			r2.right = decon->lcd_info->xres - 1;
-		if (decon->lcd_info->yres < r2.bottom)
-			r2.bottom = decon->lcd_info->yres - 1;
-	}
+	r2.left = 0;
+	r2.right = decon->lcd_info->xres - 1;
 
 	memcpy(&regs->up_region, &r2, sizeof(struct decon_rect));
 
@@ -122,7 +101,8 @@ static void win_update_check_limitation(struct decon_device *decon,
 	struct decon_win_rect update;
 	struct decon_rect r;
 	struct v4l2_subdev *sd;
-	struct dpp_restriction res;
+	struct dpp_ch_restriction ch_res;
+	struct dpp_restriction *res;
 	int i;
 	int sz_align = 1;
 	int adj_src_x = 0, adj_src_y = 0;
@@ -143,6 +123,9 @@ static void win_update_check_limitation(struct decon_device *decon,
 
 		decon_intersection(&regs->up_region, &r, &r);
 
+		if (!(r.right - r.left) && !(r.bottom - r.top))
+			continue;
+
 		if (is_yuv(config)) {
 			/* check alignment for NV12/NV21 format */
 			update.x = regs->up_region.left;
@@ -159,10 +142,11 @@ static void win_update_check_limitation(struct decon_device *decon,
 		}
 
 		sd = decon->dpp_sd[0];
-		v4l2_subdev_call(sd, core, ioctl, DPP_GET_RESTRICTION, &res);
+		v4l2_subdev_call(sd, core, ioctl, DPP_GET_RESTRICTION, &ch_res);
+		res = &ch_res.restriction;
 
-		if (((r.right - r.left) < (res.src_f_w.min * sz_align)) ||
-				((r.bottom - r.top) < (res.src_f_h.min * sz_align))) {
+		if (((r.right - r.left) < (res->src_f_w.min * sz_align)) ||
+				((r.bottom - r.top) < (res->src_f_h.min * sz_align))) {
 			goto change_full;
 		}
 
@@ -176,7 +160,7 @@ static void win_update_check_limitation(struct decon_device *decon,
 	return;
 
 change_full:
-	DPU_DEBUG_WIN("changed full: win(%d) idma(%d) [%d %d %d %d]\n",
+	DPU_DEBUG_WIN("changed full: win(%d) ch(%d) [%d %d %d %d]\n",
 			i, config->idma_type,
 			config->dst.x, config->dst.y,
 			config->dst.w, config->dst.h);
@@ -242,7 +226,7 @@ static void win_update_reconfig_coordinates(struct decon_device *decon,
 		config->src.w = config->dst.w;
 		config->src.h = config->dst.h;
 
-		DPU_DEBUG_WIN("win(%d), idma(%d)\n", i, config->idma_type);
+		DPU_DEBUG_WIN("win(%d), ch(%d)\n", i, config->idma_type);
 		DPU_DEBUG_WIN("src: origin[%d %d %d %d] -> change[%d %d %d %d]\n",
 				origin_src.x, origin_src.y,
 				origin_src.w, origin_src.h,
@@ -416,6 +400,8 @@ void dpu_set_mres_config(struct decon_device *decon, struct decon_reg_data *regs
 	idx = regs->mres_idx;
 	dsim->lcd_info.dsc_enabled = mres_info->res_info[idx].dsc_en;
 	dsim->lcd_info.dsc_slice_h = mres_info->res_info[idx].dsc_height;
+	dsim->lcd_info.dsc_enc_sw = dsim->lcd_info.dt_dsc_slice.dsc_enc_sw[idx];
+	dsim->lcd_info.dsc_dec_sw = dsim->lcd_info.dt_dsc_slice.dsc_dec_sw[idx];
 
 	/* transfer LCD resolution change commands to panel */
 	dsim->panel_ops->mres(dsim, regs->mres_idx);
@@ -428,10 +414,12 @@ void dpu_set_mres_config(struct decon_device *decon, struct decon_reg_data *regs
 	/* If LCD resolution is changed, initial partial size is also changed */
 	dpu_init_win_update(decon);
 
-	DPU_DEBUG_MRES("changed LCD resolution(%d %d)\n",
-			decon->lcd_info->xres, decon->lcd_info->yres);
+	DPU_DEBUG_MRES("changed LCD resolution(%d %d), dsc enc/dec sw(%d %d)\n",
+			decon->lcd_info->xres, decon->lcd_info->yres,
+			dsim->lcd_info.dsc_enc_sw, dsim->lcd_info.dsc_dec_sw);
 }
 
+#if !defined(CONFIG_EXYNOS_COMMON_PANEL)
 static int win_update_send_partial_command(struct dsim_device *dsim,
 		struct decon_rect *rect)
 {
@@ -456,7 +444,7 @@ static int win_update_send_partial_command(struct dsim_device *dsim,
 
 	retry = 2;
 	while (dsim_write_data(dsim, MIPI_DSI_DCS_LONG_WRITE,
-				(unsigned long)column, ARRAY_SIZE(column)) != 0) {
+				(unsigned long)column, ARRAY_SIZE(column), true) != 0) {
 		dsim_err("failed to write COLUMN_ADDRESS\n");
 		dsim_reg_function_reset(dsim->id);
 		if (--retry <= 0) {
@@ -467,7 +455,7 @@ static int win_update_send_partial_command(struct dsim_device *dsim,
 
 	retry = 2;
 	while (dsim_write_data(dsim, MIPI_DSI_DCS_LONG_WRITE,
-				(unsigned long)page, ARRAY_SIZE(page)) != 0) {
+				(unsigned long)page, ARRAY_SIZE(page), true) != 0) {
 		dsim_err("failed to write PAGE_ADDRESS\n");
 		dsim_reg_function_reset(dsim->id);
 		if (--retry <= 0) {
@@ -478,6 +466,19 @@ static int win_update_send_partial_command(struct dsim_device *dsim,
 
 	return 0;
 }
+#else
+static int win_update_send_partial_command(struct dsim_device *dsim,
+		struct decon_rect *rect)
+{
+	DPU_DEBUG_WIN("SET: [%d %d %d %d]\n", rect->left, rect->top,
+			rect->right - rect->left + 1, rect->bottom - rect->top + 1);
+
+	call_panel_ops(dsim, setarea, dsim,
+			rect->left, rect->right, rect->top, rect->bottom);
+
+	return 0;
+}
+#endif
 
 static void win_update_find_included_slice(struct decon_lcd *lcd,
 		struct decon_rect *rect, bool in_slice[])
@@ -487,7 +488,7 @@ static void win_update_find_included_slice(struct decon_lcd *lcd,
 
 	slice_left = 0;
 	slice_right = 0;
-	slice_width = lcd->xres / lcd->dsc_slice_num;
+	slice_width = lcd->dsc_dec_sw;
 
 	for (i = 0; i < lcd->dsc_slice_num; ++i) {
 		slice_left = slice_width * i;
@@ -524,9 +525,6 @@ static void win_update_set_partial_size(struct decon_device *decon,
 	decon_reg_set_partial_update(decon->id, decon->dt.dsi_mode,
 			decon->lcd_info, in_slice,
 			lcd_info.xres, lcd_info.yres);
-#if defined(CONFIG_EXYNOS_DECON_DQE)
-	dqe_reg_start(decon->id, &lcd_info);
-#endif
 	DPU_DEBUG_WIN("SET: vfp %d vbp %d vsa %d hfp %d hbp %d hsa %d w %d h %d\n",
 			lcd_info.vfp, lcd_info.vbp, lcd_info.vsa,
 			lcd_info.hfp, lcd_info.hbp, lcd_info.hsa,
@@ -589,9 +587,6 @@ void dpu_set_win_update_partial_size(struct decon_device *decon,
 void dpu_init_win_update(struct decon_device *decon)
 {
 	struct decon_lcd *lcd = decon->lcd_info;
-	struct v4l2_subdev *sd;
-	struct dpp_restriction res;
-	int sz_align = 1;
 
 	decon->win_up.enabled = false;
 	decon->cursor.xpos = lcd->xres / 2;
@@ -608,37 +603,30 @@ void dpu_init_win_update(struct decon_device *decon)
 		return;
 	}
 
-	sd = decon->dpp_sd[0];
-	v4l2_subdev_call(sd, core, ioctl, DPP_GET_RESTRICTION, &res);
-
 	if (lcd->dsc_enabled) {
 		decon->win_up.rect_w = lcd->xres / lcd->dsc_slice_num;
 		decon->win_up.rect_h = lcd->dsc_slice_h;
 	} else {
-		decon->win_up.rect_w = res.src_f_w.min * sz_align;
-		decon->win_up.rect_h = res.src_f_h.min * sz_align;
+		decon->win_up.rect_w = MIN_WIN_BLOCK_WIDTH;
+		decon->win_up.rect_h = MIN_WIN_BLOCK_HEIGHT;
 	}
 
 	DPU_FULL_RECT(&decon->win_up.prev_up_region, lcd);
 
 	decon->win_up.hori_cnt = decon->lcd_info->xres / decon->win_up.rect_w;
-	if (lcd->dsc_enabled) {
-		if (decon->lcd_info->xres - decon->win_up.hori_cnt * decon->win_up.rect_w) {
-			decon_warn("%s: parameters is wrong. lcd w(%d), win rect w(%d)\n",
-					__func__, decon->lcd_info->xres,
-					decon->win_up.rect_w);
-			return;
-		}
+	if (decon->lcd_info->xres - decon->win_up.hori_cnt * decon->win_up.rect_w) {
+		decon_warn("%s: parameters is wrong. lcd w(%d), win rect w(%d)\n",
+				__func__, decon->lcd_info->xres,
+				decon->win_up.rect_w);
+		return;
 	}
 
 	decon->win_up.verti_cnt = decon->lcd_info->yres / decon->win_up.rect_h;
-	if (lcd->dsc_enabled) {
-		if (decon->lcd_info->yres - decon->win_up.verti_cnt * decon->win_up.rect_h) {
-			decon_warn("%s: parameters is wrong. lcd h(%d), win rect h(%d)\n",
-					__func__, decon->lcd_info->yres,
-					decon->win_up.rect_h);
-			return;
-		}
+	if (decon->lcd_info->yres - decon->win_up.verti_cnt * decon->win_up.rect_h) {
+		decon_warn("%s: parameters is wrong. lcd h(%d), win rect h(%d)\n",
+				__func__, decon->lcd_info->yres,
+				decon->win_up.rect_h);
+		return;
 	}
 
 	decon_info("window update is enabled: win rectangle w(%d), h(%d)\n",

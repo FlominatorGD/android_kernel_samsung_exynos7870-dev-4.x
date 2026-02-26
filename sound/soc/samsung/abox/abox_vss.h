@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_vss.h
+/* sound/soc/samsung/abox/abox_vss.h
  *
  * ALSA SoC - Samsung Abox VSS
  *

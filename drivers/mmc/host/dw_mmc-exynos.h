@@ -41,10 +41,14 @@
 #define TUNING_PHASE_14		14
 #define TUNING_PHASE_15		15
 
-struct exynos_mmc_pmu {
-	u32 offset;
-	u32 mask;
-	u32 val;
+struct exynos_smu_data {
+	struct exynos_smu_variant_ops *vops;
+	struct platform_device *pdev;
+};
+
+struct exynos_fmp_data {
+	struct exynos_fmp_variant_ops *vops;
+	struct platform_device *pdev;
 };
 
 /* Exynos implementation specific driver private data */
@@ -76,21 +80,21 @@ struct dw_mci_exynos_priv_data {
 	struct pinctrl_state *clk_drive_str[6];
 	struct pinctrl_state *pins_config[2];
 	int cd_gpio;
+	int sec_sd_slot_type;
+#define SEC_NO_DET_SD_SLOT  0 /* No detect GPIO SD slot case */
+#define SEC_HOTPLUG_SD_SLOT 1 /* detect GPIO SD slot without Tray */
+#define SEC_HYBRID_SD_SLOT  2 /* detect GPIO SD slot with Tray */
 	u32 caps;
 	u32 ctrl_flag;
-	u32 runtime_pm_flag;
 	u32 ctrl_windows;
 	u32 ignore_phase;
 	u32 selclk_drv;
 	u32 voltage_int_extra;
-	enum smu_id	fmp;
-	enum smu_id	smu;
-	struct exynos_mmc_pmu pmu;
+	struct exynos_smu_data smu;
+	struct exynos_fmp_data fmp;
 
 #define DW_MMC_EXYNOS_BYPASS_FOR_ALL_PASS	BIT(0)
 #define DW_MMC_EXYNOS_ENABLE_SHIFT		BIT(1)
-#define DW_MMC_EXYNOS_ENABLE_RUNTIME_PM		BIT(0)
-#define DW_MMC_EXYNOS_ENABLE_RUNTIME_PM_PAD	BIT(1)
 };
 
 #define phase6_en      BIT(6)
@@ -108,7 +112,7 @@ extern void dw_mci_reg_dump(struct dw_mci *host);
 /*
 * Registers to support idmac 64-bit address mode
 */
-#define SDMMC_DBADDRL		 0x0088
+#define SDMMC_DBADDRL 		 0x0088
 #define SDMMC_DBADDRU		(SDMMC_DBADDRL + SFR_OFFSET)
 #define SDMMC_IDSTS64		(SDMMC_DBADDRU + SFR_OFFSET)
 #define SDMMC_IDINTEN64		(SDMMC_IDSTS64 + SFR_OFFSET)
@@ -250,36 +254,30 @@ extern void dw_mci_reg_dump(struct dw_mci *host);
 #define DWMCI_MPSECURITY_PROTBYTZPC		BIT(31)
 #define DWMCI_MPSECURITY_MMC_SFR_PROT_ON	BIT(29)
 #define DWMCI_MPSECURITY_FMP_ENC_ON		BIT(28)
-#define DWMCI_MPSECURITY_DESCTYPE(type)	((type & 0x3) << 19)
+#define DWMCI_MPSECURITY_DESCTYPE(type) 	((type & 0x3) << 19)
 
 /* HWACG Control */
 #define MMC_HWACG_CONTROL			BIT(4)
-#define W_INIT					3
-#define W_FREE					2
 #define HWACG_Q_ACTIVE_EN			1
 #define HWACG_Q_ACTIVE_DIS			0
 
-#define HWACG_WORK_INIT				2
-#define CMDQ_MODE				1
-#define LEGACY_MODE                             0
-
 /* PINS STATE Control */
-#define PINS_FUNC				1
-#define PINS_PDN				0
+#define PINS_FUNC			1
+#define PINS_PDN			0
 
 /* Phase 7 Mux Control */
 #define sample_path_sel_en(dev, reg) ({\
 		u32 __ret = 0;\
 		__ret = __raw_readl((dev)->regs + SDMMC_##reg);\
 		__ret &= ~(0x1 << 31);\
-		__raw_writel(((__ret) | (0x1 << 31)), (dev)->regs + SDMMC_##reg);\
+		__raw_writel(((__ret) | (0x1 << 31)) , (dev)->regs + SDMMC_##reg);\
 		})
 
 #define sample_path_sel_dis(dev, reg) ({\
 		u32 __ret = 0;\
 		__ret = __raw_readl((dev)->regs + SDMMC_##reg);\
 		__ret &= ~(0x1 << 31);\
-		__raw_writel((__ret), (dev)->regs + SDMMC_##reg);\
+		__raw_writel((__ret) , (dev)->regs + SDMMC_##reg);\
 		})
 
 #endif				/* _DW_MMC_EXYNOS_H_ */

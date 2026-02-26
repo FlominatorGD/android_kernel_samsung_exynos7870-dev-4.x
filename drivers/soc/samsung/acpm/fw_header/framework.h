@@ -78,7 +78,6 @@ struct acpm_framework {
 	u32 preempt_log_buf_front;
 	u32 preempt_log_data;
 	u32 preempt_log_entry_len;
-	unsigned long long timestamps[32];
 };
 
 /**

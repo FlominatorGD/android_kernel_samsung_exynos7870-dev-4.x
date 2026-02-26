@@ -10,23 +10,16 @@
 
 #include <linux/pm_qos.h>
 #include <soc/samsung/exynos-dm.h>
-#include <linux/timer.h>
-
-#define DEFAULT_EXPIRED_TIME 70
-#define CPUFREQ_RESTART 0x1 << 0
-#define CPUFREQ_SUSPEND 0x1 << 1
-
-struct exynos_slack_timer {
-	/* for slack timer */
-	unsigned long min;
-	int enabled;
-	int expired_time;
-	struct timer_list timer;
-};
+#include "exynos-ufc.h"
 
 struct exynos_cpufreq_dm {
 	struct list_head		list;
 	struct exynos_dm_constraint	c;
+};
+
+struct exynos_ufc {
+	struct list_head		list;
+	struct exynos_ufc_info		info;
 };
 
 typedef int (*target_fn)(struct cpufreq_policy *policy,
@@ -82,7 +75,9 @@ struct exynos_cpufreq_domain {
 
 	/* for sysfs */
 	int				user_boost;
+	int				user_boost_game;
 	unsigned int			user_default_qos;
+	int				ucc_index;
 
 	/* freq boost */
 	bool				boost_supported;
@@ -107,6 +102,9 @@ struct exynos_cpufreq_domain {
 extern struct exynos_cpufreq_domain
 		*find_domain_cpumask(const struct cpumask *mask);
 extern struct list_head *get_domain_list(void);
+extern struct exynos_cpufreq_domain *first_domain(void);
+extern struct exynos_cpufreq_domain *last_domain(void);
+extern int exynos_cpufreq_domain_count(void);
 
 /*
  * the time it takes on this CPU to switch between
@@ -119,3 +117,11 @@ extern struct list_head *get_domain_list(void);
  */
 extern void exynos_cpufreq_ready_list_add(struct exynos_cpufreq_ready_block *rb);
 extern unsigned int exynos_pstate_get_boost_freq(int cpu);
+#ifdef CONFIG_ARM_EXYNOS_UFC
+extern int ufc_domain_init(struct exynos_cpufreq_domain *domain);
+#else
+static inline int ufc_domain_init(struct exynos_cpufreq_domain *domain)
+{
+	return 0;
+}
+#endif

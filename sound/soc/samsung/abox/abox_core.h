@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_core.h
+/* sound/soc/samsung/abox/abox_core.h
  *
  * ALSA SoC - Samsung Abox Core driver
  *

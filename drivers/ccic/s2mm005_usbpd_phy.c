@@ -22,7 +22,7 @@
 #include <linux/ccic/s2mm005_usbpd.h>
 #include <linux/ccic/s2mm005_usbpd_phy.h>
 #include <linux/ccic/usbpd_typec.h>
-#include <linux/ccic/s2mm005_usbpd_msg.h>
+#include <linux/ccic/usbpd_msg.h>
 
 static char VDM_MSG_IRQ_State_Print[9][40] = {
     {"bFLAG_Vdm_Reserve_b0"},
@@ -145,7 +145,6 @@ void s2mm005_usbpd_state_detect(struct s2mm005_data *usbpd_data)
 		usbpd_data->is_pr_swap = 0;
 		usbpd_data->is_attached = false;
 		usbpd_data->cnt = 0;
-		usbpd_data->cur_rid = RID_UNDEFINED;
 		usbpd_process_cc_attach(udev, USBPD_DETACHED);
 	}
 }
@@ -383,34 +382,12 @@ void s2mm005_usbpd_msg_detect(struct s2mm005_data *usbpd_data)
 void s2mm005_usbpd_rid_detect(struct s2mm005_data *usbpd_data)
 {
 	struct i2c_client *i2c = usbpd_data->i2c;
-	struct usbpd_dev *udev = usbpd_data->udev;
 	int prev_rid = usbpd_data->cur_rid;
-#if defined(CONFIG_IFCONN_NOTIFIER)
-	struct ifconn_notifier_template *template = &udev->ifconn_template;
-#endif
 	u8 rid = 0;
 
 	s2mm005_read_byte(i2c, S2MM005_REG_RID, &rid, 1);
 	dev_info(&i2c->dev, "prev_rid : %x, rid : %x\n", prev_rid, rid);
 	usbpd_data->cur_rid = rid;
-#if defined(CONFIG_IFCONN_NOTIFIER)
-	template->rid = rid;
-	template->id = IFCONN_NOTIFY_ID_RID;
-	template->dest = IFCONN_NOTIFY_MUIC;
-	template->cable_type = IFCONN_NOTIFY_EVENT_ATTACH;
-	template->data = template;
-
-
-	if (rid) {
-		if (prev_rid != rid) {
-			template->rid = rid;
-			USBPD_SEND_DNOTI(IFCONN_NOTIFY_MUIC, ATTACH,
-				IFCONN_NOTIFY_EVENT_ATTACH, NULL);
-			USBPD_SEND_NOTI_TEMPLATE(IFCONN_NOTIFY_MUIC, RID,
-				IFCONN_NOTIFY_EVENT_ATTACH, template);
-		}
-	}
-#endif
 }
 
 static void s2mm005_usbpd_check_reset(struct s2mm005_data *usbpd_data, LP_STATE_Type *Lp_DATA)

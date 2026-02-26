@@ -17,6 +17,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/irqchip/irq-madera.h>
 #include <linux/mfd/madera/pdata.h>
+#include <linux/regulator/arizona-micsupp.h>
 #include <linux/regulator/consumer.h>
 #include <sound/madera-pdata.h>
 
@@ -134,6 +135,7 @@ enum madera_type {
 #define MADERA_GP_FN_EVENTLOG8_FIFO_STS	0x157
 
 struct snd_soc_dapm_context;
+struct madera_extcon;
 
 /*
  * struct madera
@@ -154,6 +156,7 @@ struct madera {
 	int num_core_supplies;
 	struct regulator_bulk_data core_supplies[MADERA_MAX_CORE_SUPPLIES];
 	struct regulator *dcvdd;
+	struct notifier_block dcvdd_notifier;
 	bool internal_dcvdd;
 
 	struct madera_pdata pdata;
@@ -166,9 +169,17 @@ struct madera {
 	unsigned int hp_ena;
 	unsigned int hp_impedance_x100[MADERA_MAX_ACCESSORY];
 
+	bool hs_mic_muted;
+
+	struct madera_extcon *extcon_info;
+
 	struct snd_soc_dapm_context *dapm;
 
 	struct blocking_notifier_head notifier;
+
+	bool moisture_detected;
+
+	struct arizona_micsupp_forced_bypass *micsupp_forced_bypass;
 };
 
 unsigned int madera_get_num_micbias(struct madera *madera);

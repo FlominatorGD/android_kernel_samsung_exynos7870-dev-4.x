@@ -161,7 +161,7 @@ static int madera_suspend_noirq(struct device *dev)
 {
 	struct madera_irq_priv *priv = dev_get_drvdata(dev);
 
-	dev_dbg(priv->dev, "No IRQ suspend, reenabling IRQ\n");
+	dev_info(priv->dev, "No IRQ suspend, reenabling IRQ\n");
 
 	enable_irq(priv->irq);
 
@@ -172,7 +172,7 @@ static int madera_suspend(struct device *dev)
 {
 	struct madera_irq_priv *priv = dev_get_drvdata(dev);
 
-	dev_dbg(priv->dev, "Suspend, disabling IRQ\n");
+	dev_info(priv->dev, "Suspend, disabling IRQ\n");
 
 	disable_irq(priv->irq);
 
@@ -183,7 +183,7 @@ static int madera_resume_noirq(struct device *dev)
 {
 	struct madera_irq_priv *priv = dev_get_drvdata(dev);
 
-	dev_dbg(priv->dev, "No IRQ resume, disabling IRQ\n");
+	dev_info(priv->dev, "No IRQ resume, disabling IRQ\n");
 
 	disable_irq(priv->irq);
 
@@ -194,7 +194,7 @@ static int madera_resume(struct device *dev)
 {
 	struct madera_irq_priv *priv = dev_get_drvdata(dev);
 
-	dev_dbg(priv->dev, "Resume, reenabling IRQ\n");
+	dev_info(priv->dev, "Resume, reenabling IRQ\n");
 
 	enable_irq(priv->irq);
 
@@ -309,6 +309,7 @@ static struct platform_driver madera_irq_driver = {
 	.driver = {
 		.name	= "madera-irq",
 		.pm	= &madera_irq_pm_ops,
+		.suppress_bind_attrs = true,
 	}
 };
 module_platform_driver(madera_irq_driver);

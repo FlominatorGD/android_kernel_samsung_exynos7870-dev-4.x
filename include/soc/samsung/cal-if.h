@@ -1,9 +1,20 @@
 #ifndef __CAL_IF_H__
 #define __CAL_IF_H__
 
-#ifdef CONFIG_PMUCAL
+#ifdef CONFIG_PWRCAL
+#include "../../../drivers/soc/samsung/pwrcal/pwrcal.h"
+
+static inline int cal_qch_init(unsigned int vclkid, unsigned int use_qch)
+{
+	return 0;
+}
+
+static inline int cal_if_init(void)
+{
+	return 0;
+}
+#else
 #include "../../../drivers/soc/samsung/cal-if/pmucal_system.h"
-#endif
 
 #define BLKPWR_MAGIC	0xB1380000
 
@@ -93,17 +104,11 @@ extern void cal_cp_reset_req_clear(void);
 extern void cal_cp_enable_dump_pc_no_pg(void);
 extern void cal_cp_disable_dump_pc_no_pg(void);
 
-extern void cal_gnss_init(void);
-extern int cal_gnss_status(void);
-extern void cal_gnss_reset_assert(void);
-extern void cal_gnss_reset_release(void);
-extern void cal_gnss_reset_req_clear(void);
-extern void cal_gnss_active_clear(void);
-
 extern int cal_init(void);
 extern int cal_if_init(void *);
 
 /* It is for debugging. */
 #define cal_vclk_dbg_info(a)	do{} while(0);
 //extern void cal_vclk_dbg_info(unsigned int id);
+#endif
 #endif

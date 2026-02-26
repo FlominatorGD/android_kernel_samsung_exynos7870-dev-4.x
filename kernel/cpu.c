@@ -30,6 +30,7 @@
 #include <linux/relay.h>
 #include <linux/slab.h>
 #include <linux/cpuset.h>
+#include <linux/sec_debug.h>
 
 #include <soc/samsung/exynos-emc.h>
 
@@ -229,7 +230,9 @@ err:
 static inline void wait_for_ap_thread(struct cpuhp_cpu_state *st, bool bringup)
 {
 	struct completion *done = bringup ? &st->done_up : &st->done_down;
+	sec_debug_wtsk_set_data(DTYPE_CPUHP, (void *)st->thread);
 	wait_for_completion(done);
+	sec_debug_wtsk_clear_data();
 }
 
 static inline void complete_ap_thread(struct cpuhp_cpu_state *st, bool bringup)
@@ -675,9 +678,6 @@ static void cpuhp_thread_fun(unsigned int cpu)
 	struct cpuhp_cpu_state *st = this_cpu_ptr(&cpuhp_state);
 	bool bringup = st->bringup;
 	enum cpuhp_state state;
-
-	if (WARN_ON_ONCE(!st->should_run))
-		return;
 
 	/*
 	 * ACQUIRE for the cpuhp_should_run() load of ->should_run. Ensures
@@ -1147,21 +1147,10 @@ static int __ref _cpus_down(struct cpumask cpus, int tasks_frozen,
 	}
 
 	for_each_cpu(cpu, &ap_work_cpus) {
-		struct cpuhp_cpu_state *st = per_cpu_ptr(&cpuhp_state, cpu);
-		emc_cpu_pre_off_callback(cpu);
-		set_cpu_active(cpu, false);
-		st->state = CPUHP_AP_EXYNOS_IDLE_CTRL;
-	}
-
-	cpuset_update_active_cpus();
-
-	for_each_cpu(cpu, &ap_work_cpus) {
 		st = per_cpu_ptr(&cpuhp_state, cpu);
 		set_cpu_active(cpu, false);
-		st->state = CPUHP_AP_EXYNOS_IDLE_CTRL;
+		st->state = CPUHP_EXYNOS_BOOST_CTRL_PRE;
 	}
-
-	cpuset_update_active_cpus();
 
 	for_each_cpu(cpu, &ap_work_cpus) {
 		st = per_cpu_ptr(&cpuhp_state, cpu);
@@ -1179,6 +1168,8 @@ static int __ref _cpus_down(struct cpumask cpus, int tasks_frozen,
 		st->target = target;
 		cpumask_set_cpu(cpu, &take_down_cpus);
 	}
+
+	cpuset_update_active_cpus();
 
 	/* Hotplug out of all cpu failed */
 	if (cpumask_empty(&take_down_cpus))
@@ -1208,6 +1199,7 @@ out:
 	 * concurrent CPU hotplug via cpu_add_remove_lock.
 	 */
 	lockup_detector_cleanup();
+	cpuset_wait_for_hotplug();
 
 	return ret;
 }
@@ -1297,6 +1289,8 @@ out:
 	 * concurrent CPU hotplug via cpu_add_remove_lock.
 	 */
 	lockup_detector_cleanup();
+	cpuset_wait_for_hotplug();
+
 	arch_smt_update();
 	return ret;
 }
@@ -1442,13 +1436,33 @@ static int __ref _cpus_up(struct cpumask cpus, int tasks_frozen,
 	target = min((int)target, CPUHP_BRINGUP_CPU);
 	for_each_cpu(cpu, &bringup_cpus) {
 		st = per_cpu_ptr(&cpuhp_state, cpu);
+		prev_state[cpu] = cpuhp_set_state(st, CPUHP_EXYNOS_BOOST_CTRL_PRE);
 		ret = cpuhp_up_callbacks(cpu, st, target);
 		if (ret)
 			panic("%s: fauiled to bringup_cpus\n", __func__);
 	}
+
+	for_each_cpu(cpu, &bringup_cpus) {
+		st = per_cpu_ptr(&cpuhp_state, cpu);
+		st->state = CPUHP_AP_ACTIVE;
+		set_cpu_active(cpu, true);
+	}
+
+	cpuset_update_active_cpus();
+	for_each_cpu(cpu, &bringup_cpus)
+		sched_cpu_rq_online(cpu);
+
+	for_each_cpu(cpu, &bringup_cpus) {
+		st = per_cpu_ptr(&cpuhp_state, cpu);
+		prev_state[cpu] = cpuhp_set_state(st, CPUHP_ONLINE);
+		ret = cpuhp_kick_ap(st, st->target);
+		if (ret)
+			panic("%s: fauiled to online_cpus\n", __func__);
+	}
 out:
 	cpumask_clear(&cpu_faston_mask);
 	cpus_write_unlock();
+	cpuset_wait_for_hotplug();
 
 	return ret;
 }
@@ -1510,6 +1524,8 @@ static int _cpu_up(unsigned int cpu, int tasks_frozen, enum cpuhp_state target)
 	ret = cpuhp_up_callbacks(cpu, st, target);
 out:
 	cpus_write_unlock();
+	cpuset_wait_for_hotplug();
+
 	arch_smt_update();
 	return ret;
 }
@@ -1581,6 +1597,7 @@ int cpus_up(struct cpumask cpus)
 	err = _cpus_up(cpus, 0, CPUHP_ONLINE);
 out:
 	cpu_maps_update_done();
+
 	trace_cpus_up_exit(cpumask_first(&cpus));
 
 	return err;
@@ -1607,6 +1624,11 @@ int freeze_secondary_cpus(int primary)
 	for_each_online_cpu(cpu) {
 		if (cpu == primary)
 			continue;
+
+		if (pm_wakeup_pending()) {
+			error = -EBUSY;
+			break;
+		}
 		trace_suspend_resume(TPS("CPU_OFF"), cpu, true);
 		dbg_snapshot_suspend("CPU_OFF", _cpu_down, NULL, cpu, DSS_FLAG_IN);
 		error = _cpu_down(cpu, 1, CPUHP_OFFLINE);
@@ -1727,6 +1749,11 @@ cpu_hotplug_pm_callback(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
+
+struct cpumask cpu_fastoff_mask;
+EXPORT_SYMBOL(cpu_fastoff_mask);
+struct cpumask cpu_faston_mask;
+EXPORT_SYMBOL(cpu_faston_mask);
 static int __init cpu_hotplug_pm_sync_init(void)
 {
 	/*
@@ -1743,11 +1770,6 @@ static int __init cpu_hotplug_pm_sync_init(void)
 core_initcall(cpu_hotplug_pm_sync_init);
 
 #endif /* CONFIG_PM_SLEEP_SMP */
-
-struct cpumask cpu_fastoff_mask;
-EXPORT_SYMBOL(cpu_fastoff_mask);
-struct cpumask cpu_faston_mask;
-EXPORT_SYMBOL(cpu_faston_mask);
 
 int __boot_cpu_id;
 
@@ -2724,3 +2746,18 @@ void __init boot_cpu_hotplug_init(void)
 #endif
 	this_cpu_write(cpuhp_state.state, CPUHP_ONLINE);
 }
+
+enum cpu_mitigations cpu_mitigations __ro_after_init = CPU_MITIGATIONS_AUTO;
+
+static int __init mitigations_parse_cmdline(char *arg)
+{
+	if (!strcmp(arg, "off"))
+		cpu_mitigations = CPU_MITIGATIONS_OFF;
+	else if (!strcmp(arg, "auto"))
+		cpu_mitigations = CPU_MITIGATIONS_AUTO;
+	else if (!strcmp(arg, "auto,nosmt"))
+		cpu_mitigations = CPU_MITIGATIONS_AUTO_NOSMT;
+
+	return 0;
+}
+early_param("mitigations", mitigations_parse_cmdline);

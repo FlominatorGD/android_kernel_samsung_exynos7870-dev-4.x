@@ -13,6 +13,7 @@
 #ifndef __LINUX_MFD_SEC_RTC_H
 #define __LINUX_MFD_SEC_RTC_H
 
+
 /* Slave addr = 0x0C */
 /* RTC Registers */
 #if defined(CONFIG_RTC_DRV_S2MP)
@@ -85,15 +86,13 @@
 #define SMPL_EN_SHIFT			7
 #define WTSR_EN_MASK			(1 << WTSR_EN_SHIFT)
 #define SMPL_EN_MASK			(1 << SMPL_EN_SHIFT)
+#define SUB_SMPL_EN_SHIFT		3
+#define SUB_SMPL_EN_MASK		(1 << SUB_SMPL_EN_SHIFT)
 /* RTC Update Register */
 #define RTC_RUDR_SHIFT			0
 #define RTC_RUDR_MASK			(1 << RTC_RUDR_SHIFT)
 #define RTC_AUDR_SHIFT_REV		4
 #define RTC_AUDR_MASK_REV		(1 << RTC_AUDR_SHIFT_REV)
-#ifdef CONFIG_RTC_BOOT_ALARM
-#define RTC_WAKE_SHIFT			3
-#define RTC_WAKE_MASK			(1 << RTC_WAKE_SHIFT)
-#endif
 #define RTC_FREEZE_SHIFT		2
 #define RTC_FREEZE_MASK			(1 << RTC_FREEZE_SHIFT)
 #define RTC_WUDR_SHIFT_REV		1

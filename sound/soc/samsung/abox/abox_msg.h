@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_msg.h
+/* sound/soc/samsung/abox/abox_msg.h
  *
  * ALSA SoC Audio Layer - Samsung Abox Message Queue driver
  *
@@ -34,7 +34,7 @@
 #define wmb()		__DMB()
 #endif
 
-#define ABOX_MSG_LEN_CMD	128
+#define ABOX_MSG_LEN_CMD	16
 
 struct abox_msg_cfg {
 	void *tx_addr;

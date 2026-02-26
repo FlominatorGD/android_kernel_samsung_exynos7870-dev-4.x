@@ -317,139 +317,6 @@ static const struct sc_fmt sc_formats[] = {
 		.num_planes	= 2,
 		.num_comp	= 2,
 		.h_shift	= 1,
-	}, {
-		/* Src Blending : NV12M + RGB32 */
-		.name		= "NV12M-RGB32",
-		.pixelformat	= V4L2_PIX_FMT_NV12M_RGB32,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 8, 4, 32 },
-		.num_planes	= 3,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 2,
-	}, {
-		/* Src Blending : NV12M + BGR32 */
-		.name		= "NV12M-BGR32",
-		.pixelformat	= V4L2_PIX_FMT_NV12M_BGR32,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 8, 4, 32 },
-		.num_planes	= 3,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 2,
-	}, {
-		/* Src Blending : NV12M + RGB565 */
-		.name		= "NV12M-RGB565",
-		.pixelformat	= V4L2_PIX_FMT_NV12M_RGB565,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 8, 4, 16 },
-		.num_planes	= 3,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 2,
-	}, {
-		/* Src Blending : NV12M + RGB444 */
-		.name		= "NV12M-RGB444",
-		.pixelformat	= V4L2_PIX_FMT_NV12M_RGB444,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 8, 4, 16 },
-		.num_planes	= 3,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 2,
-	}, {
-		/* Src Blending : NV12M + RGB555 */
-		.name		= "NV12M-RGB555X",
-		.pixelformat	= V4L2_PIX_FMT_NV12M_RGB555X,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 8, 4, 16 },
-		.num_planes	= 3,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 2,
-	}, {
-		/* Src Blending : NV12MT + RGB32 */
-		.name		= "NV12MT-RGB32",
-		.pixelformat	= V4L2_PIX_FMT_NV12MT_16X16_RGB32,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P |
-					SCALER_CFG_TILE_EN,
-		.bitperpixel	= { 8, 4, 32 },
-		.num_planes	= 3,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 2,
-	}, {
-		/* Src Blending : NV12 + RGB32 */
-		.name		= "NV12-RGB32",
-		.pixelformat	= V4L2_PIX_FMT_NV12_RGB32,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 12, 32 },
-		.num_planes	= 2,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 1,
-	}, {
-		/* Src Blending : NV12N + RGB32 */
-		.name		= "NV12N-RGB32",
-		.pixelformat	= V4L2_PIX_FMT_NV12N_RGB32,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 12, 32 },
-		.num_planes	= 2,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 1,
-	}, {
-		/* Src Blending : NV21M + RGB32 */
-		.name		= "NV21M-RGB32",
-		.pixelformat	= V4L2_PIX_FMT_NV21M_RGB32,
-		.cfg_val	= SCALER_CFG_FMT_YCRCB420_2P,
-		.bitperpixel	= { 8, 4, 32 },
-		.num_planes	= 3,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 2,
-	}, {
-		/* Src Blending : NV21M + BGR32 */
-		.name		= "NV21M-BGR32",
-		.pixelformat	= V4L2_PIX_FMT_NV21M_BGR32,
-		.cfg_val	= SCALER_CFG_FMT_YCRCB420_2P,
-		.bitperpixel	= { 8, 4, 32 },
-		.num_planes	= 3,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 2,
-	}, {
-		/* Src Blending : NV21 + RGB32 */
-		.name		= "NV21-RGB32",
-		.pixelformat	= V4L2_PIX_FMT_NV21_RGB32,
-		.cfg_val	= SCALER_CFG_FMT_YCRCB420_2P,
-		.bitperpixel	= { 12, 32 },
-		.num_planes	= 2,
-		.num_comp	= 3,
-		.h_shift	= 1,
-		.v_shift	= 1,
-		.is_alphablend_fmt = 1,
-		.alphablend_plane_num = 1,
 	},
 };
 
@@ -480,7 +347,6 @@ static const u32 sc_version_table[][2] = {
 	{ 0x02000100, SCALER_VERSION(5, 0, 1) }, /* SC_POLY */
 	{ 0x02000000, SCALER_VERSION(5, 0, 0) },
 	{ 0x80060007, SCALER_VERSION(4, 2, 0) }, /* SC_BI */
-	{ 0x01200100, SCALER_VERSION(4, 2, 0) }, /* SC_BI */
 	{ 0x0100000f, SCALER_VERSION(4, 0, 1) }, /* SC_POLY */
 	{ 0xA0000013, SCALER_VERSION(4, 0, 1) },
 	{ 0xA0000012, SCALER_VERSION(4, 0, 1) },
@@ -520,6 +386,7 @@ static const struct sc_variant sc_variant[] = {
 		.ratio_20bit		= 1,
 		.initphase		= 1,
 		.pixfmt_10bit		= 1,
+		.minsize_srcplane	= 4096 + 1,
 	}, {
 		.limit_input = {
 			.min_w		= 16,
@@ -589,7 +456,6 @@ static const struct sc_variant sc_variant[] = {
 		.prescale		= 0,
 		.ratio_20bit		= 1,
 		.initphase		= 1,
-		.is_bilinear		= 1,
 	}, {
 		.limit_input = {
 			.min_w		= 16,
@@ -775,7 +641,7 @@ void sc_request_devfreq(struct sc_qos_request *qos_req,
 			PM_QOS_DEVICE_THROUGHPUT, qos_table[lv].freq_int);
 }
 
-static int sc_get_pm_qos_level_by_data_size(struct sc_ctx *ctx, int framerate)
+static bool sc_get_pm_qos_level_by_data_size(struct sc_ctx *ctx, int framerate)
 {
 	struct sc_dev *sc = ctx->sc_dev;
 	struct sc_frame *frame = &ctx->d_frame;
@@ -802,7 +668,13 @@ static int sc_get_pm_qos_level_by_data_size(struct sc_ctx *ctx, int framerate)
 	if (i == sc->qos_table_cnt)
 		i--;
 
-	return i;
+	/* No request is required if level is same. */
+	if (ctx->pm_qos_lv == i)
+		return false;
+
+	ctx->pm_qos_lv = i;
+
+	return true;
 }
 
 /*
@@ -844,7 +716,7 @@ static int sc_get_clock_khz(struct sc_ctx *ctx,
 	return (int)clk;
 }
 
-static int sc_get_pm_qos_level_by_ppc(struct sc_ctx *ctx, int framerate)
+static bool sc_get_pm_qos_level_by_ppc(struct sc_ctx *ctx, int framerate)
 {
 	struct sc_dev *sc = ctx->sc_dev;
 	struct sc_qos_table *qos_table = sc->qos_table;
@@ -862,16 +734,22 @@ static int sc_get_pm_qos_level_by_ppc(struct sc_ctx *ctx, int framerate)
 			break;
 	}
 
-	return i;
+	/* No request is required if level is same. */
+	if (ctx->pm_qos_lv == i)
+		return false;
+
+	ctx->pm_qos_lv = i;
+
+	return true;
 }
 
-static int sc_get_pm_qos_level(struct sc_ctx *ctx, int framerate)
+static bool sc_get_pm_qos_level(struct sc_ctx *ctx, int framerate)
 {
 	struct sc_dev *sc = ctx->sc_dev;
 
 	/* No need to calculate if no qos_table exists. */
 	if (!sc->qos_table)
-		return -1;
+		return false;
 
 	if (!sc->ppc_table)
 		return sc_get_pm_qos_level_by_data_size(ctx, framerate);
@@ -1102,39 +980,17 @@ static int sc_v4l2_try_fmt_mplane(struct file *file, void *fh,
 		return sc_calc_fmt_s10b_size(sc_fmt, pixm, ext_size);
 
 	for (i = 0; i < pixm->num_planes; ++i) {
-		/* The pixm->plane_fmt[i].sizeimage for the plane which
-		 * contains the src blend data has to be calculated as per the
-		 * size of the actual width and actual height of the src blend
-		 * buffer
-		 */
-		BUG_ON(!sc_fmt->alphablend_plane_num &&
-				sc_fmt->is_alphablend_fmt);
-		if (i == sc_fmt->alphablend_plane_num &&
-						sc_fmt->is_alphablend_fmt) {
-			if (ctx->src_blend_cfg.blend_src_height == 0 ||
-					ctx->src_blend_cfg.blend_src_width == 0)
-				return -EINVAL;
-			pixm->plane_fmt[i].bytesperline =
-				(ctx->src_blend_cfg.blend_src_width *
-					sc_fmt->bitperpixel[i]) >> 3;
+		pixm->plane_fmt[i].bytesperline = (pixm->width *
+				sc_fmt->bitperpixel[i]) >> 3;
+		if (sc_fmt_is_ayv12(sc_fmt->pixelformat)) {
+			unsigned int y_size, c_span;
+			y_size = pixm->width * pixm->height;
+			c_span = ALIGN(pixm->width >> 1, 16);
 			pixm->plane_fmt[i].sizeimage =
-				pixm->plane_fmt[i].bytesperline *
-				ctx->src_blend_cfg.blend_src_height;
+				y_size + (c_span * pixm->height >> 1) * 2;
 		} else {
-			pixm->plane_fmt[i].bytesperline = (pixm->width *
-					sc_fmt->bitperpixel[i]) >> 3;
-			if (sc_fmt_is_ayv12(sc_fmt->pixelformat)) {
-				unsigned int y_size, c_span;
-
-				y_size = pixm->width * pixm->height;
-				c_span = ALIGN(pixm->width >> 1, 16);
-				pixm->plane_fmt[i].sizeimage =	y_size +
-					(c_span * pixm->height >> 1) * 2;
-			} else {
-				pixm->plane_fmt[i].sizeimage =
-					pixm->plane_fmt[i].bytesperline *
-					pixm->height;
-			}
+			pixm->plane_fmt[i].sizeimage =
+				pixm->plane_fmt[i].bytesperline * pixm->height;
 		}
 
 		v4l2_dbg(1, sc_log_level, &ctx->sc_dev->m2m.v4l2_dev,
@@ -1236,18 +1092,6 @@ static int sc_v4l2_s_fmt_mplane(struct file *file, void *fh,
 
 	frame->crop.width = pixm->width;
 	frame->crop.height = pixm->height;
-
-	if (V4L2_TYPE_IS_OUTPUT(f->type) && ctx->sc_dev->variant->blending &&
-			frame->sc_fmt->is_alphablend_fmt) {
-		if (pixm->pixelformat == V4L2_PIX_FMT_NV12M_RGB32 ||
-				pixm->pixelformat == V4L2_PIX_FMT_NV12N_RGB32 ||
-				pixm->pixelformat == V4L2_PIX_FMT_NV12_RGB32) {
-			ctx->src_blend_cfg.blend_src_color_byte_swap =
-				(SCALER_CFG_BYTE_HWORD_SWAP >> 5);
-			ctx->src_blend_cfg.blend_src_color_format =
-				SCALER_CFG_FMT_RGBA8888;
-		}
-	}
 
 	return 0;
 }
@@ -1435,8 +1279,9 @@ static int sc_v4l2_s_crop(struct file *file, void *fh,
 			w_align, &rect.top, 0, frame->height - rect.height,
 			h_align, 0);
 
-	if (sc_fmt_is_s10bit_yuv(frame->sc_fmt->pixelformat))
-		rect.width = ALIGN(rect.width, 4);
+	if (!V4L2_TYPE_IS_OUTPUT(cr->type) &&
+			sc_fmt_is_s10bit_yuv(frame->sc_fmt->pixelformat))
+		rect.width = ALIGN_DOWN(rect.width, 4);
 
 	if ((rect.height > frame->height) || (rect.top > frame->height) ||
 		(rect.width > frame->width) || (rect.left > frame->width)) {
@@ -1447,46 +1292,6 @@ static int sc_v4l2_s_crop(struct file *file, void *fh,
 		return -EINVAL;
 	}
 
-	if (!V4L2_TYPE_IS_OUTPUT(cr->type) && ctx->bl_op &&
-		ctx->sc_dev->variant->blending) {
-		struct sc_frame *src_blend_frame = &ctx->src_blend_frame;
-		struct sc_src_blend_cfg *cfg = &ctx->src_blend_cfg;
-
-		/* Bound an image to have crop position in limit */
-		v4l_bound_align_image(&cfg->blend_src_h_pos, 0,
-				cfg->blend_src_width - rect.width, w_align,
-				&cfg->blend_src_v_pos, 0,
-				cfg->blend_src_height - rect.height, h_align,
-				0);
-
-		if (cfg->blend_src_h_pos + rect.width > cfg->blend_src_width) {
-			v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
-				"Invalid range(x) of blending image: %d\n",
-				cfg->blend_src_width);
-			v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
-				"which is smaller than X-pos(%d) + width(%d)\n",
-				cfg->blend_src_h_pos, rect.width);
-			return -EINVAL;
-		}
-		if (cfg->blend_src_v_pos + rect.height >
-						cfg->blend_src_height) {
-			v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
-				"Invalid range(y) of blending image: %d\n",
-				cfg->blend_src_height);
-			v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
-				"which is smaller than Y-pos(%d) + height(%d)\n",
-				cfg->blend_src_v_pos, rect.height);
-			return -EINVAL;
-		}
-
-		src_blend_frame->crop.top = ctx->src_blend_cfg.blend_src_v_pos;
-		src_blend_frame->crop.left = ctx->src_blend_cfg.blend_src_h_pos;
-		src_blend_frame->crop.width = rect.width;
-		src_blend_frame->crop.height = rect.height;
-		/* src blend crop width and crop height HAS TO BE same as dst */
-		cfg->blend_src_crop_width = rect.width;
-		cfg->blend_src_crop_height = rect.height;
-	}
 	frame->crop.top = rect.top;
 	frame->crop.left = rect.left;
 	frame->crop.height = rect.height;
@@ -1562,6 +1367,7 @@ static void sc_calc_intbufsize(struct sc_dev *sc, struct sc_int_frame *int_frame
 	struct sc_frame *frame = &int_frame->frame;
 	unsigned int pixsize, bytesize;
 	unsigned int ext_size = 0, i;
+	u32 min_size = sc->variant->minsize_srcplane;
 
 	pixsize = frame->width * frame->height;
 	bytesize = (pixsize * frame->sc_fmt->bitperpixel[0]) >> 3;
@@ -1615,6 +1421,11 @@ static void sc_calc_intbufsize(struct sc_dev *sc, struct sc_int_frame *int_frame
 
 	for (i = 0; ext_size && i < frame->sc_fmt->num_comp; i++)
 		frame->addr.size[i] += (i == 0) ? ext_size : ext_size/2;
+
+	for (i = 0; i < frame->sc_fmt->num_comp; i++) {
+		if (frame->addr.size[i] < min_size)
+			frame->addr.size[i] = min_size;
+	}
 
 	memcpy(&int_frame->src_addr, &frame->addr, sizeof(int_frame->src_addr));
 	memcpy(&int_frame->dst_addr, &frame->addr, sizeof(int_frame->dst_addr));
@@ -2143,17 +1954,59 @@ static int sc_vb2_queue_setup(struct vb2_queue *vq,
 	return 0;
 }
 
+/*
+ * This function should be used for source buffer only.
+ * In case of destination buffer, frame->bytesused[] is not valid.
+ */
+static int sc_check_src_plane_size(struct sc_ctx *ctx, struct vb2_buffer *vb,
+					 struct sc_frame *frame, u32 min_size)
+{
+	struct sg_table *sgt;
+	int i, ret = 0;
+
+	if (!V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type) || !min_size)
+		return ret;
+
+	for (i = 0; i < frame->sc_fmt->num_planes; i++) {
+		if (frame->bytesused[i] < min_size) {
+			sgt = (struct sg_table *)vb2_plane_cookie(vb, i);
+			if (!sgt) {
+				v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
+					"invalid sgt in plane %d\n", i);
+				return -EINVAL;
+			}
+
+			if (sg_nents_for_len(sgt->sgl, (u64)min_size) <= 0) {
+				ret = -EINVAL;
+				break;
+			}
+		}
+	}
+
+	if (ret)
+		v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
+			"plane%d size %d is smaller than %d\n",
+			i, frame->bytesused[i], min_size);
+
+	return ret;
+}
+
 static int sc_vb2_buf_prepare(struct vb2_buffer *vb)
 {
 	struct sc_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 	struct sc_frame *frame;
+	u32 min_size = ctx->sc_dev->variant->minsize_srcplane;
 	int i;
 
 	frame = ctx_get_frame(ctx, vb->vb2_queue->type);
 	if (IS_ERR(frame))
 		return PTR_ERR(frame);
 
-	if (!V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
+	if (V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type)) {
+		/* Plane size checking is needed for source buffer */
+		if (sc_check_src_plane_size(ctx, vb, frame, min_size))
+			return -EINVAL;
+	} else {
 		for (i = 0; i < frame->sc_fmt->num_planes; i++)
 			vb2_set_plane_payload(vb, i, frame->bytesused[i]);
 	}
@@ -2282,8 +2135,6 @@ static bool sc_configure_rotation_degree(struct sc_ctx *ctx, int degree)
 
 static void sc_set_framerate(struct sc_ctx *ctx, int framerate)
 {
-	int ret_qos_lv;
-
 	if (!ctx->sc_dev->qos_table)
 		return;
 
@@ -2292,21 +2143,15 @@ static void sc_set_framerate(struct sc_ctx *ctx, int framerate)
 		cancel_delayed_work(&ctx->qos_work);
 		sc_remove_devfreq(&ctx->pm_qos, ctx->sc_dev->qos_table);
 		ctx->framerate = 0;
-		ctx->pm_qos_lv = -1;
 	} else {
 		if (framerate != ctx->framerate) {
 			ctx->framerate = framerate;
-			ret_qos_lv = sc_get_pm_qos_level(ctx, ctx->framerate);
-			if (ret_qos_lv < 0) {
+			if (!sc_get_pm_qos_level(ctx, ctx->framerate)) {
 				mutex_unlock(&ctx->pm_qos_lock);
 				return;
 			}
-			/* No request is required if level is same. */
-			if (ret_qos_lv != ctx->pm_qos_lv) {
-				ctx->pm_qos_lv = ret_qos_lv;
-				sc_request_devfreq(&ctx->pm_qos,
+			sc_request_devfreq(&ctx->pm_qos,
 					ctx->sc_dev->qos_table, ctx->pm_qos_lv);
-			}
 		}
 		mod_delayed_work(system_wq,
 				&ctx->qos_work, msecs_to_jiffies(50));
@@ -2350,34 +2195,6 @@ static int sc_s_ctrl(struct v4l2_ctrl *ctrl)
 			return -EINVAL;
 		}
 		ctx->bl_op = ctrl->val;
-		break;
-	case V4L2_CID_2D_SRC_BLEND_SET_H_POS:
-		if (!ctx->sc_dev->variant->blending)
-			return -EINVAL;
-		ctx->src_blend_cfg.blend_src_h_pos = ctrl->val;
-		break;
-
-	case V4L2_CID_2D_SRC_BLEND_SET_V_POS:
-		if (!ctx->sc_dev->variant->blending)
-			return -EINVAL;
-		ctx->src_blend_cfg.blend_src_v_pos = ctrl->val;
-		break;
-	case V4L2_CID_2D_SRC_BLEND_FMT_PREMULTI:
-		if (!ctx->sc_dev->variant->blending)
-			return -EINVAL;
-		ctx->src_blend_cfg.pre_multi = ctrl->val;
-		break;
-	case V4L2_CID_2D_SRC_BLEND_SET_HEIGHT:
-		if (!ctx->sc_dev->variant->blending)
-			return -EINVAL;
-		ctx->src_blend_cfg.blend_src_height = ctrl->val;
-		ctx->src_blend_frame.height = ctrl->val;
-		break;
-	case V4L2_CID_2D_SRC_BLEND_SET_WIDTH:
-		if (!ctx->sc_dev->variant->blending)
-			return -EINVAL;
-		ctx->src_blend_cfg.blend_src_width = ctrl->val;
-		ctx->src_blend_frame.width = ctrl->val;
 		break;
 	case V4L2_CID_2D_FMT_PREMULTI:
 		ctx->pre_multi = ctrl->val;
@@ -2489,56 +2306,6 @@ static const struct v4l2_ctrl_config sc_custom_ctrl[] = {
 		.min = 0,
 		.max = SC_FT_MAX,
 		.def = 0,
-	}, {
-		.ops = &sc_ctrl_ops,
-		.id = V4L2_CID_2D_SRC_BLEND_SET_H_POS,
-		.name = "set src blend H position",
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.flags = V4L2_CTRL_FLAG_SLIDER,
-		.step = 1,
-		.min = 0,
-		.max = 8192,
-		.def = 0,
-	}, {
-		.ops = &sc_ctrl_ops,
-		.id = V4L2_CID_2D_SRC_BLEND_SET_V_POS,
-		.name = "set src blend V position",
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.flags = V4L2_CTRL_FLAG_SLIDER,
-		.step = 1,
-		.min = 0,
-		.max = 8192,
-		.def = 0,
-	}, {
-		.ops = &sc_ctrl_ops,
-		.id = V4L2_CID_2D_SRC_BLEND_FMT_PREMULTI,
-		.name = "set src blend premultiplied alpha",
-		.type = V4L2_CTRL_TYPE_BOOLEAN,
-		.flags = V4L2_CTRL_FLAG_SLIDER,
-		.step = 1,
-		.min = 0,
-		.max = 1,
-		.def = 0,
-	}, {
-		.ops = &sc_ctrl_ops,
-		.id = V4L2_CID_2D_SRC_BLEND_SET_WIDTH,
-		.name = "set src blend full width",
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.flags = V4L2_CTRL_FLAG_SLIDER,
-		.step = 1,
-		.min = 16,
-		.max = 8192,
-		.def = 16,
-	}, {
-		.ops = &sc_ctrl_ops,
-		.id = V4L2_CID_2D_SRC_BLEND_SET_HEIGHT,
-		.name = "set src blend full height",
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.flags = V4L2_CTRL_FLAG_SLIDER,
-		.step = 1,
-		.min = 16,
-		.max = 8192,
-		.def = 16,
 	}, {
 		.ops = &sc_ctrl_ops,
 		.id = SC_CID_FRAMERATE,
@@ -2660,7 +2427,6 @@ static void sc_timeout_qos_work(struct work_struct *work)
 
 	sc_remove_devfreq(&ctx->pm_qos, ctx->sc_dev->qos_table);
 	ctx->framerate = 0;
-	ctx->pm_qos_lv = -1;
 
 	mutex_unlock(&ctx->pm_qos_lock);
 }
@@ -2700,7 +2466,6 @@ static int sc_open(struct file *file)
 	/* Default color format */
 	ctx->s_frame.sc_fmt = &sc_formats[0];
 	ctx->d_frame.sc_fmt = &sc_formats[0];
-	ctx->src_blend_frame.sc_fmt = &sc_formats[0];
 
 	if (!IS_ERR(sc->pclk)) {
 		ret = clk_prepare(sc->pclk);
@@ -2805,8 +2570,6 @@ static void sc_job_finish(struct sc_dev *sc, struct sc_ctx *ctx)
 
 	spin_lock_irqsave(&sc->slock, flags);
 
-	del_timer(&sc->wdt.timer);
-
 	if (ctx->context_type == SC_CTX_V4L2_TYPE) {
 		ctx = v4l2_m2m_get_curr_priv(sc->m2m.m2m_dev);
 		if (!ctx || !ctx->m2m_ctx) {
@@ -2882,38 +2645,22 @@ static void sc_watchdog(unsigned long arg)
 
 }
 
-static void sc_set_csc_coef(struct sc_ctx *ctx, struct sc_frame *s_frame,
-		struct sc_frame *d_frame, bool is_2nd_processing)
+static void sc_set_csc_coef(struct sc_ctx *ctx)
 {
+	struct sc_frame *s_frame, *d_frame;
 	struct sc_dev *sc;
 	enum sc_csc_idx idx;
 
 	sc = ctx->sc_dev;
+	s_frame = &ctx->s_frame;
+	d_frame = &ctx->d_frame;
 
-	if (test_bit(CTX_INT_FRAME, &ctx->flags) && ctx->bl_op) {
-	/* MSCL blending is always blending from YUV to YUV.
-	 * 1st processing is scaling from YUV to YUV.
-	 * So, in 1st processing idx should be NO_CSC.
-	 * And, 2st processing is blending and scaling from YUV to YUV.
-	 * But, HW get RGB as output of blending.
-	 * And then, do CSC from RGB to YUV automatically.
-	 * So, we should consider this as CSC from YUV to RGB,
-	 * although it is CSC from YUV to YUV.
-	 */
-		if (is_2nd_processing)
-			idx = CSC_Y2R;
-		else
-			idx = NO_CSC;
-	} else {
-		if (s_frame->sc_fmt->is_alphablend_fmt)
-			idx = CSC_Y2R;
-		else if (s_frame->sc_fmt->is_rgb == d_frame->sc_fmt->is_rgb)
-			idx = NO_CSC;
-		else if (s_frame->sc_fmt->is_rgb)
-			idx = CSC_R2Y;
-		else
-			idx = CSC_Y2R;
-	}
+	if (s_frame->sc_fmt->is_rgb == d_frame->sc_fmt->is_rgb)
+		idx = NO_CSC;
+	else if (s_frame->sc_fmt->is_rgb)
+		idx = CSC_R2Y;
+	else
+		idx = CSC_Y2R;
 
 	sc_hwset_csc_coef(sc, idx, &ctx->csc);
 }
@@ -2946,8 +2693,6 @@ static bool sc_process_2nd_stage(struct sc_dev *sc, struct sc_ctx *ctx)
 			walign, &s_frame->crop.height, limit->min_h,
 			limit->max_h, halign, 0);
 
-	sc_set_csc_coef(ctx, s_frame, d_frame, true);
-
 	sc_hwset_src_image_format(sc, s_frame->sc_fmt);
 	sc_hwset_dst_image_format(sc, d_frame->sc_fmt);
 	sc_hwset_src_imgsize(sc, s_frame);
@@ -2975,26 +2720,12 @@ static bool sc_process_2nd_stage(struct sc_dev *sc, struct sc_ctx *ctx)
 	}
 
 	/* no rotation */
-	if (ctx->bl_op) {
-		if (sc->variant->blending) {
-			struct sc_frame *src_blend_frame =
-					&ctx->src_blend_frame;
-			sc_hwset_blend_src_addr(sc, src_blend_frame);
-			sc_hwset_blend(sc, ctx->bl_op, ctx->pre_multi,
-				       ctx->g_alpha, &ctx->src_blend_cfg);
-		} else {
-			sc_hwset_blend(sc, ctx->bl_op, ctx->pre_multi,
-				       ctx->g_alpha, NULL);
-		}
-	}
 
 	sc_hwset_hratio(sc, h_ratio, pre_h_ratio);
 	sc_hwset_vratio(sc, v_ratio, pre_v_ratio);
 
-	if (!sc->variant->is_bilinear) {
-		sc_hwset_polyphase_hcoef(sc, h_ratio, h_ratio, 0);
-		sc_hwset_polyphase_vcoef(sc, v_ratio, v_ratio, 0);
-	}
+	sc_hwset_polyphase_hcoef(sc, h_ratio, h_ratio, 0);
+	sc_hwset_polyphase_vcoef(sc, v_ratio, v_ratio, 0);
 
 	sc_hwset_src_pos(sc, s_frame->crop.left, s_frame->crop.top,
 			s_frame->sc_fmt->h_shift, s_frame->sc_fmt->v_shift);
@@ -3024,10 +2755,19 @@ static bool sc_process_2nd_stage(struct sc_dev *sc, struct sc_ctx *ctx)
 static void sc_set_dithering(struct sc_ctx *ctx)
 {
 	struct sc_dev *sc = ctx->sc_dev;
+	struct sc_frame *s_frame = &ctx->s_frame;
+	struct sc_frame *d_frame = &ctx->d_frame;
 	unsigned int val = 0;
 
 	if (ctx->dith)
 		val = sc_dith_val(1, 1, 1);
+
+	if (sc->variant->pixfmt_10bit) {
+		if (sc_fmt_is_s10bit_yuv(s_frame->sc_fmt->pixelformat))
+			val |= SCALER_DITH_SRC_INV;
+		if (sc_fmt_is_s10bit_yuv(d_frame->sc_fmt->pixelformat))
+			val |= SCALER_DITH_DST_EN;
+	}
 
 	sc_dbg("dither value is 0x%x\n", val);
 	sc_hwset_dith(sc, val);
@@ -3117,15 +2857,15 @@ static int sc_run_next_job(struct sc_dev *sc)
 	s_frame = &ctx->s_frame;
 	d_frame = &ctx->d_frame;
 
-	sc_hwset_init(sc);
 	sc_hwset_clk_request(sc, true);
+	sc_hwset_init(sc);
 
 	if (ctx->i_frame) {
 		set_bit(CTX_INT_FRAME, &ctx->flags);
 		d_frame = &ctx->i_frame->frame;
 	}
 
-	sc_set_csc_coef(ctx, s_frame, d_frame, false);
+	sc_set_csc_coef(ctx);
 
 	sc_hwset_src_image_format(sc, s_frame->sc_fmt);
 	sc_hwset_dst_image_format(sc, d_frame->sc_fmt);
@@ -3175,12 +2915,10 @@ static int sc_run_next_job(struct sc_dev *sc)
 	sc_hwset_hratio(sc, h_ratio, pre_h_ratio);
 	sc_hwset_vratio(sc, v_ratio, pre_v_ratio);
 
-	if (!sc->variant->is_bilinear) {
-		sc_hwset_polyphase_hcoef(sc, h_ratio, ch_ratio,
-				ctx->dnoise_ft.strength);
-		sc_hwset_polyphase_vcoef(sc, v_ratio, cv_ratio,
-				ctx->dnoise_ft.strength);
-	}
+	sc_hwset_polyphase_hcoef(sc, h_ratio, ch_ratio,
+			ctx->dnoise_ft.strength);
+	sc_hwset_polyphase_vcoef(sc, v_ratio, cv_ratio,
+			ctx->dnoise_ft.strength);
 
 	sc_hwset_src_pos(sc, s_frame->crop.left, s_frame->crop.top,
 			s_frame->sc_fmt->h_shift, s_frame->sc_fmt->v_shift);
@@ -3199,20 +2937,8 @@ static int sc_run_next_job(struct sc_dev *sc)
 
 	sc_set_dithering(ctx);
 
-	if (ctx->bl_op && !test_bit(CTX_INT_FRAME, &ctx->flags)) {
-		if (sc->variant->blending) {
-			struct sc_frame *src_blend_frame =
-					&ctx->src_blend_frame;
-			sc_hwset_blend_src_addr(sc, src_blend_frame);
-			sc_hwset_blend(sc, ctx->bl_op, ctx->pre_multi,
-							ctx->g_alpha,
-							&ctx->src_blend_cfg);
-		} else {
-			sc_hwset_blend(sc, ctx->bl_op, ctx->pre_multi,
-							ctx->g_alpha,
-							NULL);
-		}
-	}
+	if (ctx->bl_op)
+		sc_hwset_blend(sc, ctx->bl_op, ctx->pre_multi, ctx->g_alpha);
 
 	if (ctx->dnoise_ft.strength > SC_FT_BLUR)
 		sc_hwset_flip_rotation(sc, 0);
@@ -3322,12 +3048,8 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 			struct vb2_sc_buffer *svb =
 					container_of(mb, typeof(*svb), mb);
 
-			dst_vb->reserved2 =
+			dst_vb->vb2_buf.timestamp =
 				(__u32)ktime_us_delta(ktime_get(), svb->ktime);
-
-			if (sc_show_stat & 0x4)
-				dev_info(sc->dev, "H/W time : %ld us\n",
-				(unsigned long)dst_vb->reserved2);
 		}
 
 		v4l2_m2m_buf_done(src_vb,
@@ -3347,14 +3069,10 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 
 		BUG_ON(ctx->context_type != SC_CTX_M2M1SHOT_TYPE);
 
-		if (__measure_hw_latency) {
+		if (__measure_hw_latency)
 			task->task.reserved[1] =
 				(unsigned long)ktime_us_delta(
 					ktime_get(), ctx->ktime_m2m1shot);
-			if (sc_show_stat & 0x4)
-				dev_info(sc->dev, "H/W time : %ld us\n",
-				(unsigned long)task->task.reserved[1]);
-		}
 
 		m2m1shot_task_finish(sc->m21dev, task,
 					SCALER_INT_OK(irq_status));
@@ -3376,9 +3094,9 @@ isr_unlock:
 }
 
 static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
-		struct sc_frame *frame, struct sc_frame *src_blend_frame)
+		struct sc_frame *frame)
 {
-	unsigned int pixsize, bytesize, src_blend_pixsize;
+	unsigned int pixsize, bytesize;
 
 	pixsize = frame->width * frame->height;
 	bytesize = (pixsize * frame->sc_fmt->bitperpixel[0]) >> 3;
@@ -3457,57 +3175,10 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 			}
 		} else if (frame->sc_fmt->num_planes == 3) {
 			frame->addr.ioaddr[SC_PLANE_CB] = vb2_dma_sg_plane_dma_addr(vb2buf, 1);
-
-			if (frame->sc_fmt->is_alphablend_fmt) {
-				BUG_ON(!sc->variant->blending);
-				BUG_ON(src_blend_frame == NULL);
-
-				src_blend_frame->addr.ioaddr[SC_PLANE_Y] =
-					vb2_dma_sg_plane_dma_addr(vb2buf, 2);
-
-				src_blend_pixsize =
-					src_blend_frame->width *
-						src_blend_frame->height;
-
-				src_blend_frame->addr.size[SC_PLANE_Y] =
-					src_blend_pixsize *
-						frame->sc_fmt->bitperpixel[1] >> 3;
-			} else
-				frame->addr.ioaddr[SC_PLANE_CR] =
-					vb2_dma_sg_plane_dma_addr(vb2buf, 2);
-
+			frame->addr.ioaddr[SC_PLANE_CR] = vb2_dma_sg_plane_dma_addr(vb2buf, 2);
 			sc_calc_planesize(frame, pixsize);
 		} else {
-			if (frame->sc_fmt->is_alphablend_fmt) {
-				BUG_ON(!sc->variant->blending);
-				BUG_ON(src_blend_frame == NULL);
-
-				src_blend_frame->addr.ioaddr[SC_PLANE_Y] =
-					vb2_dma_sg_plane_dma_addr(vb2buf, 1);
-				src_blend_pixsize =
-					src_blend_frame->width *
-						src_blend_frame->height;
-
-				if (frame->sc_fmt->pixelformat ==
-						V4L2_PIX_FMT_NV12N_RGB32) {
-					unsigned int w = frame->width;
-					unsigned int h = frame->height;
-
-					frame->addr.ioaddr[SC_PLANE_CB] =
-						NV12N_CBCR_BASE(frame->addr.ioaddr[SC_PLANE_Y], w, h);
-					frame->addr.size[SC_PLANE_Y] = NV12N_Y_SIZE(w, h);
-					frame->addr.size[SC_PLANE_CB] = NV12N_CBCR_SIZE(w, h);
-				} else {
-					frame->addr.ioaddr[SC_PLANE_CB] = frame->addr.ioaddr[SC_PLANE_Y] + pixsize;
-					frame->addr.size[SC_PLANE_Y] = pixsize;
-					frame->addr.size[SC_PLANE_CB] = bytesize - pixsize;
-				}
-
-				src_blend_frame->addr.size[SC_PLANE_Y] =
-					src_blend_pixsize *
-						frame->sc_fmt->bitperpixel[1] >> 3;
-			} else
-				dev_err(sc->dev, "Please check the num of comp\n");
+			dev_err(sc->dev, "Please check the num of comp\n");
 		}
 		break;
 	default:
@@ -3521,16 +3192,10 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 		frame->addr.ioaddr[SC_PLANE_CR] = t_cb;
 	}
 
-	sc_dbg("y addr %pa y size %#x\n", &frame->addr.ioaddr[SC_PLANE_Y],
-			frame->addr.size[SC_PLANE_Y]);
-	sc_dbg("cb addr %pa cb size %#x\n", &frame->addr.ioaddr[SC_PLANE_CB],
-			frame->addr.size[SC_PLANE_CB]);
-	sc_dbg("cr addr %pa cr size %#x\n", &frame->addr.ioaddr[SC_PLANE_CR],
-			frame->addr.size[SC_PLANE_CR]);
-	if (frame->sc_fmt->is_alphablend_fmt == 1)
-		sc_dbg("src blend addr %pa src blend sz %#x\n",
-				&src_blend_frame->addr.ioaddr[SC_PLANE_Y],
-				src_blend_frame->addr.size[SC_PLANE_Y]);
+	sc_dbg("y addr %pa y size %#x\n", &frame->addr.ioaddr[SC_PLANE_Y], frame->addr.size[SC_PLANE_Y]);
+	sc_dbg("cb addr %pa cb size %#x\n", &frame->addr.ioaddr[SC_PLANE_CB], frame->addr.size[SC_PLANE_CB]);
+	sc_dbg("cr addr %pa cr size %#x\n", &frame->addr.ioaddr[SC_PLANE_CR], frame->addr.size[SC_PLANE_CR]);
+
 	return 0;
 }
 
@@ -3538,23 +3203,30 @@ static void sc_m2m_device_run(void *priv)
 {
 	struct sc_ctx *ctx = priv;
 	struct sc_dev *sc = ctx->sc_dev;
-	struct sc_frame *s_frame, *d_frame, *src_blend_frame;
+	struct sc_frame *s_frame, *d_frame;
+	struct vb2_buffer *src_vb, *dst_vb;
+	struct vb2_v4l2_buffer *src_vb_v4l2, *dst_vb_v4l2;
 
 	s_frame = &ctx->s_frame;
 	d_frame = &ctx->d_frame;
 
-	if (sc->variant->blending && ctx->bl_op) {
-		src_blend_frame = &ctx->src_blend_frame;
+	src_vb = v4l2_m2m_next_src_buf(ctx->m2m_ctx);
+	dst_vb = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
 
-		BUG_ON(!s_frame->sc_fmt->is_alphablend_fmt);
-		BUG_ON(!ctx->src_blend_cfg.blend_src_width);
-		BUG_ON(!ctx->src_blend_cfg.blend_src_height);
-	} else
-		src_blend_frame = NULL;
+	if (src_vb->state == VB2_BUF_STATE_ERROR ||
+	    dst_vb->state == VB2_BUF_STATE_ERROR) {
+		src_vb_v4l2 = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+		dst_vb_v4l2 = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
 
-	sc_get_bufaddr(sc, v4l2_m2m_next_src_buf(ctx->m2m_ctx),	s_frame,
-							src_blend_frame);
-	sc_get_bufaddr(sc, v4l2_m2m_next_dst_buf(ctx->m2m_ctx), d_frame, NULL);
+		v4l2_m2m_buf_done(src_vb_v4l2, VB2_BUF_STATE_ERROR);
+		v4l2_m2m_buf_done(dst_vb_v4l2, VB2_BUF_STATE_ERROR);
+
+		v4l2_m2m_job_finish(sc->m2m.m2m_dev, ctx->m2m_ctx);
+		return;
+	}
+
+	sc_get_bufaddr(sc, src_vb, s_frame);
+	sc_get_bufaddr(sc, dst_vb, d_frame);
 
 	sc_add_context_and_run(sc, ctx);
 }
@@ -3873,17 +3545,57 @@ static int sc_m2m1shot_prepare_operation(struct m2m1shot_context *m21ctx,
 	return sc_prepare_denoise_filter(m21ctx->priv);
 }
 
+/*
+ * This function should be used for source buffer only.
+ * In case of destination buffer, plane->bytes_used is not valid.
+ */
+static int sc_m2m1shot_check_src_plane_size(
+			struct m2m1shot_buffer_plane_dma *plane,
+			enum dma_data_direction dir, u32 min_size)
+{
+	if ((dir != DMA_TO_DEVICE) || !min_size)
+		return 0;
+
+	if (plane->dmabuf) {
+		if (plane->bytes_used < min_size &&
+				plane->dmabuf->size < min_size)
+			return -EINVAL;
+	} else {
+		if (plane->bytes_used < min_size)
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int sc_m2m1shot_prepare_buffer(struct m2m1shot_context *m21ctx,
 			struct m2m1shot_buffer_dma *buf_dma,
 			int plane,
 			enum dma_data_direction dir)
 {
+	struct sc_ctx *ctx = m21ctx->priv;
+	u32 min_size = ctx->sc_dev->variant->minsize_srcplane;
 	int ret;
 
 	ret = m2m1shot_map_dma_buf(m21ctx->m21dev->dev,
 				&buf_dma->plane[plane], dir);
 	if (ret)
 		return ret;
+
+	/* Plane size checking is needed for source buffer */
+	if (dir == DMA_TO_DEVICE) {
+		ret = sc_m2m1shot_check_src_plane_size(
+				&buf_dma->plane[plane], dir, min_size);
+		if (ret) {
+			dev_err(ctx->sc_dev->dev,
+				"plane%d size %d is smaller than %d\n",
+				plane, buf_dma->plane[plane].bytes_used,
+				min_size);
+			m2m1shot_unmap_dma_buf(m21ctx->m21dev->dev,
+					&buf_dma->plane[plane], dir);
+			return ret;
+		}
+	}
 
 	ret = m2m1shot_dma_addr_map(m21ctx->m21dev->dev, buf_dma, plane, dir);
 	if (ret) {
@@ -4280,6 +3992,67 @@ static int sc_populate_dt(struct sc_dev *sc)
 	return 0;
 }
 
+#ifdef CONFIG_EXYNOS_ITMON
+static bool sc_itmon_check(struct sc_dev *sc, char *str_itmon, char *str_attr)
+{
+	const char *name = NULL;
+
+	if (!str_itmon)
+		return false;
+
+	of_property_read_string(sc->dev->of_node, str_attr, &name);
+	if (!name)
+		return false;
+
+	if (strncmp(str_itmon, name, strlen(name)) == 0)
+		return true;
+
+	return false;
+}
+
+static int sc_itmon_notifier(struct notifier_block *nb,
+			unsigned long action, void *nb_data)
+{
+	struct sc_dev *sc = container_of(nb, struct sc_dev, itmon_nb);
+	struct itmon_notifier *itmon_info = nb_data;
+	static int called_count;
+
+	if (called_count != 0) {
+		dev_info(sc->dev, "%s is called %d times, ignore it.\n",
+				__func__, called_count);
+		return NOTIFY_DONE;
+	}
+
+	if (sc_itmon_check(sc, itmon_info->master, "itmon,master")) {
+		if (test_bit(DEV_RUN, &sc->state)) {
+			if (sc->current_ctx)
+				sc_ctx_dump(sc->current_ctx);
+			sc_hwregs_dump(sc);
+			exynos_sysmmu_show_status(sc->dev);
+		} else {
+			dev_info(sc->dev, "MSCL is not running!\n");
+		}
+		called_count++;
+	} else if (sc_itmon_check(sc, itmon_info->dest, "itmon,dest")) {
+		if (test_bit(DEV_RUN, &sc->state)) {
+			if (sc->current_ctx)
+				sc_ctx_dump(sc->current_ctx);
+			if (itmon_info->onoff) {
+				sc_hwregs_dump(sc);
+				exynos_sysmmu_show_status(sc->dev);
+			} else {
+				dev_info(sc->dev, "MSCL power is disabled!\n");
+			}
+		} else {
+			dev_info(sc->dev, "MSCL is not running!\n");
+		}
+		called_count++;
+	}
+
+	return NOTIFY_DONE;
+}
+#endif
+
 static int sc_probe(struct platform_device *pdev)
 {
 	struct sc_dev *sc;
@@ -4429,6 +4202,11 @@ static int sc_probe(struct platform_device *pdev)
 	pm_runtime_put(&pdev->dev);
 
 	iovmm_set_fault_handler(&pdev->dev, sc_sysmmu_fault_handler, sc);
+
+#ifdef CONFIG_EXYNOS_ITMON
+	sc->itmon_nb.notifier_call = sc_itmon_notifier;
+	itmon_notifier_chain_register(&sc->itmon_nb);
+#endif
 
 	dev_info(&pdev->dev,
 		"Driver probed successfully(version: %08x(%x))\n",

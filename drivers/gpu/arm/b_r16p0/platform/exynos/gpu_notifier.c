@@ -54,10 +54,16 @@ static int gpu_pm_qos_notifier(struct notifier_block *nb,
 
 	if (pm_qos_class == PM_QOS_GPU_THROUGHPUT_MAX) {
 		/* TO DO FOR MAX LOCK */
-		gpu_dvfs_clock_lock(GPU_DVFS_MAX_LOCK, PMQOS_LOCK, val);
+		if ( val > 0)
+			gpu_dvfs_clock_lock(GPU_DVFS_MAX_LOCK, PMQOS_LOCK, val);
+		else
+			gpu_dvfs_clock_lock(GPU_DVFS_MAX_UNLOCK, PMQOS_LOCK, -1);
 	} else if (pm_qos_class == PM_QOS_GPU_THROUGHPUT_MIN) {
 		/* TO DO FOR MIN LOCK */
-		gpu_dvfs_clock_lock(GPU_DVFS_MIN_LOCK, PMQOS_LOCK, val);
+		if ( val > 0)
+			gpu_dvfs_clock_lock(GPU_DVFS_MIN_LOCK, PMQOS_LOCK, val);
+		else
+			gpu_dvfs_clock_lock(GPU_DVFS_MIN_UNLOCK, PMQOS_LOCK, -1);
 	} else {
 		/* invalid PM QoS class */
 		return -EINVAL;
@@ -94,7 +100,7 @@ static int gpu_tmu_notifier(struct notifier_block *notifier,
 {
 	int frequency;
 	struct exynos_context *platform = (struct exynos_context *)pkbdev->platform_context;
-#if defined(CONFIG_DEBUG_SNAPSHOT) || defined(CONFIG_EXYNOS_SNAPSHOT_THERMAL)
+#if defined(CONFIG_DEBUG_SNAPSHOT_THERMAL) || defined(CONFIG_EXYNOS_SNAPSHOT_THERMAL)
 	char *cooling_device_name = "GPU";
 #endif
 
@@ -117,7 +123,7 @@ static int gpu_tmu_notifier(struct notifier_block *notifier,
 #endif
 #if defined(CONFIG_EXYNOS_SNAPSHOT_THERMAL)
 		exynos_ss_thermal(NULL, 0, cooling_device_name, frequency);
-#elif defined(CONFIG_DEBUG_SNAPSHOT)
+#elif defined(CONFIG_DEBUG_SNAPSHOT_THERMAL)
 		dbg_snapshot_thermal(NULL, 0, cooling_device_name, frequency);
 #endif
 	}
@@ -210,7 +216,6 @@ static void gpu_power_suspend(struct kbase_device *kbdev)
 		return;
 
 	GPU_LOG(DVFS_INFO, DUMMY, 0u, 0u, "power suspend\n");
-#ifdef CONFIG_MALI_RT_PM
 	if (platform->dvs_status)
 		gpu_control_enable_customization(kbdev);
 
@@ -219,7 +224,6 @@ static void gpu_power_suspend(struct kbase_device *kbdev)
 #ifdef CONFIG_MALI_DVFS
 	if (platform->early_clk_gating_status)
 		gpu_control_disable_clock(kbdev);
-#endif
 #endif
 
 	platform->power_runtime_suspend_ret = ret;

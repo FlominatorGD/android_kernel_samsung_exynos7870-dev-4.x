@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_vss.c
+/* sound/soc/samsung/abox/abox_vss.c
  *
  * ALSA SoC Audio Layer - Samsung Abox VSS driver
  *

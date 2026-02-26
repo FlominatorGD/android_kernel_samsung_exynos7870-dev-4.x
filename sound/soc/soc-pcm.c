@@ -31,6 +31,9 @@
 #include <sound/soc.h>
 #include <sound/soc-dpcm.h>
 #include <sound/initval.h>
+#if defined(CONFIG_SEC_ABC)
+#include <linux/sti/abc_common.h>
+#endif
 
 #define DPCM_MAX_BE_USERS	8
 
@@ -584,6 +587,10 @@ dynamic:
 	return 0;
 
 config_err:
+#if defined(CONFIG_SEC_ABC)
+	dev_err(platform->dev, "ASoC:Notify sec abc driver of soc_pcm_open_fail\n");
+	sec_abc_send_event("MODULE=sound@ERROR=soc_pcm_open_fail");
+#endif
 	if (rtd->dai_link->ops && rtd->dai_link->ops->shutdown)
 		rtd->dai_link->ops->shutdown(substream);
 
@@ -2865,10 +2872,10 @@ EXPORT_SYMBOL_GPL(snd_soc_dpcm_be_set_state);
 int snd_soc_dpcm_can_be_free_stop(struct snd_soc_pcm_runtime *fe,
 		struct snd_soc_pcm_runtime *be, int stream)
 {
-	struct snd_soc_dpcm *dpcm;
+	struct snd_soc_dpcm *dpcm, *tmp;
 	int state;
 
-	list_for_each_entry(dpcm, &be->dpcm[stream].fe_clients, list_fe) {
+	list_for_each_entry_safe(dpcm, tmp, &be->dpcm[stream].fe_clients, list_fe) {
 
 		if (dpcm->fe == fe)
 			continue;

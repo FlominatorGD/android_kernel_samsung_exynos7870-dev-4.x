@@ -34,6 +34,18 @@ struct exynos_devfreq_opp_table {
 	u32 volt;
 };
 
+struct um_exynos {
+	struct list_head node;
+	void __iomem **va_base;
+	u32 *pa_base;
+	u32 *mask_v;
+	u32 *mask_a;
+	u32 *channel;
+	unsigned int um_count;
+	u64 val_ccnt;
+	u64 val_pmcnt;
+};
+
 struct exynos_devfreq_data {
 	struct device				*dev;
 	struct devfreq				*devfreq;
@@ -98,6 +110,14 @@ struct exynos_devfreq_data {
 	bool					use_acpm;
 	bool					bts_update;
 	bool					update_fvp;
+	bool					use_get_dev;
+
+	struct devfreq_notifier_block		*um_nb;
+	struct um_exynos			um_data;
+	u64					last_monitor_period;
+	u64					last_monitor_time;
+	u32					last_um_usage_rate;
+
 	struct exynos_pm_domain *pm_domain;
 };
 

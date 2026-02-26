@@ -33,18 +33,33 @@
 
 #include "decon.h"
 /* TODO: SoC dependency will be removed */
-#if defined(CONFIG_SOC_EXYNOS9610)
-#include "./cal_9610/regs-dpp.h"
-#include "./cal_9610/dpp_cal.h"
+#if defined(CONFIG_SOC_EXYNOS9810)
+#include "./cal_9810/regs-dpp.h"
+#include "./cal_9810/dpp_cal.h"
+#elif defined(CONFIG_SOC_EXYNOS9820)
+#include "./cal_9820/regs-dpp.h"
+#include "./cal_9820/dpp_cal.h"
+#elif defined(CONFIG_SOC_EXYNOS9110)
+#include "./cal_9110/regs-dpp.h"
+#include "./cal_9110/dpp_cal.h"
+#endif
+#ifdef CONFIG_EXYNOS_MCD_HDR
+#include "./mcd_hdr/hdr_drv.h"
 #endif
 
 extern int dpp_log_level;
 
 #define DPP_MODULE_NAME		"exynos-dpp"
-#define MAX_DPP_CNT		5 /* + ODMA case */
+#define MAX_DPP_CNT		7 /* + ODMA case */
+#define MAX_FMT_CNT		64
+#define DEFAULT_FMT_CNT		10
 
 /* about 1msec @ ACLK=630MHz */
 #define INIT_RCV_NUM		630000
+
+#define P010_Y_SIZE(w, h)		((w) * (h) * 2)
+#define P010_CBCR_SIZE(w, h)		((w) * (h))
+#define P010_CBCR_BASE(base, w, h)	((base) + P010_Y_SIZE((w), (h)))
 
 #define check_align(width, height, align_w, align_h)\
 	(IS_ALIGNED(width, align_w) && IS_ALIGNED(height, align_h))
@@ -57,6 +72,7 @@ extern int dpp_log_level;
 			&& (config->format <= DECON_PIXEL_FORMAT_YVU422_3P))
 #define is_yuv420(config) ((config->format >= DECON_PIXEL_FORMAT_NV12) \
 			&& (config->format <= DECON_PIXEL_FORMAT_YVU420M))
+#define is_afbc(config) (config->compression)
 
 #define dpp_err(fmt, ...)							\
 	do {									\
@@ -99,6 +115,7 @@ enum dpp_csc_defs {
 	/* csc_id used in csc_3x3_t[] : increase by even value */
 	DPP_CSC_ID_BT_2020 = 0,
 	DPP_CSC_ID_DCI_P3 = 2,
+	CSC_CUSTOMIZED_START = 4,
 };
 
 enum dpp_state {
@@ -112,6 +129,13 @@ enum dpp_reg_area {
 	REG_AREA_DMA_COM,
 };
 
+#ifdef CONFIG_EXYNOS_MCD_HDR
+enum hdr_path {
+	HDR_PATH_LSI = 0,
+	HDR_PATH_MCD,
+};
+
+#endif
 enum dpp_attr {
 	DPP_ATTR_AFBC		= 0,
 	DPP_ATTR_BLOCK		= 1,
@@ -120,8 +144,9 @@ enum dpp_attr {
 	DPP_ATTR_CSC		= 4,
 	DPP_ATTR_SCALE		= 5,
 	DPP_ATTR_HDR		= 6,
-	DPP_ATTR_HDR10		= 7,
-
+	DPP_ATTR_C_HDR		= 7,
+	DPP_ATTR_C_HDR10_PLUS	= 8,
+	DPP_ATTR_WCG		= 9,
 	DPP_ATTR_IDMA		= 16,
 	DPP_ATTR_ODMA		= 17,
 	DPP_ATTR_DPP		= 18,
@@ -145,6 +170,11 @@ struct dpp_debug {
 struct dpp_config {
 	struct decon_win_config config;
 	unsigned long rcv_num;
+#ifdef CONFIG_EXYNOS_MCD_HDR
+	u32 wcg_mode;
+	//struct exynos_video_meta meta;
+	struct dpp_hdr10_info hdr_info;
+#endif
 };
 
 struct dpp_size_range {
@@ -175,8 +205,13 @@ struct dpp_restriction {
 
 	u32 src_h_rot_max; /* limit of source img height in case of rotation */
 
-	u32 *format; /* supported format list for each DPP channel */
-	u32 reserved[8];
+	u32 format[MAX_FMT_CNT]; /* supported format list for each DPP channel */
+	int format_cnt;
+
+	u32 scale_down;
+	u32 scale_up;
+
+	u32 reserved[6];
 };
 
 struct dpp_ch_restriction {
@@ -190,6 +225,7 @@ struct dpp_ch_restriction {
 struct dpp_restrictions_info {
 	u32 ver; /* version of dpp_restrictions_info structure */
 	struct dpp_ch_restriction dpp_ch[MAX_DPP_CNT];
+	int dpp_cnt;
 	u32 reserved[4];
 };
 
@@ -208,6 +244,11 @@ struct dpp_device {
 	spinlock_t dma_slock;
 	struct mutex lock;
 	struct dpp_restriction restriction;
+#ifdef CONFIG_EXYNOS_MCD_HDR
+	struct v4l2_subdev *mcd_sd;
+	u32 wcg_src_cm;
+	u32 wcg_dst_cm;
+#endif
 };
 
 extern struct dpp_device *dpp_drvdata[MAX_DPP_CNT];
@@ -322,7 +363,7 @@ static inline void dpp_select_format(struct dpp_device *dpp,
 
 void dpp_dump(struct dpp_device *dpp);
 
-#define DPP_WIN_CONFIG			_IOW('P', 0, struct decon_win_config)
+#define DPP_WIN_CONFIG			_IOW('P', 0, struct dpp_config)
 #define DPP_STOP			_IOW('P', 1, unsigned long)
 #define DPP_DUMP			_IOW('P', 2, u32)
 #define DPP_WB_WAIT_FOR_FRAMEDONE	_IOR('P', 3, u32)
@@ -331,5 +372,6 @@ void dpp_dump(struct dpp_device *dpp);
 #define DPP_AFBC_ATTR_ENABLED		_IOR('P', 6, unsigned long)
 #define DPP_GET_PORT_NUM		_IOR('P', 7, unsigned long)
 #define DPP_GET_RESTRICTION		_IOR('P', 8, unsigned long)
+#define DPP_GET_RECOVERY_CNT		_IOR('P', 20, unsigned long)
 
 #endif /* __SAMSUNG_DPP_H__ */

@@ -1,10 +1,19 @@
 /*
- * phy-exynos-usb3p1-reg.h
+ * Copyright (c) 2017 Samsung Electronics Co., Ltd.
+ *              http://www.samsung.com
  *
- *  Created on: Oct 27, 2016
- *      Author: sung-hyun na
- *		jee-woong oh
- *		dae-man ko
+ * Author: Sung-Hyun Na <sunghyun.na@samsung.com>
+ *
+ * Chip Abstraction Layer for USB PHY
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef DRIVER_USB_USBPHY_CAL_PHY_EXYNOS_USB3P1_REG_H_
@@ -143,12 +152,10 @@
 #define SSP_CRCTL1_CR_ACK			(0x1 << 0)
 
 #define EXYNOS_USBCON_COMBO_PMA_CTRL	(0x48)
-/* S5E9820 added */
 #define PMA_REF_SOC_PLL_SSC                    (0x1 << 16)
 #define PMA_ROPLL_REF_REQ_MASK                 (0x3 << 12)
 #define PMA_ROPLL_REF_REQ_SET(_x)                      ((_x & 0x3) << 12)
 #define PMA_ROPLL_REF_REQ_GET(_x)                      ((_x & (0x3 << 12)) >> 12)
-/* S5E9820 added */
 #define PMA_PLL_REF_REQ_MASK			(0x3 << 10)
 #define PMA_PLL_REF_REQ_SET(_x)			((_x & 0x3) << 10)
 #define PMA_PLL_REF_REQ_GET(_x)			((_x & (0x3 << 10)) >> 10)

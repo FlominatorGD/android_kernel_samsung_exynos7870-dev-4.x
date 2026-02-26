@@ -22,6 +22,7 @@
 
 extern void phy_exynos_usbdp_enable(struct exynos_usbphy_info *);
 extern void phy_exynos_usbdp_ilbk(struct exynos_usbphy_info *info);
+extern void phy_exynos_usbdp_pcs_reset(struct exynos_usbphy_info *info);
 extern int phy_exynos_usbdp_check_pll_lock(struct exynos_usbphy_info *info);
 extern void phy_exynos_usbdp_disable(struct exynos_usbphy_info *);
 extern void phy_exynos_usbdp_tune_each(struct exynos_usbphy_info *, char *, int);

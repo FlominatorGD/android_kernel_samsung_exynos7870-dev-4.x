@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_dbg.h
+/* sound/soc/samsung/abox/abox_dbg.h
  *
  * ALSA SoC - Samsung Abox Debug driver
  *

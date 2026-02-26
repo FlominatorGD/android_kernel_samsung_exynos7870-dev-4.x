@@ -676,7 +676,7 @@ TRACE_EVENT(sched_fluid_activated_cpus,
 		__field(	int,		cpu		)
 		__field(	int,		util_sum	)
 		__field(	int,		busy_thr	)
-		__field(	unsigned long,	prefer_mask	)
+		__field(	unsigned int,	prefer_mask	)
 	),
 
 	TP_fast_assign(
@@ -865,8 +865,7 @@ TRACE_EVENT(sched_load_se,
 		__entry->cpu = __trace_sched_cpu(gcfs_rq, se);
 		__trace_sched_path(gcfs_rq, __get_dynamic_array(path),
 				   __get_dynamic_array_len(path));
-		memcpy(__entry->comm, p ? p->comm : "(null)",
-				      p ? TASK_COMM_LEN : sizeof("(null)"));
+		memcpy(__entry->comm, p ? p->comm : "(null)", TASK_COMM_LEN);
 		__entry->pid = p ? p->pid : -1;
 		__entry->load = se->avg.load_avg;
 		__entry->util = se->avg.util_avg;
@@ -1103,22 +1102,27 @@ TRACE_EVENT(sched_boost_task,
 /*
  * Tracepoint for system overutilized flag
  */
-TRACE_EVENT(sched_overutilized,
+struct sched_domain;
+TRACE_EVENT_CONDITION(sched_overutilized,
 
-	TP_PROTO(int overutilized),
+	TP_PROTO(struct sched_domain *sd, bool was_overutilized, bool overutilized),
 
-	TP_ARGS(overutilized),
+	TP_ARGS(sd, was_overutilized, overutilized),
+
+	TP_CONDITION(overutilized != was_overutilized),
 
 	TP_STRUCT__entry(
-		__field( int,  overutilized    )
+		__field( bool,	overutilized	  )
+		__array( char,  cpulist , 32      )
 	),
 
 	TP_fast_assign(
-		__entry->overutilized   = overutilized;
+		__entry->overutilized	= overutilized;
+		scnprintf(__entry->cpulist, sizeof(__entry->cpulist), "%*pbl", cpumask_pr_args(sched_domain_span(sd)));
 	),
 
-	TP_printk("overutilized=%d",
-		__entry->overutilized)
+	TP_printk("overutilized=%d sd_span=%s",
+		__entry->overutilized ? 1 : 0, __entry->cpulist)
 );
 
 /*

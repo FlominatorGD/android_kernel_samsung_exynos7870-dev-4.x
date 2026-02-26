@@ -29,12 +29,9 @@
 #include <linux/debugfs.h>
 
 #include <linux/mfd/samsung/core.h>
-#if defined(CONFIG_EXYNOS_BCM_DBG)
 #include <soc/samsung/exynos-bcm_dbg.h>
-#endif
 
 #include <soc/samsung/exynos-cpupm.h>
-#include <soc/samsung/exynos-devfreq.h>
 #include <dt-bindings/power/exynos-power.h>
 
 #define EXYNOS_PD_PREFIX	"EXYNOS-PD: "
@@ -72,7 +69,6 @@ struct exynos_pm_domain {
 #endif
 	bool power_down_skipped;
 	unsigned int need_smc;
-	bool skip_idle_ip;
 };
 
 struct exynos_pd_dbg_info {

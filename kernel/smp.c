@@ -567,6 +567,7 @@ void __init setup_nr_cpu_ids(void)
 }
 
 /* Called by boot processor to activate the rest. */
+bool smp_init_done = false;
 void __init smp_init(void)
 {
 	int num_nodes, num_cpus;
@@ -597,6 +598,7 @@ void __init smp_init(void)
 
 	/* Any cleanup work */
 	smp_cpus_done(setup_max_cpus);
+	smp_init_done = true;
 }
 
 /*

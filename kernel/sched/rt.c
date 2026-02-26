@@ -8,18 +8,19 @@
 
 #include <linux/slab.h>
 #include <linux/irq_work.h>
+#include <linux/ems.h>
 
 #include "tune.h"
 
 #include "walt.h"
-#include "sched-pelt.h"
-#include "ems/ems.h"
 #include <trace/events/sched.h>
 
 #ifdef CONFIG_SCHED_USE_FLUID_RT
 struct frt_dom {
 	unsigned int		coverage_ratio;
+	unsigned int		coverage_thr;
 	unsigned int		active_ratio;
+	unsigned int		active_thr;
 	int			coregroup;
 	struct cpumask		cpus;
 
@@ -44,6 +45,8 @@ static struct kobject *frt_kobj;
 #define cpu_util(rq) (rq->cfs.avg.util_avg + rq->rt.avg.util_avg)
 #define ratio_scale(v, r) (((v) * (r) * 10) >> RATIO_SCALE_SHIFT)
 
+static int frt_set_coverage_ratio(int cpu);
+static int frt_set_active_ratio(int cpu);
 struct frt_attr {
 	struct attribute attr;
 	ssize_t (*show)(struct kobject *, char *);
@@ -73,6 +76,7 @@ static ssize_t store_##_name(struct kobject *k, const char *buf, size_t count)	\
 										\
 	val = val > _max ? _max : val;						\
 	dom->_name = (_type)val;						\
+	frt_set_##_name(cpumask_first(&dom->cpus));				\
 										\
 	return count;								\
 }
@@ -81,14 +85,14 @@ static ssize_t show_coverage_ratio(struct kobject *k, char *buf)
 {
 	struct frt_dom *dom = container_of(k, struct frt_dom, kobj);
 
-	return sprintf(buf, "%u\n", dom->coverage_ratio);
+	return sprintf(buf, "%u (%u)\n", dom->coverage_ratio, dom->coverage_thr);
 }
 
 static ssize_t show_active_ratio(struct kobject *k, char *buf)
 {
 	struct frt_dom *dom = container_of(k, struct frt_dom, kobj);
 
-	return sprintf(buf, "%u\n", dom->active_ratio);
+	return sprintf(buf, "%u (%u)\n", dom->active_ratio, dom->active_thr);
 }
 
 frt_store(coverage_ratio, int, 100);
@@ -121,7 +125,6 @@ static struct attribute *dom_frt_attrs[] = {
 	&active_ratio_attr.attr,
 	NULL
 };
-
 static struct kobj_type ktype_frt = {
 	.sysfs_ops	= &frt_sysfs_ops,
 	.default_attrs	= dom_frt_attrs,
@@ -159,23 +162,11 @@ static const struct attribute_group frt_group = {
 static int frt_find_prefer_cpu(struct task_struct *task)
 {
 	int cpu, allowed_cpu = 0;
-	unsigned long coverage_thr;
+	unsigned int coverage_thr;
 	struct frt_dom *dom;
 
 	list_for_each_entry(dom, &frt_list, list) {
-		unsigned long capacity;
-		struct cpumask active_cpus;
-		int first_cpu;
-
-		cpumask_and(&active_cpus, &dom->cpus, cpu_active_mask);
-		first_cpu = cpumask_first(&active_cpus);
-		/* all cpus of domain are off */
-		if (first_cpu == NR_CPUS)
-			continue;
-
-		capacity = capacity_cpu(first_cpu, 0);
-		coverage_thr = ratio_scale(capacity, dom->coverage_ratio);
-
+		coverage_thr = per_cpu(frt_rqs, cpumask_first(&dom->cpus))->coverage_thr;
 		for_each_cpu_and(cpu, &task->cpus_allowed, &dom->cpus) {
 			allowed_cpu = cpu;
 			if (task->rt.avg.util_avg < coverage_thr)
@@ -183,6 +174,35 @@ static int frt_find_prefer_cpu(struct task_struct *task)
 		}
 	}
 	return allowed_cpu;
+}
+
+static int frt_set_active_ratio(int cpu)
+{
+	unsigned long capacity;
+	struct frt_dom *dom = per_cpu(frt_rqs, cpu);
+
+	if (!dom || !cpu_active(cpu))
+		return -1;
+
+	capacity = get_cpu_max_capacity(cpu, 0) *
+			cpumask_weight(cpu_coregroup_mask(cpu));
+	dom->active_thr = ratio_scale(capacity, dom->active_ratio);
+
+	return 0;
+}
+
+static int frt_set_coverage_ratio(int cpu)
+{
+	unsigned long capacity;
+	struct frt_dom *dom = per_cpu(frt_rqs, cpu);
+
+	if (!dom || !cpu_active(cpu))
+		return -1;
+
+	capacity = get_cpu_max_capacity(cpu, 0);
+	dom->coverage_thr = ratio_scale(capacity, dom->coverage_ratio);
+
+	return 0;
 }
 
 static const struct cpumask *get_activated_cpus(void)
@@ -221,7 +241,7 @@ static void update_activated_cpus(void)
 			dom_util_sum += cpu_util(rq);
 		}
 
-		capacity = capacity_cpu_orig(first_cpu, 0) * cpumask_weight(&active_cpus);
+		capacity = get_cpu_max_capacity(first_cpu, 0) * cpumask_weight(&active_cpus);
 		dom_active_thr = ratio_scale(capacity, dom->active_ratio);
 
 		/* domain is idle */
@@ -287,18 +307,20 @@ static void frt_parse_dt(struct device_node *dn, struct frt_dom *dom, int cnt)
 		goto disable;
 	dom->coregroup = cnt;
 
-	if (of_property_read_u32(coregroup, "coverage-ratio", &dom->coverage_ratio))
-		return;
+	of_property_read_u32(coregroup, "coverage-ratio", &dom->coverage_ratio);
+	if (!dom->coverage_ratio)
+		dom->coverage_ratio = 100;
 
-	if (of_property_read_u32(coregroup, "active-ratio", &dom->active_ratio))
-		return;
+	of_property_read_u32(coregroup, "active-ratio", &dom->active_ratio);
+	if (!dom->active_ratio)
+		dom->active_thr = 0;
 
 	return;
 
 disable:
 	dom->coregroup = cnt;
 	dom->coverage_ratio = 100;
-	dom->active_ratio = 100;
+	dom->active_thr = 0;
 	pr_err("FRT(%s): failed to parse frt node\n", __func__);
 }
 
@@ -308,7 +330,7 @@ static int __init init_frt(void)
 	struct device_node *dn;
 	int cpu, tcpu, cnt = 0;
 
-	dn = of_find_node_by_path("/ems");
+	dn = of_find_node_by_path("/cpus/ems");
 	if (!dn)
 		return 0;
 
@@ -342,6 +364,8 @@ static int __init init_frt(void)
 		for_each_cpu(tcpu, &dom->cpus)
 			per_cpu(frt_rqs, tcpu) = dom;
 
+		frt_set_coverage_ratio(cpu);
+		frt_set_active_ratio(cpu);
 		list_add_tail(&dom->list, &frt_list);
 	}
 	frt_sysfs_init();
@@ -2064,7 +2088,6 @@ static void remove_rt_entity_load_avg(struct sched_rt_entity *rt_se)
 	atomic_long_add(rt_se->avg.util_avg, &rt_rq->removed_util_avg);
 }
 
-#ifdef CONFIG_RT_GROUP_SCHED
 static void attach_task_rt_rq(struct task_struct *p)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
@@ -2074,7 +2097,6 @@ static void attach_task_rt_rq(struct task_struct *p)
 	update_rt_load_avg(now, rt_se);
 	attach_rt_entity_load_avg(rt_rq, rt_se);
 }
-#endif
 
 static void detach_task_rt_rq(struct task_struct *p)
 {
@@ -2369,10 +2391,8 @@ static void put_prev_task_rt(struct rq *rq, struct task_struct *p)
 
 void rt_rq_util_change(struct rt_rq *rt_rq)
 {
-#ifdef CONFIG_RT_GROUP_SCHED
 	if (&this_rq()->rt == rt_rq)
 		cpufreq_update_util(rt_rq->rq, SCHED_CPUFREQ_RT);
-#endif
 }
 
 #ifdef CONFIG_RT_GROUP_SCHED
@@ -2459,10 +2479,7 @@ static inline int propagate_entity_rt_load_avg(struct sched_rt_entity *rt_se)
 	return 1;
 }
 #else
-static inline int propagate_entity_rt_load_avg(struct sched_rt_entity *rt_se)
-{
-	return 0;
-}
+static inline int propagate_entity_rt_load_avg(struct sched_rt_entity *rt_se) { };
 #endif
 
 void update_rt_load_avg(u64 now, struct sched_rt_entity *rt_se)
@@ -2480,10 +2497,8 @@ void update_rt_load_avg(u64 now, struct sched_rt_entity *rt_se)
 	update_rt_rq_load_avg(now, cpu, rt_rq, rt_rq->curr == rt_se);
 	propagate_entity_rt_load_avg(rt_se);
 
-#ifdef CONFIG_RT_GROUP_SCHED
 	if (entity_is_task(rt_se))
 		trace_sched_rt_load_avg_task(rt_task_of(rt_se), &rt_se->avg);
-#endif
 }
 
 /* Only try algorithms three times */
@@ -2573,19 +2588,12 @@ static inline int affordable_cpu(int cpu, unsigned long task_load)
 	return 1;
 }
 
-unsigned long task_util(struct task_struct *p)
-{
-	if (rt_task(p))
-		return p->rt.avg.util_avg;
-	else
-		return p->se.avg.util_avg;
-}
-
+extern unsigned long task_util(struct task_struct *p);
 unsigned long frt_cpu_util_wake(int cpu, struct task_struct *p)
 {
 	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
 	struct rt_rq *rt_rq = &cpu_rq(cpu)->rt;
-	unsigned long util;
+	unsigned int util;
 
 	util = READ_ONCE(cfs_rq->avg.util_avg) + READ_ONCE(rt_rq->avg.util_avg);
 
@@ -2604,7 +2612,7 @@ unsigned long frt_cpu_util_wake(int cpu, struct task_struct *p)
 		return util;
 
 	/* Discount task's blocked util from CPU's util */
-	util -= min_t(unsigned long, util, task_util(p));
+	util -= min_t(unsigned int, util, task_util(p));
 
 	return min_t(unsigned long, util, capacity_orig_of(cpu));
 }
@@ -2724,9 +2732,6 @@ static int find_idle_cpu(struct task_struct *task, int wake_flags)
 			if (!idle_cpu(cpu))
 				continue;
 
-			if (ecs_is_sparing_cpu(cpu))
-				continue;
-
 			cpu_prio = cpu_rq(cpu)->rt.highest_prio.curr;
 			if (cpu_prio < max_prio)
 				continue;
@@ -2783,9 +2788,6 @@ static int find_recessive_cpu(struct task_struct *task, int wake_flags)
 
 	do {
 		for_each_cpu_and(cpu, &dom->cpus, &candidate_cpus) {
-			if (ecs_is_sparing_cpu(cpu))
-				continue;
-
 			cpu_load = frt_cpu_util_wake(cpu, task) + task_util(task);
 
 			if (cpu_load > capacity_orig_of(cpu))
@@ -2846,9 +2848,6 @@ static int find_lowest_rq_fluid(struct task_struct *task, int wake_flags)
 	 */
 	for_each_cpu(cpu, cpu_active_mask) {
 		if (cpu != cpumask_first(cpu_coregroup_mask(cpu)))
-			continue;
-
-		if (ecs_is_sparing_cpu(cpu))
 			continue;
 
 		if (find_victim_rt_rq(task, cpu_coregroup_mask(cpu), &best_cpu) != -1)
@@ -3578,12 +3577,14 @@ static void task_tick_rt(struct rq *rq, struct task_struct *p, int queued)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
 	u64 now = rq_clock_task(rq);
+	int cpu = cpu_of(rq);
 
 	update_curr_rt(rq);
 
 	for_each_sched_rt_entity(rt_se)
 		update_rt_load_avg(now, rt_se);
 
+	update_rt_rq_load_avg(now, cpu, &rq->rt, rq->curr != NULL);
 	update_activated_cpus();
 	watchdog(rq, p);
 

@@ -41,29 +41,6 @@
 #define IOVA_OVFL(addr, size)	((((addr) + (size)) > 0xFFFFFFFF) ||	\
 				((addr) + (size) < (addr)))
 
-static const unsigned int sysmmu_reg_set[MAX_SET_IDX][MAX_REG_IDX] = {
-	/* Default without VM */
-	{
-		/* FLPT base, TLB invalidation, Fault information */
-		0x000C,	0x0010,	0x0014,	0x0018,
-		0x0020,	0x0024,	0x0070,	0x0078,
-		/* TLB information */
-		0x8000,	0x8004,	0x8008,	0x800C,
-		/* SBB information */
-		0x8020,	0x8024,	0x8028,	0x802C,
-	},
-	/* VM */
-	{
-		/* FLPT base, TLB invalidation, Fault information */
-		0x800C,	0x8010,	0x8014,	0x8018,
-		0x8020,	0x8024,	0x1000,	0x1004,
-		/* TLB information */
-		0x3000,	0x3004,	0x3008,	0x300C,
-		/* SBB information */
-		0x3020,	0x3024,	0x3028,	0x302C,
-	},
-};
-
 static struct kmem_cache *lv2table_kmem_cache;
 
 static struct sysmmu_drvdata *sysmmu_drvdata_list;
@@ -92,29 +69,16 @@ static struct dentry *exynos_sysmmu_debugfs_root;
 int exynos_client_add(struct device_node *np, struct exynos_iovmm *vmm_data)
 {
 	struct exynos_client *client = kzalloc(sizeof(*client), GFP_KERNEL);
-	struct exynos_client *test;
 
 	if (!client)
 		return -ENOMEM;
 
-	spin_lock(&exynos_client_lock);
-
-	list_for_each_entry(test, &exynos_client_list, list) {
-		if (test->master_np == np) {
-			spin_unlock(&exynos_client_lock);
-			pr_err("%s is already registered to a iommu-domain\n",
-					of_node_full_name(np));
-			kfree(client);
-			return -EEXIST;
-		}
-	}
-
-	list_add_tail(&client->list, &exynos_client_list);
-
-	spin_unlock(&exynos_client_lock);
-
+	INIT_LIST_HEAD(&client->list);
 	client->master_np = np;
 	client->vmm_data = vmm_data;
+	spin_lock(&exynos_client_lock);
+	list_add_tail(&client->list, &exynos_client_list);
+	spin_unlock(&exynos_client_lock);
 
 	return 0;
 }
@@ -239,25 +203,14 @@ static int sysmmu_get_hw_info(struct sysmmu_drvdata *data)
 
 	data->version = __sysmmu_get_hw_version(data);
 
-	/* Default value */
-	data->reg_set = sysmmu_reg_set[REG_IDX_DEFAULT];
-
 	/*
 	 * If CAPA1 doesn't exist, sysmmu uses TLB way dedication.
 	 * If CAPA1[31:28] is zero, sysmmu uses TLB port dedication.
 	 */
-	if (!__sysmmu_has_capa1(data)) {
+	if (!__sysmmu_has_capa1(data))
 		tlb_props->flags |= TLB_TYPE_WAY;
-	} else {
-		if (__sysmmu_get_capa_type(data) == 0)
-			tlb_props->flags |= TLB_TYPE_PORT;
-		if (__sysmmu_get_capa_vcr_enabled(data)) {
-			data->reg_set = sysmmu_reg_set[REG_IDX_VM];
-			data->has_vcr = true;
-		}
-		if (__sysmmu_get_capa_no_block_mode(data))
-			data->no_block_mode = true;
-	}
+	else if (__sysmmu_get_capa_type(data) == 0)
+		tlb_props->flags |= TLB_TYPE_PORT;
 
 	return 0;
 }
@@ -567,10 +520,7 @@ static int __init exynos_sysmmu_probe(struct platform_device *pdev)
 	}
 
 	data->clk = devm_clk_get(dev, "aclk");
-	if (PTR_ERR(data->clk) == -ENOENT) {
-		dev_info(dev, "'aclk' not found. Ignoring clock gating...\n");
-		data->clk = NULL;
-	} else if (IS_ERR(data->clk)) {
+	if (IS_ERR(data->clk)) {
 		dev_err(dev, "Failed to get clock!\n");
 		return PTR_ERR(data->clk);
 	} else  {
@@ -1277,41 +1227,25 @@ static int exynos_iommu_of_xlate(struct device *master,
 
 	sysmmu = data->sysmmu;
 	if (!owner) {
-		struct iommu_domain *domain = NULL;
-		struct exynos_iovmm *vmm_data = NULL;
-
-		spin_lock(&exynos_client_lock);
-
-		list_for_each_entry_safe(client, buf_client,
-					&exynos_client_list, list) {
-			if (client->master_np == master->of_node) {
-				domain = client->vmm_data->domain;
-				vmm_data = client->vmm_data;
-				list_del(&client->list);
-				kfree(client);
-				break;
-			}
-		}
-
-		spin_unlock(&exynos_client_lock);
-
-		if (!vmm_data) {
-			dev_err(master, "is registered to no domain-clients\n");
-			return -EINVAL;
-		}
-
 		owner = kzalloc(sizeof(*owner), GFP_KERNEL);
 		if (!owner)
 			return -ENOMEM;
 
-		owner->domain = domain;
-		owner->vmm_data = vmm_data;
-		owner->master = master;
 		INIT_LIST_HEAD(&owner->sysmmu_list);
 		INIT_LIST_HEAD(&owner->client);
+		master->archdata.iommu = owner;
+		owner->master = master;
 		spin_lock_init(&owner->lock);
 
-		master->archdata.iommu = owner;
+		list_for_each_entry_safe(client, buf_client,
+					&exynos_client_list, list) {
+			if (client->master_np == master->of_node) {
+				owner->domain = client->vmm_data->domain;
+				owner->vmm_data = client->vmm_data;
+				list_del(&client->list);
+				kfree(client);
+			}
+		}
 
 		/* HACK: Make relationship between group and master */
 		master->iommu_group = owner->vmm_data->group;

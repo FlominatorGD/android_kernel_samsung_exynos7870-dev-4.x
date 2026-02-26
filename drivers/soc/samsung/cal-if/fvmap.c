@@ -209,39 +209,6 @@ static int __init get_mfc_volt(char *str)
 }
 early_param("mfc", get_mfc_volt);
 
-static int __init get_dsp_volt(char *str)
-{
-	int volt;
-
-	get_option(&str, &volt);
-	init_margin_table[MARGIN_DSP] = volt;
-
-	return 0;
-}
-early_param("dsp", get_dsp_volt);
-
-static int __init get_dnc_volt(char *str)
-{
-	int volt;
-
-	get_option(&str, &volt);
-	init_margin_table[MARGIN_DNC] = volt;
-
-	return 0;
-}
-early_param("dnc", get_dnc_volt);
-
-static int __init get_tnr_volt(char *str)
-{
-	int volt;
-
-	get_option(&str, &volt);
-	init_margin_table[MARGIN_TNR] = volt;
-
-	return 0;
-}
-early_param("tnr", get_tnr_volt);
-
 static int __init get_percent_margin_volt(char *str)
 {
 	int percent;
@@ -422,17 +389,18 @@ static const struct attribute_group percent_margin_group = {
 	.attrs = percent_margin_attrs,
 };
 
-static int fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base)
+static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base)
 {
 	struct fvmap_header *fvmap_header, *header;
 	struct rate_volt_header *old, *new;
+	struct dvfs_table *old_param, *new_param;
 	struct clocks *clks;
 	struct pll_header *plls;
 	struct vclk *vclk;
 	unsigned int member_addr;
-	unsigned int blk_idx;
+	unsigned int blk_idx, param_idx;
 	int size, margin;
-	int i, j;
+	int i, j, k;
 
 	fvmap_header = map_base;
 	header = sram_base;
@@ -462,16 +430,6 @@ static int fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base)
 		vclk = cmucal_get_node(ACPM_VCLK_TYPE | i);
 		if (vclk == NULL)
 			continue;
-		/*
-		 * In case when ECT parser is disabled, vclk->list
-		 * isn't assigned in vclk_get_dfs_info().
-		 */
-		if (vclk->list == NULL) {
-			pr_err("%s: Error: vclk->list is NULL\n", __func__);
-			pr_err("  Is ECT parser disabled?\n");
-			return -ENOENT;
-		}
-
 		pr_info("dvfs_type : %s - id : %x\n",
 			vclk->name, fvmap_header[i].dvfs_type);
 		pr_info("  num_of_lv      : %d\n", fvmap_header[i].num_of_lv);
@@ -497,8 +455,12 @@ static int fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base)
 				member_addr = (clks->addr[j] & ~0x3) & 0xffff;
 				blk_idx = clks->addr[j] & 0x3;
 
-				member_addr |= ((fvmap_header[i].block_addr[blk_idx]) << 16) - 0x90000000;
+				if (blk_idx < BLOCK_ADDR_SIZE)
+					member_addr |= ((fvmap_header[i].block_addr[blk_idx]) << 16) - 0x90000000;
+				else
+					pr_err("[%s] blk_idx %u is out of range for block_addr\n", __func__, blk_idx);
 			}
+
 
 			vclk->list[j] = cmucal_get_id_by_addr(member_addr);
 
@@ -515,31 +477,37 @@ static int fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base)
 				new->table[j].rate, new->table[j].volt,
 				volt_offset_percent);
 		}
-	}
 
-	return 0;
+		old_param = sram_base + fvmap_header[i].o_tables;
+		new_param = map_base + fvmap_header[i].o_tables;
+		for (j = 0; j < fvmap_header[i].num_of_lv; j++) {
+			for (k = 0; k < fvmap_header[i].num_of_members; k++) {
+				param_idx = fvmap_header[i].num_of_members * j + k;
+				new_param->val[param_idx] = old_param->val[param_idx];
+				if (vclk->lut[j].params[k] != new_param->val[param_idx]) {
+					vclk->lut[j].params[k] = new_param->val[param_idx];
+					pr_info("Mis-match %s[%d][%d] : %d %d\n",
+						vclk->name, j, k,
+						vclk->lut[j].params[k],
+						new_param->val[param_idx]);
+				}
+			}
+		}
+	}
 }
 
 int fvmap_init(void __iomem *sram_base)
 {
 	void __iomem *map_base;
-#ifdef CONFIG_PM
 	struct kobject *kobj;
-#endif
-	int ret = 0;
 
 	map_base = kzalloc(FVMAP_SIZE, GFP_KERNEL);
 
 	fvmap_base = map_base;
 	sram_fvmap_base = sram_base;
-	pr_info("%s:fvmap initialize %p\n", __func__, sram_base);
-	ret = fvmap_copy_from_sram(map_base, sram_base);
-	if (ret) {
-		pr_err("%s failed; err = %d\n", __func__, ret);
-		goto err_copy_from_sram;
-	}
+	pr_info("%s:fvmap initialize %pK\n", __func__, sram_base);
+	fvmap_copy_from_sram(map_base, sram_base);
 
-#ifdef CONFIG_PM
 	/* percent margin for each doamin at runtime */
 	kobj = kobject_create_and_add("percent_margin", power_kobj);
 	if (!kobj)
@@ -547,13 +515,6 @@ int fvmap_init(void __iomem *sram_base)
 
 	if (sysfs_create_group(kobj, &percent_margin_group))
 		pr_err("Fail to create percent_margin group\n");
-#endif
 
 	return 0;
-
-err_copy_from_sram:
-	kfree(map_base);
-	fvmap_base = NULL;
-	sram_fvmap_base = NULL;
-	return ret;
 }

@@ -31,12 +31,12 @@ int exynos_acpm_set_rate(unsigned int id, unsigned long rate)
 	config.response = true;
 	config.indirection = false;
 	config.cmd[0] = id;
-	config.cmd[1] = rate;
+	config.cmd[1] = (unsigned int)rate;
 	config.cmd[2] = FREQ_REQ;
 	config.cmd[3] = 0;
 
 	before = sched_clock();
-	ret = acpm_ipc_send_data(acpm_dvfs.ch_num, &config);
+	ret = acpm_ipc_send_data_lazy(acpm_dvfs.ch_num, &config);
 	after = sched_clock();
 	latency = after - before;
 	if (ret)
@@ -59,12 +59,12 @@ int exynos_acpm_set_init_freq(unsigned int dfs_id, unsigned long freq)
 	config.response = true;
 	config.indirection = false;
 	config.cmd[0] = id;
-	config.cmd[1] = freq;
+	config.cmd[1] = (unsigned int)freq;
 	config.cmd[2] = DATA_INIT;
 	config.cmd[3] = SET_INIT_FREQ;
 
 	before = sched_clock();
-	ret = acpm_ipc_send_data(acpm_dvfs.ch_num, &config);
+	ret = acpm_ipc_send_data_lazy(acpm_dvfs.ch_num, &config);
 	after = sched_clock();
 	latency = after - before;
 	if (ret)
@@ -90,7 +90,7 @@ unsigned long exynos_acpm_get_rate(unsigned int id)
 	config.cmd[3] = 0;
 
 	before = sched_clock();
-	ret = acpm_ipc_send_data(acpm_dvfs.ch_num, &config);
+	ret = acpm_ipc_send_data_lazy(acpm_dvfs.ch_num, &config);
 	after = sched_clock();
 	latency = after - before;
 	if (ret)
@@ -100,12 +100,17 @@ unsigned long exynos_acpm_get_rate(unsigned int id)
 	return config.cmd[1];
 }
 
+char margin_list[MAX_MARGIN_ID][10] = {"MIF", "INT", "BIG", "MID", "LIT", "G3D",
+		"INTCAM", "CAM", "DISP", "G3DM",
+		"CP", "FSYS0", "AUD", "IVA", "SCORE", "NPU", "MFC"};
+
 int exynos_acpm_set_volt_margin(unsigned int id, int volt)
 {
 	struct ipc_config config;
 	unsigned int cmd[4];
 	unsigned long long before, after, latency;
 	int ret;
+	struct vclk *vclk;
 
 	config.cmd = cmd;
 	config.response = true;
@@ -123,10 +128,17 @@ int exynos_acpm_set_volt_margin(unsigned int id, int volt)
 		pr_err("%s:[%d] latency = %llu ret = %d",
 			__func__, id, latency, ret);
 
+	vclk = cmucal_get_node(id);
+	if (!vclk)
+		pr_err("%s:[%d] can't find cmucal node ",
+			__func__, id);
+	else
+		pr_auto(ASL5, "%s: [%s] +margin %d uV\n", __func__, margin_list[vclk->margin_id], volt);
+
 	return ret;
 }
 
-#if !defined(CONFIG_EXYNOS_ACPM_THERMAL) && defined(CONFIG_EXYNOS_THERMAL)
+#ifndef CONFIG_EXYNOS_ACPM_THERMAL
 int exynos_acpm_set_cold_temp(unsigned int id, bool is_cold_temp)
 {
 	struct ipc_config config;
@@ -160,7 +172,7 @@ static void acpm_noti_mif_callback(unsigned int *cmd, unsigned int size)
 	pm_qos_update_request(&mif_request_from_acpm, cmd[1]);
 }
 
-#if !defined(CONFIG_EXYNOS_ACPM_THERMAL) && defined(CONFIG_EXYNOS_THERMAL)
+#ifndef CONFIG_EXYNOS_ACPM_THERMAL
 static int acpm_cpu_tmu_notifier(struct notifier_block *nb, unsigned long event, void *v)
 {
 	unsigned int *is_cold_temp = v;
@@ -181,7 +193,7 @@ static int acpm_cpu_tmu_notifier(struct notifier_block *nb, unsigned long event,
 }
 #endif
 
-#if !defined(CONFIG_EXYNOS_ACPM_THERMAL) && defined(CONFIG_EXYNOS_THERMAL)
+#ifndef CONFIG_EXYNOS_ACPM_THERMAL
 static int acpm_gpu_tmu_notifier(struct notifier_block *nb, unsigned long event, void *v)
 {
 	unsigned int *is_cold_temp = v;
@@ -202,15 +214,15 @@ static int acpm_gpu_tmu_notifier(struct notifier_block *nb, unsigned long event,
 }
 #endif
 
-#if !defined(CONFIG_EXYNOS_ACPM_THERMAL) && defined(CONFIG_EXYNOS_THERMAL)
+#ifndef CONFIG_EXYNOS_ACPM_THERMAL
 static void acpm_dvfs_get_cpu_cold_temp_list(struct device *dev)
 {
 	struct device_node *node = dev->of_node;
-	unsigned int proplen;
+	int proplen;
 
 	proplen = of_property_count_u32_elems(node, "cpu_cold_temp_list");
 
-	if (!proplen)
+	if (proplen <= 0)
 		return;
 
 	acpm_dvfs.cpu_coldtemp = kcalloc(proplen, sizeof(u32), GFP_KERNEL);
@@ -232,7 +244,7 @@ static void acpm_dvfs_get_cpu_cold_temp_list(struct device *dev)
 }
 #endif
 
-#if !defined(CONFIG_EXYNOS_ACPM_THERMAL) && defined(CONFIG_EXYNOS_THERMAL)
+#ifndef CONFIG_EXYNOS_ACPM_THERMAL
 static void acpm_dvfs_get_gpu_cold_temp_list(struct device *dev)
 {
 	struct device_node *node = dev->of_node;
@@ -240,7 +252,7 @@ static void acpm_dvfs_get_gpu_cold_temp_list(struct device *dev)
 
 	proplen = of_property_count_u32_elems(node, "gpu_cold_temp_list");
 
-	if (!proplen)
+	if (proplen <= 0)
 		return;
 
 	acpm_dvfs.gpu_coldtemp = kcalloc(proplen, sizeof(u32), GFP_KERNEL);
@@ -277,7 +289,7 @@ static int acpm_dvfs_probe(struct platform_device *pdev)
 
 	pm_qos_add_request(&mif_request_from_acpm, PM_QOS_BUS_THROUGHPUT, 0);
 
-#if !defined(CONFIG_EXYNOS_ACPM_THERMAL) && defined(CONFIG_EXYNOS_THERMAL)
+#ifndef CONFIG_EXYNOS_ACPM_THERMAL
 	acpm_dvfs_get_cpu_cold_temp_list(dev);
 	acpm_dvfs_get_gpu_cold_temp_list(dev);
 #endif

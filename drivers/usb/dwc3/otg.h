@@ -28,7 +28,6 @@
 #endif
 #include "dwc3-exynos.h"
 
-
 struct dwc3_ext_otg_ops {
 	int	(*setup)(struct device *dev, struct otg_fsm *fsm);
 	void	(*exit)(struct device *dev);
@@ -68,15 +67,14 @@ struct dwc3_otg {
 	int			pm_qos_int_val;
 
 	struct dwc3_ext_otg_ops *ext_otg_ops;
-#if defined(CONFIG_TYPEC_DEFAULT)
-	struct intf_typec	*typec;
-#endif
+	
+	int			dp_use_informed;
+	
+	struct notifier_block	pm_nb;
 	struct completion	resume_cmpl;
 	int			dwc3_suspended;
-
-	struct mutex lock;
-	u32 combo_phy_control;
-
+	struct			mutex lock;
+	u32			combo_phy_control;
 };
 
 static inline int dwc3_ext_otg_setup(struct dwc3_otg *dotg)

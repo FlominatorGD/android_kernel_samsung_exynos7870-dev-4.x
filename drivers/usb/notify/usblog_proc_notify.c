@@ -1,38 +1,45 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  *  drivers/usb/notify/usblog_proc_notify.c
  *
- * Copyright (C) 2016-2017 Samsung, Inc.
+ * Copyright (C) 2016-2020 Samsung, Inc.
  * Author: Dongrak Shin <dongrak.shin@samsung.com>
  *
-*/
+ */
 
- /* usb notify layer v3.2 */
+ /* usb notify layer v3.5 */
 
  #define pr_fmt(fmt) "usb_notify: " fmt
 
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/time.h>
-#include <linux/sched/clock.h>
 #include <linux/kernel.h>
+#include <linux/vmalloc.h>
 #include <linux/security.h>
 #include <linux/syscalls.h>
 #include <linux/proc_fs.h>
 #include <linux/spinlock.h>
 #include <linux/seq_file.h>
+/* clock.h should be included since kernel 4.14 */
+#include <linux/sched/clock.h>
 #include <linux/usb_notify.h>
 
-#define USBLOG_MAX_BUF_SIZE	(1 << 7) /* 128 */
-#define USBLOG_MAX_BUF2_SIZE	(1 << 8) /* 256 */
-#define USBLOG_MAX_BUF3_SIZE	(1 << 9) /* 512 */
+#define USBLOG_MAX_BUF_SIZE	(1 << 6) /* 64 */
+#define USBLOG_MAX_BUF2_SIZE	(1 << 7) /* 128 */
+#define USBLOG_MAX_BUF3_SIZE	(1 << 8) /* 256 */
+#define USBLOG_MAX_BUF4_SIZE	(1 << 9) /* 512 */
 #define USBLOG_MAX_STRING_SIZE	(1 << 4) /* 16 */
 #define USBLOG_CMP_INDEX	3
+#define USBLOG_MAX_STORE_PORT	(1 << 6) /* 64 */
 
-#define USBLOG_CCIC_BUFFER_SIZE	USBLOG_MAX_BUF3_SIZE
+#define USBLOG_CCIC_BUFFER_SIZE	USBLOG_MAX_BUF4_SIZE
 #define USBLOG_MODE_BUFFER_SIZE	USBLOG_MAX_BUF_SIZE
-#define USBLOG_STATE_BUFFER_SIZE	USBLOG_MAX_BUF2_SIZE
+#define USBLOG_STATE_BUFFER_SIZE	USBLOG_MAX_BUF3_SIZE
 #define USBLOG_EVENT_BUFFER_SIZE	USBLOG_MAX_BUF_SIZE
-#define USBLOG_EXTRA_BUFFER_SIZE	USBLOG_MAX_BUF_SIZE
+#define USBLOG_PORT_BUFFER_SIZE		USBLOG_MAX_BUF2_SIZE
+#define USBLOG_PCM_BUFFER_SIZE		USBLOG_MAX_BUF_SIZE
+#define USBLOG_EXTRA_BUFFER_SIZE	USBLOG_MAX_BUF2_SIZE
 
 struct ccic_buf {
 	unsigned long long ts_nsec;
@@ -56,6 +63,26 @@ struct event_buf {
 	int enable;
 };
 
+struct port_buf {
+	unsigned long long ts_nsec;
+	int type;
+	uint16_t param1;
+	uint16_t param2;
+	uint16_t count;
+};
+
+struct port_count {
+	uint16_t vid;
+	uint16_t pid;
+	uint16_t count;
+};
+
+struct pcm_buf {
+	unsigned long long ts_nsec;
+	int type;
+	int enable;
+};
+
 struct extra_buf {
 	unsigned long long ts_nsec;
 	int event;
@@ -66,17 +93,27 @@ struct usblog_buf {
 	unsigned long long mode_count;
 	unsigned long long state_count;
 	unsigned long long event_count;
+	unsigned long long port_count;
 	unsigned long long extra_count;
 	unsigned long ccic_index;
 	unsigned long mode_index;
 	unsigned long state_index;
 	unsigned long event_index;
+	unsigned long port_index;
 	unsigned long extra_index;
 	struct ccic_buf ccic_buffer[USBLOG_CCIC_BUFFER_SIZE];
 	struct mode_buf mode_buffer[USBLOG_MODE_BUFFER_SIZE];
 	struct state_buf state_buffer[USBLOG_STATE_BUFFER_SIZE];
 	struct event_buf event_buffer[USBLOG_EVENT_BUFFER_SIZE];
+	struct port_buf port_buffer[USBLOG_PORT_BUFFER_SIZE];
+	struct port_count store_port_cnt[USBLOG_MAX_STORE_PORT];
 	struct extra_buf extra_buffer[USBLOG_EXTRA_BUFFER_SIZE];
+};
+
+struct usblog_vm_buf {
+	unsigned long long pcm_count;
+	unsigned long pcm_index;
+	struct pcm_buf pcm_buffer[USBLOG_PCM_BUFFER_SIZE];
 };
 
 struct ccic_version {
@@ -87,6 +124,7 @@ struct ccic_version {
 
 struct usblog_root_str {
 	struct usblog_buf *usblog_buffer;
+	struct usblog_vm_buf *usblog_vm_buffer;
 	struct ccic_version ccic_ver;
 	struct ccic_version ccic_bin_ver;
 	spinlock_t usblog_lock;
@@ -155,6 +193,20 @@ static const char *usbstate_string(enum usblog_state usbstate)
 		return "HIGH SPEED";
 	case NOTIFY_SUPER:
 		return "SUPER SPEED";
+	case NOTIFY_GET_DES:
+		return "GET_DES";
+	case NOTIFY_SET_CON:
+		return "SET_CON";
+	case NOTIFY_CONNDONE_SSP:
+		return "CONNDONE SSP";
+	case NOTIFY_CONNDONE_SS:
+		return "CONNDONE SS";
+	case NOTIFY_CONNDONE_HS:
+		return "CONNDONE HS";
+	case NOTIFY_CONNDONE_FS:
+		return "CONNDONE FS";
+	case NOTIFY_CONNDONE_LS:
+		return "CONNDONE LS";
 	default:
 		return "UNDEFINED";
 	}
@@ -191,14 +243,16 @@ static const char *ccic_dev_string(enum ccic_device dev)
 		return "MUIC";
 	case NOTIFY_DEV_CCIC:
 		return "CCIC";
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	case NOTIFY_DEV_MANAGER:
 		return "MANAGER";
-#endif
 	case NOTIFY_DEV_DP:
 		return "DP";
 	case NOTIFY_DEV_USB_DP:
 		return "USB_DP";
+	case NOTIFY_DEV_SUB_BATTERY:
+		return "BATTERY2";
+	case NOTIFY_DEV_SECOND_MUIC:
+		return "MUIC2";
 	default:
 		return "UNDEFINED";
 	}
@@ -215,14 +269,16 @@ static const char *ccic_id_string(enum ccic_id id)
 		return "ID_RID";
 	case NOTIFY_ID_USB:
 		return "ID_USB";
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	case NOTIFY_ID_POWER_STATUS:
 		return "ID_POWER_STATUS";
-#endif
 	case NOTIFY_ID_WATER:
 		return "ID_WATER";
 	case NOTIFY_ID_VCONN:
 		return "ID_VCONN";
+	case NOTIFY_ID_OTG:
+		return "ID_OTG";
+	case NOTIFY_ID_TA:
+		return "ID_TA";
 	case NOTIFY_ID_DP_CONNECT:
 		return "ID_DP_CONNECT";
 	case NOTIFY_ID_DP_HPD:
@@ -237,6 +293,8 @@ static const char *ccic_id_string(enum ccic_id id)
 		return "ID_FAC";
 	case NOTIFY_ID_CC_PIN_STATUS:
 		return "ID_PIN_STATUS";
+	case NOTIFY_ID_WATER_CABLE:
+		return "ID_WATER_CABLE";
 	default:
 		return "UNDEFINED";
 	}
@@ -247,10 +305,17 @@ static const char *ccic_rid_string(enum ccic_rid rid)
 	switch (rid) {
 	case NOTIFY_RID_UNDEFINED:
 		return "RID_UNDEFINED";
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+	case NOTIFY_RID_GND:
+		return "RID_GND";
+	case NOTIFY_RID_056K:
+		return "RID_056K";
+#else
 	case NOTIFY_RID_000K:
 		return "RID_000K";
 	case NOTIFY_RID_001K:
 		return "RID_001K";
+#endif
 	case NOTIFY_RID_255K:
 		return "RID_255K";
 	case NOTIFY_RID_301K:
@@ -399,6 +464,22 @@ static const char *extra_string(enum extra event)
 		return "SBU VBUS SHORT";
 	case NOTIFY_EXTRA_UVDM_TIMEOUT:
 		return "UVDM TIMEOUT";
+	case NOTIFY_EXTRA_CCOPEN_REQ_SET:
+		return "CC OPEN SET";
+	case NOTIFY_EXTRA_CCOPEN_REQ_CLEAR:
+		return "CC OPEN CLEAR";
+	case NOTIFY_EXTRA_USB_ANALOGAUDIO:
+		return "USB ANALOG AUDIO";
+	case NOTIFY_EXTRA_USBHOST_OVERCURRENT:
+		return "USB HOST OVERCURRENT";
+	case NOTIFY_EXTRA_ROOTHUB_SUSPEND_FAIL:
+		return "ROOTHUB SUSPEND FAIL";
+	case NOTIFY_EXTRA_PORT_SUSPEND_FAIL:
+		return "PORT SUSPEND FAIL";
+	case NOTIFY_EXTRA_PORT_SUSPEND_WAKEUP_FAIL:
+		return "PORT REMOTE WAKEUP FAIL";
+	case NOTIFY_EXTRA_PORT_SUSPEND_LTM_FAIL:
+		return "PORT LTM FAIL";
 	default:
 		return "ETC";
 	}
@@ -422,7 +503,8 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 		break;
 	case NOTIFY_CCIC_EVENT:
 		if (type.id == NOTIFY_ID_ATTACH) {
-			if (type.src == NOTIFY_DEV_MUIC)
+			if (type.src == NOTIFY_DEV_MUIC
+				|| type.src == NOTIFY_DEV_SECOND_MUIC)
 				seq_printf(m,
 					"[%5lu.%06lu] ccic notify:    id=%s src=%s dest=%s rprd=%s cable=%d %s\n",
 				(unsigned long)ts, rem_nsec / 1000,
@@ -455,7 +537,6 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			ccic_dev_string(type.src),
 			ccic_dev_string(type.dest),
 			usbstatus_string(type.sub2));
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 		else if (type.id  == NOTIFY_ID_POWER_STATUS)
 			seq_printf(m, "[%5lu.%06lu] ccic notify:    id=%s src=%s dest=%s %s\n",
 			(unsigned long)ts, rem_nsec / 1000,
@@ -463,7 +544,6 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			ccic_dev_string(type.src),
 			ccic_dev_string(type.dest),
 			ccic_con_string(type.sub1));
-#endif
 		else if (type.id  == NOTIFY_ID_WATER)
 			seq_printf(m, "[%5lu.%06lu] ccic notify:   id=%s src=%s dest=%s    %s detected\n",
 			(unsigned long)ts, rem_nsec / 1000,
@@ -477,6 +557,20 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			ccic_id_string(type.id),
 			ccic_dev_string(type.src),
 			ccic_dev_string(type.dest));
+		else if (type.id  == NOTIFY_ID_OTG)
+			seq_printf(m, "[%5lu.%06lu] ccic notify:    id=%s src=%s dest=%s %s\n",
+			(unsigned long)ts, rem_nsec / 1000,
+			ccic_id_string(type.id),
+			ccic_dev_string(type.src),
+			ccic_dev_string(type.dest),
+			type.sub2 ? "Enable":"Disable");
+		else if (type.id  == NOTIFY_ID_TA)
+			seq_printf(m, "[%5lu.%06lu] ccic notify:    id=%s src=%s dest=%s %s\n",
+			(unsigned long)ts, rem_nsec / 1000,
+			ccic_id_string(type.id),
+			ccic_dev_string(type.src),
+			ccic_dev_string(type.dest),
+			ccic_con_string(type.sub1));
 		else if (type.id  == NOTIFY_ID_DP_CONNECT)
 			seq_printf(m, "[%5lu.%06lu] ccic notify:    id=%s src=%s dest=%s 0x%04x/0x%04x %s\n",
 			(unsigned long)ts, rem_nsec / 1000,
@@ -531,6 +625,13 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			ccic_dev_string(type.src),
 			ccic_dev_string(type.dest),
 			ccic_pinstatus_string(type.sub1));
+		else if (type.id == NOTIFY_ID_WATER_CABLE)
+			seq_printf(m, "[%5lu.%06lu] ccic notify:	id=%s src=%s dest=%s %s\n",
+			(unsigned long)ts, rem_nsec / 1000,
+			ccic_id_string(type.id),
+			ccic_dev_string(type.src),
+			ccic_dev_string(type.dest),
+			ccic_con_string(type.sub1));
 		else
 			seq_printf(m, "[%5lu.%06lu] ccic notify:    id=%s src=%s dest=%s rprd=%s %s\n",
 			(unsigned long)ts, rem_nsec / 1000,
@@ -542,7 +643,8 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 		break;
 	case NOTIFY_MANAGER:
 		if (type.id == NOTIFY_ID_ATTACH) {
-			if (type.src == NOTIFY_DEV_MUIC)
+			if (type.src == NOTIFY_DEV_MUIC
+				|| type.src == NOTIFY_DEV_SECOND_MUIC)
 				seq_printf(m,
 					"[%5lu.%06lu] manager notify: id=%s src=%s dest=%s rprd=%s cable=%d %s\n",
 				(unsigned long)ts, rem_nsec / 1000,
@@ -575,7 +677,6 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			ccic_dev_string(type.src),
 			ccic_dev_string(type.dest),
 			usbstatus_string(type.sub2));
-#ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 		else if (type.id  == NOTIFY_ID_POWER_STATUS)
 			seq_printf(m, "[%5lu.%06lu] manager notify: id=%s src=%s dest=%s %s\n",
 			(unsigned long)ts, rem_nsec / 1000,
@@ -583,7 +684,6 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			ccic_dev_string(type.src),
 			ccic_dev_string(type.dest),
 			ccic_con_string(type.sub1));
-#endif
 		else if (type.id  == NOTIFY_ID_WATER)
 			seq_printf(m, "[%5lu.%06lu] manager notify: id=%s src=%s dest=%s    %s detected\n",
 			(unsigned long)ts, rem_nsec / 1000,
@@ -597,6 +697,20 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			ccic_id_string(type.id),
 			ccic_dev_string(type.src),
 			ccic_dev_string(type.dest));
+		else if (type.id  == NOTIFY_ID_OTG)
+			seq_printf(m, "[%5lu.%06lu] ccic notify:    id=%s src=%s dest=%s %s\n",
+			(unsigned long)ts, rem_nsec / 1000,
+			ccic_id_string(type.id),
+			ccic_dev_string(type.src),
+			ccic_dev_string(type.dest),
+			type.sub2 ? "Enable":"Disable");
+		else if (type.id  == NOTIFY_ID_TA)
+			seq_printf(m, "[%5lu.%06lu] ccic notify:    id=%s src=%s dest=%s %s\n",
+			(unsigned long)ts, rem_nsec / 1000,
+			ccic_id_string(type.id),
+			ccic_dev_string(type.src),
+			ccic_dev_string(type.dest),
+			ccic_con_string(type.sub1));
 		else if (type.id  == NOTIFY_ID_DP_CONNECT)
 			seq_printf(m, "[%5lu.%06lu] manager notify: id=%s src=%s dest=%s 0x%04x/0x%04x %s\n",
 			(unsigned long)ts, rem_nsec / 1000,
@@ -630,7 +744,7 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			type.sub1,
 			type.sub2);
 		else if (type.id  == NOTIFY_ID_ROLE_SWAP)
-			seq_printf(m, "[%5lu.%06lu] manager notify: id=%s src=%s dest=%s syb1=%d sub2=%d\n",
+			seq_printf(m, "[%5lu.%06lu] manager notify: id=%s src=%s dest=%s sub1=%d sub2=%d\n",
 			(unsigned long)ts, rem_nsec / 1000,
 			ccic_id_string(type.id),
 			ccic_dev_string(type.src),
@@ -661,7 +775,84 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 			ccic_con_string(type.sub1));
 		break;
 	default:
-		pr_info("%s undefined event\n", __func__);
+		seq_printf(m, "[%5lu.%06lu] undefined event\n",
+			(unsigned long)ts, rem_nsec / 1000);
+		break;
+	}
+}
+
+static void print_port_string(struct seq_file *m, unsigned long long ts,
+	unsigned long rem_nsec, int type, uint16_t param1,
+		uint16_t param2, uint16_t cnt)
+{
+	switch (type) {
+	case NOTIFY_PORT_CONNECT:
+		seq_printf(m, "[%5lu.%06lu] port connect - VID:0x%04x PID:0x%04x cnt:%d\n",
+			(unsigned long)ts, rem_nsec / 1000,
+					param1, param2, cnt);
+		break;
+	case NOTIFY_PORT_DISCONNECT:
+		seq_printf(m, "[%5lu.%06lu] port disconnect - VID:0x%04x PID:0x%04x\n",
+			(unsigned long)ts, rem_nsec / 1000, param1, param2);
+		break;
+	case NOTIFY_PORT_CLASS:
+		seq_printf(m, "[%5lu.%06lu] device class %d, interface class %d\n",
+			(unsigned long)ts, rem_nsec / 1000, param1, param2);
+		break;
+	default:
+		seq_printf(m, "[%5lu.%06lu] undefined event\n",
+			(unsigned long)ts, rem_nsec / 1000);
+		break;
+	}
+}
+
+static uint16_t set_port_count(uint16_t vid, uint16_t pid)
+{
+	int i;
+	uint16_t ret = 0;
+	struct port_count *temp_port;
+
+	for (i = 0; i < USBLOG_MAX_STORE_PORT; i++) {
+		temp_port = &usblog_root.usblog_buffer->store_port_cnt[i];
+		if ((temp_port->vid == vid)
+			&& temp_port->pid == pid) {
+			temp_port->count++;
+			ret = temp_port->count;
+			break;
+		}
+
+		if (!temp_port->vid && !temp_port->pid) {
+			temp_port->vid = vid;
+			temp_port->pid = pid;
+			temp_port->count++;
+			ret = temp_port->count;
+			break;
+		}
+	}
+
+	if (i == USBLOG_MAX_STORE_PORT)
+		pr_err("%s store port overflow\n", __func__);
+
+	return ret;
+}
+
+static void print_pcm_string(struct seq_file *m, unsigned long long ts,
+	unsigned long rem_nsec, int type, int enable)
+{
+	switch (type) {
+	case NOTIFY_PCM_PLAYBACK:
+		seq_printf(m, "[%5lu.%06lu] USB PCM PLAYBACK %s\n",
+			(unsigned long)ts, rem_nsec / 1000,
+				enable ? "OPEN" : "CLOSE");
+		break;
+	case NOTIFY_PCM_CAPTURE:
+		seq_printf(m, "[%5lu.%06lu] USB PCM CAPTURE %s\n",
+			(unsigned long)ts, rem_nsec / 1000,
+				enable ? "OPEN" : "CLOSE");
+		break;
+	default:
+		seq_printf(m, "[%5lu.%06lu] undefined event\n",
+			(unsigned long)ts, rem_nsec / 1000);
 		break;
 	}
 }
@@ -669,13 +860,15 @@ static void print_ccic_event(struct seq_file *m, unsigned long long ts,
 static int usblog_proc_show(struct seq_file *m, void *v)
 {
 	struct usblog_buf *temp_usblog_buffer;
+	struct usblog_vm_buf *temp_usblog_vm_buffer;
 	unsigned long long ts;
 	unsigned long rem_nsec;
 	unsigned long i;
 
 	temp_usblog_buffer = usblog_root.usblog_buffer;
+	temp_usblog_vm_buffer = usblog_root.usblog_vm_buffer;
 
-	if (!temp_usblog_buffer)
+	if (!temp_usblog_buffer || !temp_usblog_vm_buffer)
 		goto err;
 
 	seq_printf(m,
@@ -754,6 +947,7 @@ static int usblog_proc_show(struct seq_file *m, void *v)
 			rem_nsec / 1000,
 		temp_usblog_buffer->mode_buffer[i].usbmode_str);
 	}
+
 	seq_printf(m,
 		"\n\n");
 	seq_printf(m,
@@ -768,8 +962,8 @@ static int usblog_proc_show(struct seq_file *m, void *v)
 			rem_nsec = do_div(ts, 1000000000);
 			seq_printf(m, "[%5lu.%06lu] %s\n", (unsigned long)ts,
 				rem_nsec / 1000,
-			usbstate_string(temp_usblog_buffer->
-						state_buffer[i].usbstate));
+			usbstate_string(temp_usblog_buffer
+						->state_buffer[i].usbstate));
 		}
 	}
 
@@ -780,6 +974,7 @@ static int usblog_proc_show(struct seq_file *m, void *v)
 			rem_nsec / 1000,
 		usbstate_string(temp_usblog_buffer->state_buffer[i].usbstate));
 	}
+
 	seq_printf(m,
 		"\n\n");
 	seq_printf(m,
@@ -795,8 +990,8 @@ static int usblog_proc_show(struct seq_file *m, void *v)
 			seq_printf(m, "[%5lu.%06lu] %s %s\n", (unsigned long)ts,
 				rem_nsec / 1000,
 			event_string(temp_usblog_buffer->event_buffer[i].event),
-			status_string(temp_usblog_buffer->
-					event_buffer[i].enable));
+			status_string(temp_usblog_buffer
+				->event_buffer[i].enable));
 		}
 	}
 
@@ -808,6 +1003,63 @@ static int usblog_proc_show(struct seq_file *m, void *v)
 		event_string(temp_usblog_buffer->event_buffer[i].event),
 		status_string(temp_usblog_buffer->event_buffer[i].enable));
 	}
+
+	seq_printf(m,
+		"\n\n");
+	seq_printf(m,
+		"usblog PORT: count=%llu maxline=%d\n",
+			temp_usblog_buffer->port_count,
+				USBLOG_PORT_BUFFER_SIZE);
+
+	if (temp_usblog_buffer->port_count >= USBLOG_PORT_BUFFER_SIZE) {
+		for (i = temp_usblog_buffer->port_index;
+			i < USBLOG_PORT_BUFFER_SIZE; i++) {
+			ts = temp_usblog_buffer->port_buffer[i].ts_nsec;
+			rem_nsec = do_div(ts, 1000000000);
+			print_port_string(m, ts, rem_nsec,
+				temp_usblog_buffer->port_buffer[i].type,
+				temp_usblog_buffer->port_buffer[i].param1,
+				temp_usblog_buffer->port_buffer[i].param2,
+				temp_usblog_buffer->port_buffer[i].count);
+		}
+	}
+
+	for (i = 0; i < temp_usblog_buffer->port_index; i++) {
+		ts = temp_usblog_buffer->port_buffer[i].ts_nsec;
+		rem_nsec = do_div(ts, 1000000000);
+		print_port_string(m, ts, rem_nsec,
+			temp_usblog_buffer->port_buffer[i].type,
+			temp_usblog_buffer->port_buffer[i].param1,
+			temp_usblog_buffer->port_buffer[i].param2,
+			temp_usblog_buffer->port_buffer[i].count);
+	}
+
+	seq_printf(m,
+		"\n\n");
+	seq_printf(m,
+		"usblog PCM: count=%llu maxline=%d\n",
+			temp_usblog_vm_buffer->pcm_count,
+				USBLOG_PCM_BUFFER_SIZE);
+
+	if (temp_usblog_vm_buffer->pcm_count >= USBLOG_PCM_BUFFER_SIZE) {
+		for (i = temp_usblog_vm_buffer->pcm_index;
+			i < USBLOG_PCM_BUFFER_SIZE; i++) {
+			ts = temp_usblog_vm_buffer->pcm_buffer[i].ts_nsec;
+			rem_nsec = do_div(ts, 1000000000);
+			print_pcm_string(m, ts, rem_nsec,
+				temp_usblog_vm_buffer->pcm_buffer[i].type,
+				temp_usblog_vm_buffer->pcm_buffer[i].enable);
+		}
+	}
+
+	for (i = 0; i < temp_usblog_vm_buffer->pcm_index; i++) {
+		ts = temp_usblog_vm_buffer->pcm_buffer[i].ts_nsec;
+		rem_nsec = do_div(ts, 1000000000);
+		print_pcm_string(m, ts, rem_nsec,
+			temp_usblog_vm_buffer->pcm_buffer[i].type,
+			temp_usblog_vm_buffer->pcm_buffer[i].enable);
+	}
+
 	seq_printf(m,
 		"\n\n");
 	seq_printf(m,
@@ -822,8 +1074,8 @@ static int usblog_proc_show(struct seq_file *m, void *v)
 			rem_nsec = do_div(ts, 1000000000);
 			seq_printf(m, "[%5lu.%06lu] %s\n", (unsigned long)ts,
 				rem_nsec / 1000,
-			extra_string(temp_usblog_buffer->
-					extra_buffer[i].event));
+			extra_string(temp_usblog_buffer
+				->extra_buffer[i].event));
 		}
 	}
 
@@ -898,7 +1150,8 @@ void mode_store_usblog_notify(int type, char *param1)
 		param_len = strlen(b);
 		if (param_len >= USBLOG_MAX_STRING_SIZE)
 			param_len = USBLOG_MAX_STRING_SIZE-1;
-		strncpy(md_buffer->usbmode_str, b, param_len);
+		strncpy(md_buffer->usbmode_str, b,
+			sizeof(md_buffer->usbmode_str)-1);
 	} else if (type == NOTIFY_USBMODE) {
 		if (b) {
 			name = strsep(&b, ",");
@@ -912,8 +1165,8 @@ void mode_store_usblog_notify(int type, char *param1)
 				continue;
 			if (USBLOG_MAX_STRING_SIZE
 				- strlen(md_buffer->usbmode_str) < 5) {
-				strncpy(md_buffer->usbmode_str, "overflow",
-					sizeof(md_buffer->usbmode_str)-1);
+				memset(md_buffer->usbmode_str + (USBLOG_MAX_STRING_SIZE-2), 0, 2);
+				strncat(md_buffer->usbmode_str, ".", 1);
 				b = NULL;
 			} else {
 				strncat(md_buffer->usbmode_str, ",", 1);
@@ -967,7 +1220,7 @@ void state_store_usblog_notify(int type, char *param1)
 		if (b) {
 			index2 = *b;
 			switch (index2) {
-			case 'L': /* FULL SPEED */
+			case 'F': /* FULL SPEED */
 				usbstate = NOTIFY_RESET_FULL;
 				break;
 			case 'H':  /* HIGH SPEED */
@@ -1060,6 +1313,43 @@ void state_store_usblog_notify(int type, char *param1)
 	case 'H': /*HIGH SPEED */
 		usbstate = NOTIFY_HIGH;
 		break;
+	case 'M': /* USB ENUMERATION */
+		name = strsep(&b, ":");
+		if (b) {
+			index2 = *b;
+			name = strsep(&b, ":");
+			if (b)
+				index3 = *b;
+			else /* X means none */
+				index3 = 'X';
+		} else /* X means none */
+			index2 = 'X';
+
+		switch (index2) {
+		case 'C': /* CONNDONE */
+			if (index3 == 'P') /* SUPERSPEED_PLUS */
+				usbstate = NOTIFY_CONNDONE_SSP;
+			else if (index3 == 'S') /* SUPERSPEED */
+				usbstate = NOTIFY_CONNDONE_SS;
+			else if (index3 == 'H') /* HIGHSPEED */
+				usbstate = NOTIFY_CONNDONE_HS;
+			else if (index3 == 'F') /* FULLSPEED */
+				usbstate = NOTIFY_CONNDONE_FS;
+			else if (index3 == 'L') /* LOWSPEED */
+				usbstate = NOTIFY_CONNDONE_LS;
+			break;
+		case 'G': /* GET */
+			if (index3 == 'D') /* GET_DES */
+				usbstate = NOTIFY_GET_DES;
+			break;
+		case 'S': /* SET */
+			if (index3 == 'C') /* SET_CON */
+				usbstate = NOTIFY_SET_CON;
+			break;
+		default:
+			break;
+		}
+		break;
 	default:
 		pr_err("%s state param error. state=%s\n", __func__, param1);
 		goto err;
@@ -1096,21 +1386,78 @@ err:
 	return;
 }
 
+void port_store_usblog_notify(int type, void *param1, void *param2)
+{
+	struct port_buf *pt_buffer;
+	unsigned long long *target_count;
+	unsigned long *target_index;
+
+	target_count = &usblog_root.usblog_buffer->port_count;
+	target_index = &usblog_root.usblog_buffer->port_index;
+	pt_buffer = &usblog_root.usblog_buffer->port_buffer[*target_index];
+	if (pt_buffer == NULL) {
+		pr_err("%s target_buffer error\n", __func__);
+		goto err;
+	}
+	pt_buffer->ts_nsec = local_clock();
+	pt_buffer->type = type;
+	if (type == NOTIFY_PORT_CONNECT) {
+		pt_buffer->param1 = le16_to_cpu(*(__le16 *)(param1));
+		pt_buffer->param2 = le16_to_cpu(*(__le16 *)(param2));
+		pt_buffer->count
+			= set_port_count(pt_buffer->param1, pt_buffer->param2);
+	} else if (type == NOTIFY_PORT_DISCONNECT) {
+		pt_buffer->param1 = le16_to_cpu(*(__le16 *)(param1));
+		pt_buffer->param2 = le16_to_cpu(*(__le16 *)(param2));
+	} else {
+		pt_buffer->param1 = (uint16_t)(*(__u8 *)(param1));
+		pt_buffer->param2 = (uint16_t)(*(__u8 *)(param2));
+	}
+
+	*target_index = (*target_index+1)%USBLOG_PORT_BUFFER_SIZE;
+	(*target_count)++;
+err:
+	return;
+}
+
+void pcm_store_usblog_notify(int type, int *param1)
+{
+	struct pcm_buf *pcm_buffer;
+	unsigned long long *target_count;
+	unsigned long *target_index;
+
+	target_count = &usblog_root.usblog_vm_buffer->pcm_count;
+	target_index = &usblog_root.usblog_vm_buffer->pcm_index;
+	pcm_buffer = &usblog_root.usblog_vm_buffer->pcm_buffer[*target_index];
+	if (pcm_buffer == NULL) {
+		pr_err("%s target_buffer error\n", __func__);
+		goto err;
+	}
+	pcm_buffer->ts_nsec = local_clock();
+	pcm_buffer->type = type;
+	pcm_buffer->enable = *param1;
+
+	*target_index = (*target_index+1)%USBLOG_PCM_BUFFER_SIZE;
+	(*target_count)++;
+err:
+	return;
+}
+
 void extra_store_usblog_notify(int type, int *param1)
 {
-	struct extra_buf *ev_buffer;
+	struct extra_buf *ex_buffer;
 	unsigned long long *target_count;
 	unsigned long *target_index;
 
 	target_count = &usblog_root.usblog_buffer->extra_count;
 	target_index = &usblog_root.usblog_buffer->extra_index;
-	ev_buffer = &usblog_root.usblog_buffer->extra_buffer[*target_index];
-	if (ev_buffer == NULL) {
+	ex_buffer = &usblog_root.usblog_buffer->extra_buffer[*target_index];
+	if (ex_buffer == NULL) {
 		pr_err("%s target_buffer error\n", __func__);
 		goto err;
 	}
-	ev_buffer->ts_nsec = local_clock();
-	ev_buffer->event = *param1;
+	ex_buffer->ts_nsec = local_clock();
+	ex_buffer->event = *param1;
 
 	*target_index = (*target_index+1)%USBLOG_EXTRA_BUFFER_SIZE;
 	(*target_count)++;
@@ -1134,6 +1481,12 @@ void store_usblog_notify(int type, void *param1, void *param2)
 		return;
 	}
 
+	if (!usblog_root.usblog_vm_buffer) {
+		pr_err("%s usblog_vm_buffer is null\n", __func__);
+		spin_unlock_irqrestore(&usblog_root.usblog_lock, flags);
+		return;
+	}
+
 	if (type == NOTIFY_FUNCSTATE || type == NOTIFY_ALTERNATEMODE) {
 		temp = *(int *)param1;
 		ccic_store_usblog_notify(type, &temp);
@@ -1148,6 +1501,13 @@ void store_usblog_notify(int type, void *param1, void *param2)
 		mode_store_usblog_notify(type, (char *)param1);
 	else if (type == NOTIFY_USBSTATE)
 		state_store_usblog_notify(type, (char *)param1);
+	else if (type == NOTIFY_PORT_CONNECT ||
+				type == NOTIFY_PORT_DISCONNECT ||
+					type == NOTIFY_PORT_CLASS)
+		port_store_usblog_notify(type, param1, param2);
+	else if (type == NOTIFY_PCM_PLAYBACK ||
+				type == NOTIFY_PCM_CAPTURE)
+		pcm_store_usblog_notify(type, (int *)param1);
 	else if (type == NOTIFY_EXTRA)
 		extra_store_usblog_notify(type, (int *)param1);
 	else
@@ -1184,7 +1544,6 @@ void store_ccic_bin_version(const unsigned char *sw_main,
 }
 EXPORT_SYMBOL(store_ccic_bin_version);
 
-#if defined(CONFIG_USB_HW_PARAM)
 unsigned long long show_ccic_version(void)
 {
 	unsigned long long ret = 0;
@@ -1193,7 +1552,6 @@ unsigned long long show_ccic_version(void)
 	return ret;
 }
 EXPORT_SYMBOL(show_ccic_version);
-#endif
 
 int register_usblog_proc(void)
 {
@@ -1210,7 +1568,7 @@ int register_usblog_proc(void)
 
 	usblog_root.init = 1;
 
-	proc_create("usblog", 0, NULL, &usblog_proc_fops);
+	proc_create("usblog", 0444, NULL, &usblog_proc_fops);
 
 	usblog_root.usblog_buffer
 		= kzalloc(sizeof(struct usblog_buf), GFP_KERNEL);
@@ -1218,14 +1576,27 @@ int register_usblog_proc(void)
 		ret = -ENOMEM;
 		goto err;
 	}
+	usblog_root.usblog_vm_buffer
+		= vzalloc(sizeof(struct usblog_vm_buf));
+	if (!usblog_root.usblog_vm_buffer) {
+		ret = -ENOMEM;
+		goto err1;
+	}
 	pr_info("%s size=%zu\n", __func__, sizeof(struct usblog_buf));
+	return ret;
+err1:
+	kfree(usblog_root.usblog_buffer);
+	usblog_root.usblog_buffer = NULL;
 err:
+	pr_err("%s error\n", __func__);
 	return ret;
 }
 EXPORT_SYMBOL(register_usblog_proc);
 
 void unregister_usblog_proc(void)
 {
+	vfree(usblog_root.usblog_vm_buffer);
+	usblog_root.usblog_vm_buffer = NULL;
 	kfree(usblog_root.usblog_buffer);
 	usblog_root.usblog_buffer = NULL;
 	remove_proc_entry("usblog", NULL);

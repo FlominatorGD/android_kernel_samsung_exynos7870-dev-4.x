@@ -29,6 +29,7 @@
 #define SMC_CMD_KERNEL_PANIC_NOTICE	(-122)
 #define SMC_CMD_SET_SEH_ADDRESS		(-123)
 #define SMC_CMD_LOCKUP_NOTICE		(0x8200007C)
+#define SMC_CMD_GET_SJTAG_STATUS	(0x8200012E)
 
 /* For protecting kernel text area */
 #define SMC_CMD_PROTECT_KERNEL_TEXT	(-125)
@@ -39,16 +40,6 @@
 
 /* For D-GPIO/D-TZPC */
 #define SMC_CMD_PREAPRE_PD_ONOFF	(0x82000410)
-
-/* For FMP/SMU Ctrl */
-#define SMC_CMD_FMP_SECURITY		(0xC2001810)
-#define SMC_CMD_FMP_DISK_KEY_STORED	(0xC2001820)
-#define SMC_CMD_FMP_DISK_KEY_SET	(0xC2001830)
-#define SMC_CMD_FMP_DISK_KEY_CLEAR	(0xC2001840)
-#define SMC_CMD_SMU			(0xC2001850)
-#define SMC_CMD_FMP_SMU_RESUME		(0xC2001860)
-#define SMC_CMD_FMP_SMU_DUMP		(0xC2001870)
-#define SMC_CMD_UFS_LOG			(0xC2001880)
 
 /* For FMP/SMU Ctrl */
 #define SMC_CMD_FMP_SECURITY		(0xC2001810)
@@ -78,6 +69,15 @@
 #define MC_FC_DRM_SET_CFW_PROT		(0x10000000)
 #define SMC_SRPMB_WSM			(0x82003811)
 
+/* Command ID for seccam */
+#define SMC_SECCAM_SETENV               (0x82002130)
+#define SMC_SECCAM_INIT                 (0x82002131)
+#define SMC_SECCAM_INIT_NSBUF           (0x82002134)
+#define SMC_SECCAM_SYSREG_PROT          (0x82002132)
+#define SMC_SECCAM_PREPARE              (0x82002135)
+#define SMC_SECCAM_UNPREPARE            (0x82002136)
+#define SMC_SECCAM_GETSTATUS            (0x82002137)
+
 /* Deprecated */
 #define SMC_DRM_MAKE_PGTABLE		(0x81000003)
 #define SMC_DRM_CLEAR_PGTABLE		(0x81000004)
@@ -99,16 +99,9 @@
 /* For Secure log information */
 #define SMC_CMD_SEC_LOG_INFO		(0x82000610)
 
-/* For connectivity I/F */
-#define SMC_CMD_CONN_IF			(0x82000710)
-
 /* For PPMPU fail information */
 #define SMC_CMD_GET_PPMPU_FAIL_INFO	(0x8200211A)
 #define SMC_CMD_CHECK_PPMPU_CH_NUM	(0x8200211B)
-
-/* For TZASC fail information */
-#define SMC_CMD_GET_TZASC_FAIL_INFO	(0x82000620)
-#define SMC_CMD_CHECK_TZASC_CH_NUM	(0x82000621)
 
 /* For MMCache flush */
 #define SMC_CMD_MM_CACHE_OPERATION	(0x82000720)
@@ -136,11 +129,6 @@
  */
 #define SMC_SRPMB_WSM			(0x82003811)
 
-/*
- * For SMC CMD for SRPMB
- */
-#define SMC_SRPMB_WSM			(0x82003811)
-
 /* For DTRNG Access */
 #define HWRNG_INIT			(0x0)
 #define HWRNG_EXIT			(0x1)
@@ -157,15 +145,18 @@
 #define PROT_MFC			(0)
 #define PROT_MSCL0			(1)
 #define PROT_MSCL1			(2)
-#define PROT_L0				(3)
-#define PROT_L1				(4)
-#define PROT_L2			    (5)
-#define PROT_L3				(6)
-#define PROT_L4				(7)
-#define PROT_L5				(8)
+#define PROT_GF0			(3)
+#define PROT_GF1			(4)
+#define PROT_VG				(5)
+#define PROT_VGF			(6)
+#define PROT_G2				(7)
+#define PROT_G3				(8)
+#define PROT_VGS			(9)
+#define PROT_VGRFS			(10)
 #define PROT_WB1			(11)
 #define PROT_G3D			(12)
 #define PROT_JPEG			(13)
+#define PROT_G2D			(14)
 
 #ifndef __ASSEMBLY__
 /* secure SysMMU SFR access */

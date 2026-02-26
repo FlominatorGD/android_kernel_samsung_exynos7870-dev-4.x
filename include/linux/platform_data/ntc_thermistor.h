@@ -55,7 +55,6 @@ struct ntc_thermistor_platform_data {
 	unsigned int pulldown_ohm;
 	enum { NTC_CONNECTED_POSITIVE, NTC_CONNECTED_GROUND } connect;
 	struct iio_channel *chan;
-	bool iio_convert_support;
 
 	int (*read_ohm)(void);
 };

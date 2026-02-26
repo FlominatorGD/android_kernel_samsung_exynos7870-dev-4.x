@@ -270,8 +270,8 @@ menu "Samsung Exynos"
 config ARCH_EXYNOS
 	bool
 
-config SOC_EXYNOS9610
-	bool "Samsung EXYNOS9610"
+config SOC_EXYNOS9810
+	bool "Samsung EXYNOS9810"
 	select SOC_SAMSUNG
 	select ARCH_EXYNOS
 	select ARCH_HAS_CPUFREQ
@@ -287,8 +287,8 @@ config SOC_EXYNOS9610
 	select PINCTRL
 	select SAMSUNG_DMADEV
 
-config SOC_EXYNOS9630
-	bool "Samsung EXYNOS9630"
+config SOC_EMULATOR9820
+	bool "Samsung EMULATOR9820"
 	select SOC_SAMSUNG
 	select ARCH_EXYNOS
 	select ARCH_HAS_CPUFREQ
@@ -304,8 +304,8 @@ config SOC_EXYNOS9630
 	select PINCTRL
 	select SAMSUNG_DMADEV
 
-config SOC_EXYNOS3830
-	bool "Samsung EXYNOS3830"
+config SOC_EXYNOS9820
+	bool "Samsung EXYNOS9820"
 	select SOC_SAMSUNG
 	select ARCH_EXYNOS
 	select ARCH_HAS_CPUFREQ
@@ -320,6 +320,10 @@ config SOC_EXYNOS3830
 	select CLKSRC_EXYNOS_MCT
 	select PINCTRL
 	select SAMSUNG_DMADEV
+
+config SOC_EXYNOS9820_EVT0
+	default n
+	bool "Samsung EXYNOS9820 EVT0"
 
 config ARCH_EXYNOS9
 	bool "ARMv8 based Samsung Exynos9"
@@ -328,5 +332,10 @@ config ARCH_EXYNOS9
 	help
 	  Samsung EXYNOS9 (Meercat/Ananke) SoC based systems
 
+config ANDROID_SYSTEM_AS_ROOT
+	bool "Enable Android System As Root"
+	default n
+
 endmenu
+
 endmenu

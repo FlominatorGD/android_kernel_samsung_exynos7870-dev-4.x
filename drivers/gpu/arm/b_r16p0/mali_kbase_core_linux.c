@@ -4033,8 +4033,10 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 		return err;
 	}
 	kbdev->inited_subsys |= inited_hwcnt_gpu_virt;
-
-	err = kbase_vinstr_init(kbdev->hwcnt_gpu_virt, &kbdev->vinstr_ctx);
+//SRUK-START
+	//err = kbase_vinstr_init(kbdev->hwcnt_gpu_virt, &kbdev->vinstr_ctx);
+	err = kbase_vinstr_init(kbdev, kbdev->hwcnt_gpu_virt, &kbdev->vinstr_ctx);
+//SRUK-END
 	if (err) {
 		dev_err(kbdev->dev,
 			"Virtual instrumentation initialization failed\n");
@@ -4173,6 +4175,7 @@ static int kbase_device_suspend(struct device *dev)
 		return -ENODEV;
 
 	platform = (struct exynos_context *)kbdev->platform_context;
+
 	if (!platform)
 		return -ENODEV;
 
@@ -4211,6 +4214,7 @@ static int kbase_device_resume(struct device *dev)
 		return -ENODEV;
 
 	platform = (struct exynos_context *)kbdev->platform_context;
+
 	if (!platform)
 		return -ENODEV;
 

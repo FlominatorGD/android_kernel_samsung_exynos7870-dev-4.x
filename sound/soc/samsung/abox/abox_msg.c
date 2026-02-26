@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_msg.c
+/* sound/soc/samsung/abox/abox_msg.c
  *
  * ALSA SoC Audio Layer - Samsung Abox Message Queue driver
  *

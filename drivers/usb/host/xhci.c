@@ -691,7 +691,7 @@ static void xhci_stop(struct usb_hcd *hcd)
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 
 	mutex_lock(&xhci->mutex);
-
+	pr_info("%s %d xhci->main_hcd = %pS\n", __func__, __LINE__, xhci->main_hcd);
 	/* Only halt host and free memory after both hcds are removed */
 	if (!usb_hcd_is_primary_hcd(hcd)) {
 		mutex_unlock(&xhci->mutex);
@@ -704,7 +704,6 @@ static void xhci_stop(struct usb_hcd *hcd)
 	xhci_halt(xhci);
 	xhci_reset(xhci);
 	spin_unlock_irq(&xhci->lock);
-
 	xhci_cleanup_msix(xhci);
 
 	/* Deleting Compliance Mode Recovery Timer */
@@ -1086,7 +1085,7 @@ int xhci_resume(struct xhci_hcd *xhci, bool hibernated)
 		 * doesn't mention any timeout value.
 		 */
 		if (xhci_handshake(&xhci->op_regs->status,
-			      STS_RESTORE, 0, 100 * 1000)) {
+			      STS_RESTORE, 0, 10 * 1000)) {
 			xhci_warn(xhci, "WARN: xHC restore state timeout\n");
 			spin_unlock_irq(&xhci->lock);
 			return -ETIMEDOUT;
@@ -1623,8 +1622,20 @@ static int xhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 			goto done;
 		}
 		ep->ep_state |= EP_STOP_CMD_PENDING;
+#if !defined(CONFIG_USB_HOST_SAMSUNG_FEATURE)
 		ep->stop_cmd_timer.expires = jiffies +
 			XHCI_STOP_EP_CMD_TIMEOUT * HZ;
+#else
+		if (xhci->xhc_state & XHCI_STATE_REMOVING) {
+			ep->stop_cmd_timer.expires = jiffies + 1 * HZ;
+			xhci_info(xhci, "stop_cmd_timer: 1 sec\n");
+
+		} else {
+			ep->stop_cmd_timer.expires = jiffies +
+				XHCI_STOP_EP_CMD_TIMEOUT * HZ;
+			xhci_info(xhci, "stop_cmd_timer: 5 sec\n");
+		}
+#endif
 		add_timer(&ep->stop_cmd_timer);
 		xhci_queue_stop_endpoint(xhci, command, urb->dev->slot_id,
 					 ep_index, 0);
@@ -3657,6 +3668,7 @@ static void xhci_free_dev(struct usb_hcd *hcd, struct usb_device *udev)
 	slot_ctx = xhci_get_slot_ctx(xhci, virt_dev->out_ctx);
 	trace_xhci_free_dev(slot_ctx);
 
+	xhci_info(xhci, "%s clear EP_STOP_CMD_PENDING\n", __func__);
 	/* Stop any wayward timer functions (which may grab the lock) */
 	for (i = 0; i < 31; i++) {
 		virt_dev->eps[i].ep_state &= ~EP_STOP_CMD_PENDING;
@@ -3769,29 +3781,29 @@ int xhci_set_deq(struct xhci_hcd *xhci, struct xhci_container_ctx *ctx,
 		struct xhci_ep_ctx *ep_ctx = xhci_get_ep_ctx(xhci, ctx, i);
 
 		if (epaddr == udev->hwinfo.in_ep ) {
-			pr_info("[%s] set in deq : %#08llx \n",
-					__func__, ep_ctx->deq);
+			pr_info("[%s] set in eq addr: 0x%x \n",
+					__func__, epaddr);
 			if (udev->hwinfo.in_deq)
 				udev->hwinfo.old_in_deq =
 						udev->hwinfo.in_deq;
 			udev->hwinfo.in_deq = ep_ctx->deq;
 		} else if (epaddr == udev->hwinfo.out_ep) {
-			pr_info("[%s] set out deq : %#08llx \n",
-					__func__, ep_ctx->deq);
+			pr_info("[%s] set out deq addr: 0x%x \n",
+					__func__, epaddr);
 			if (udev->hwinfo.out_deq)
 				udev->hwinfo.old_out_deq =
 						udev->hwinfo.out_deq;
 			udev->hwinfo.out_deq = ep_ctx->deq;
 		} else if (epaddr == udev->hwinfo.fb_out_ep) {
-			pr_info("[%s] set fb out deq : %#08llx \n",
-					__func__, ep_ctx->deq);
+			pr_info("[%s] set fb out deq addr : 0x%x \n",
+					__func__, epaddr);
 			if (udev->hwinfo.fb_out_deq)
 				udev->hwinfo.fb_old_out_deq =
 						udev->hwinfo.fb_out_deq;
 			udev->hwinfo.fb_out_deq = ep_ctx->deq;
 		} else if (epaddr == udev->hwinfo.fb_in_ep) {
-			pr_info("[%s] set fb in deq : %#08llx \n",
-					__func__, ep_ctx->deq);
+			pr_info("[%s] set fb in deq addr: 0x%x \n",
+					__func__, epaddr);
 			if (udev->hwinfo.fb_in_deq)
 				udev->hwinfo.fb_old_in_deq =
 						udev->hwinfo.fb_in_deq;

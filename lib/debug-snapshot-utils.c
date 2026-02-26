@@ -31,6 +31,7 @@
 #include <asm/smp_plat.h>
 #include <asm/core_regs.h>
 #include <asm/cacheflush.h>
+#include <linux/irqflags.h>
 
 #include "debug-snapshot-local.h"
 
@@ -47,7 +48,7 @@ void dbg_snapshot_hook_hardlockup_entry(void *v_regs)
 	int cpu = raw_smp_processor_id();
 	unsigned int val;
 
-	if (!dbg_snapshot_get_enable())
+	if (!dss_base.enabled)
 		return;
 
 	if (!dss_desc.hardlockup_core_mask) {
@@ -91,11 +92,20 @@ void dbg_snapshot_hook_hardlockup_entry(void *v_regs)
 		regs->pc = last_pc;
 
 		/* Then, we expect bug() function works well */
-		dev_emerg(dss_desc.dev, "\n------------------------------------------------------------------------------\n"
-					"%s - Debugging Information for Hardlockup core(%d) - locked CPUs %*pbl"
-					"\n------------------------------------------------------------------------------\n\n",
-					(dss_desc.allcorelockup_detected) ? "All Core" : "Core", cpu,
-					cpumask_pr_args((cpumask_t *)&dss_desc.hardlockup_core_mask));
+		pr_emerg("\n--------------------------------------------------------------------------\n"
+			"%s - Debugging Information for Hardlockup core - CPU(%d), Mask:(0x%lx)"
+			"\n--------------------------------------------------------------------------\n\n",
+			(dss_desc.allcorelockup_detected) ? "All Core" : "Core",
+			cpu, dss_desc.hardlockup_core_mask);
+
+#if defined(CONFIG_HARDLOCKUP_DETECTOR_OTHER_CPU)			\
+	&& defined(CONFIG_SEC_DEBUG)
+		update_hardlockup_type(cpu);
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+		sec_debug_set_extra_info_backtrace_cpu(v_regs, cpu);
+#endif
 	}
 }
 
@@ -103,7 +113,7 @@ void dbg_snapshot_hook_hardlockup_exit(void)
 {
 	int cpu = raw_smp_processor_id();
 
-	if (!dbg_snapshot_get_enable() ||
+	if (!dss_base.enabled ||
 		!dss_desc.hardlockup_core_mask) {
 		return;
 	}
@@ -129,11 +139,8 @@ void dbg_snapshot_recall_hardlockup_core(void)
 	unsigned long cpu_mask = 0, tmp_bit = 0;
 	unsigned long last_pc_addr = 0, timeout;
 
-	if (!dbg_snapshot_get_enable())
-		goto out;
-
 	if (dss_desc.allcorelockup_detected) {
-		dev_emerg(dss_desc.dev, "debug-snapshot: skip recall hardlockup for dump of each core\n");
+		pr_emerg("debug-snapshot: skip recall hardlockup for dump of each core\n");
 		goto out;
 	}
 
@@ -150,7 +157,7 @@ void dbg_snapshot_recall_hardlockup_core(void)
 
 	last_pc_addr = dbg_snapshot_get_last_pc_paddr();
 
-	dev_emerg(dss_desc.dev, "debug-snapshot: core hardlockup mask information: 0x%lx\n", cpu_mask);
+	pr_emerg("debug-snapshot: core hardlockup mask information: 0x%lx\n", cpu_mask);
 	dss_desc.hardlockup_core_mask = cpu_mask;
 
 #ifdef SMC_CMD_KERNEL_PANIC_NOTICE
@@ -160,7 +167,7 @@ void dbg_snapshot_recall_hardlockup_core(void)
 				 (unsigned long)dbg_snapshot_bug_func,
 				 last_pc_addr);
 	if (ret) {
-		dev_emerg(dss_desc.dev, "debug-snapshot: failed to generate NMI, "
+		pr_emerg("debug-snapshot: failed to generate NMI, "
 			 "not support to dump information of core\n");
 		dss_desc.hardlockup_core_mask = 0;
 		goto out;
@@ -178,7 +185,7 @@ void dbg_snapshot_save_system(void *unused)
 {
 	struct dbg_snapshot_mmu_reg *mmu_reg;
 
-	if (!dbg_snapshot_get_enable())
+	if (!dbg_snapshot_get_enable("header"))
 		return;
 
 	mmu_reg = per_cpu(dss_mmu_reg, raw_smp_processor_id());
@@ -199,7 +206,7 @@ int dbg_snapshot_save_core(void *v_regs)
 	struct pt_regs *core_reg =
 			per_cpu(dss_core_reg, smp_processor_id());
 
-	if (!dbg_snapshot_get_enable())
+	if(!dbg_snapshot_get_enable("header"))
 		return 0;
 
 	if (!regs)
@@ -207,7 +214,7 @@ int dbg_snapshot_save_core(void *v_regs)
 	else
 		memcpy(core_reg, regs, sizeof(struct user_pt_regs));
 
-	dev_emerg(dss_desc.dev, "debug-snapshot: core register saved(CPU:%d)\n",
+	pr_emerg("debug-snapshot: core register saved(CPU:%d)\n",
 						smp_processor_id());
 	return 0;
 }
@@ -219,7 +226,7 @@ int dbg_snapshot_save_context(void *v_regs)
 	unsigned long flags;
 	struct pt_regs *regs = (struct pt_regs *)v_regs;
 
-	if (!dbg_snapshot_get_enable())
+	if (unlikely(!dss_base.enabled))
 		return 0;
 
 	dss_soc_ops->soc_save_context_entry(NULL);
@@ -233,9 +240,9 @@ int dbg_snapshot_save_context(void *v_regs)
 		dbg_snapshot_save_core(regs);
 		dbg_snapshot_dump();
 		dbg_snapshot_set_core_panic_stat(DSS_SIGN_PANIC, cpu);
-		dev_emerg(dss_desc.dev, "debug-snapshot: context saved(CPU:%d)\n", cpu);
+		pr_emerg("debug-snapshot: context saved(CPU:%d)\n", cpu);
 	} else
-		dev_emerg(dss_desc.dev, "debug-snapshot: skip context saved(CPU:%d)\n", cpu);
+		pr_emerg("debug-snapshot: skip context saved(CPU:%d)\n", cpu);
 
 	raw_spin_unlock_irqrestore(&dss_desc.ctrl_lock, flags);
 
@@ -274,15 +281,16 @@ static void dbg_snapshot_dump_one_task_info(struct task_struct *tsk, bool is_mai
 	touch_softlockup_watchdog();
 	dss_soc_ops->soc_kick_watchdog(NULL);
 
-	dev_info(dss_desc.dev, "%8d %8d %8d %16lld %c(%d) %3d  %16zx %16zx  %16zx %c %16s [%s]\n",
-				tsk->pid, (int)(tsk->utime), (int)(tsk->stime),
-				tsk->se.exec_start, state_array[idx], (int)(tsk->state),
-				task_cpu(tsk), wchan, pc, (unsigned long)tsk,
-				is_main ? '*' : ' ', tsk->comm, symname);
+	pr_info("%8d %8d %8d %16lld %c(%d) %3d  %16zx %16zx  %16zx %c %16s [%s]\n",
+			tsk->pid, (int)(tsk->utime), (int)(tsk->stime),
+			tsk->se.exec_start, state_array[idx], (int)(tsk->state),
+			task_cpu(tsk), wchan, pc, (unsigned long)tsk,
+			is_main ? '*' : ' ', tsk->comm, symname);
 
-	if (tsk->state == TASK_RUNNING || tsk->state == TASK_UNINTERRUPTIBLE) {
+	if (tsk->state == TASK_RUNNING || tsk->state == TASK_UNINTERRUPTIBLE || tsk->state == TASK_KILLABLE) {		
+		sec_debug_wtsk_print_info(tsk, true);
 		show_stack(tsk, NULL);
-		dev_info(dss_desc.dev, "\n");
+		pr_info("\n");
 	}
 }
 
@@ -300,14 +308,11 @@ void dbg_snapshot_dump_task_info(void)
 	struct task_struct *frst_thr;
 	struct task_struct *curr_thr;
 
-	if (!dbg_snapshot_get_enable())
-		return;
-
-	dev_info(dss_desc.dev, "\n");
-	dev_info(dss_desc.dev, " current proc : %d %s\n", current->pid, current->comm);
-	dev_info(dss_desc.dev, " ----------------------------------------------------------------------------------------------------------------------------\n");
-	dev_info(dss_desc.dev, "     pid      uTime    sTime      exec(ns)  stat  cpu       wchan           user_pc        task_struct       comm   sym_wchan\n");
-	dev_info(dss_desc.dev, " ----------------------------------------------------------------------------------------------------------------------------\n");
+	pr_info("\n");
+	pr_info(" current proc : %d %s\n", current->pid, current->comm);
+	pr_info(" ----------------------------------------------------------------------------------------------------------------------------\n");
+	pr_info("     pid      uTime    sTime      exec(ns)  stat  cpu       wchan           user_pc        task_struct       comm   sym_wchan\n");
+	pr_info(" ----------------------------------------------------------------------------------------------------------------------------\n");
 
 	/* processes */
 	frst_tsk = &init_task;
@@ -332,9 +337,10 @@ void dbg_snapshot_dump_task_info(void)
 		if (curr_tsk == frst_tsk)
 			break;
 	}
-	dev_info(dss_desc.dev, " ----------------------------------------------------------------------------------------------------------------------------\n");
+	pr_info(" ----------------------------------------------------------------------------------------------------------------------------\n");
 }
 
+#ifdef CONFIG_DEBUG_SNAPSHOT_CRASH_KEY
 void dbg_snapshot_check_crash_key(unsigned int code, int value)
 {
 	static bool volup_p;
@@ -342,10 +348,13 @@ void dbg_snapshot_check_crash_key(unsigned int code, int value)
 	static int loopcount;
 
 	static const unsigned int VOLUME_UP = KEY_VOLUMEUP;
+#if defined(CONFIG_DEBUG_SNAPSHOT_ONE_CRASH_KEY)
+	static const unsigned int VOLUME_DOWN = KEY_RESET;
+#else
 	static const unsigned int VOLUME_DOWN = KEY_VOLUMEDOWN;
-
+#endif
 	if (code == KEY_POWER)
-		dev_info(dss_desc.dev, "debug-snapshot: POWER-KEY %s\n", value ? "pressed" : "released");
+		pr_crit("debug-snapshot: POWER-KEY %s\n", value ? "pressed" : "released");
 
 	/* Enter Forced Upload
 	 *  Hold volume down key first
@@ -359,8 +368,9 @@ void dbg_snapshot_check_crash_key(unsigned int code, int value)
 			voldown_p = true;
 		if (!volup_p && voldown_p) {
 			if (code == KEY_POWER) {
-				dev_info(dss_desc.dev,
-					"debug-snapshot: count for entering forced upload [%d]\n", ++loopcount);
+				pr_info
+				    ("debug-snapshot: count for entering forced upload [%d]\n",
+				     ++loopcount);
 				if (loopcount == 2) {
 					panic("Crash Key");
 				}
@@ -376,10 +386,11 @@ void dbg_snapshot_check_crash_key(unsigned int code, int value)
 	}
 }
 EXPORT_SYMBOL(dbg_snapshot_check_crash_key);
+#endif
 
 void __init dbg_snapshot_allcorelockup_detector_init(void)
 {
-	int ret = -1;
+	int ret;
 
 	if (!dss_desc.multistage_wdt_irq)
 		return;
@@ -398,7 +409,7 @@ void __init dbg_snapshot_allcorelockup_detector_init(void)
 				 (unsigned long)(virt_to_phys)(&dss_allcorelockup_param));
 #endif
 
-	dev_emerg(dss_desc.dev, "debug-snapshot: %s to register all-core lockup detector - ret: %d\n",
+	pr_emerg("debug-snapshot: %s to register all-core lockup detector - ret: %d\n",
 			ret == 0 ? "success" : "failed", ret);
 }
 
@@ -407,7 +418,7 @@ void __init dbg_snapshot_init_utils(void)
 	size_t vaddr;
 	int i;
 
-	vaddr = dss_items[DSS_ITEM_HEADER_ID].entry.vaddr;
+	vaddr = dss_items[dss_desc.header_num].entry.vaddr;
 
 	for (i = 0; i < DSS_NR_CPUS; i++) {
 		per_cpu(dss_mmu_reg, i) = (struct dbg_snapshot_mmu_reg *)
@@ -424,9 +435,6 @@ void __init dbg_snapshot_init_utils(void)
 
 static int __init dbg_snapshot_utils_save_systems_all(void)
 {
-	if (!dbg_snapshot_get_enable())
-		return 0;
-
 	smp_call_function(dbg_snapshot_save_system, NULL, 1);
 	dbg_snapshot_save_system(NULL);
 

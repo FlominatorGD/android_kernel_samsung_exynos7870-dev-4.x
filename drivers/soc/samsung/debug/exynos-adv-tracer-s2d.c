@@ -100,8 +100,9 @@ int adv_tracer_s2d_set_blk_info(unsigned int all)
 	return 0;
 }
 
-static void adv_tracer_s2d_handler(struct adv_tracer_ipc_cmd *cmd, unsigned int len)
+static int adv_tracer_s2d_handler(struct adv_tracer_ipc_cmd *cmd, unsigned int len)
 {
+	return 0;
 }
 
 static ssize_t s2d_enable_store(struct device *dev,
@@ -154,7 +155,8 @@ static int adv_tracer_s2d_probe(struct platform_device *pdev)
 	struct adv_tracer_plugin *s2d = NULL;
 	int ret;
 
-	dev_set_socdata(&pdev->dev, "Exynos", "EAT_S2D");
+	dev_info(&pdev->dev, "[EAT+] %s\n", __func__);
+
 	s2d = devm_kzalloc(&pdev->dev, sizeof(struct adv_tracer_plugin), GFP_KERNEL);
 	if (!s2d) {
 		dev_err(&pdev->dev, "can not allocate mem for s2d\n");
@@ -165,7 +167,7 @@ static int adv_tracer_s2d_probe(struct platform_device *pdev)
 	plugin_s2d.pdev = pdev;
 	plugin_s2d.s2d_dev = s2d;
 
-	ret = adv_tracer_ipc_request_channel(node, adv_tracer_s2d_handler,
+	ret = adv_tracer_ipc_request_channel(node, (ipc_callback)adv_tracer_s2d_handler,
 				&s2d->id, &s2d->len);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "s2d ipc request fail(%d)\n",ret);
@@ -178,6 +180,18 @@ static int adv_tracer_s2d_probe(struct platform_device *pdev)
 		goto err_sysfs_probe;
 	dev_info(&pdev->dev, "S2D %sabled\n", plugin_s2d.enable ? "en" : "dis");
 
+	ret = dbg_snapshot_get_debug_level_reg();
+	if (plugin_s2d.enable) {
+	       if (ret == DSS_DEBUG_LEVEL_LOW)
+		       plugin_s2d.all_block = 0;
+	       else
+		       plugin_s2d.all_block = 1;
+
+		adv_tracer_s2d_set_blk_info(plugin_s2d.all_block);
+		dev_info(&pdev->dev, "S2D block: %s\n",
+				plugin_s2d.all_block ? "All" : "CPU");
+	}
+
 	platform_set_drvdata(pdev, s2d);
 	ret = sysfs_create_groups(&pdev->dev.kobj, adv_tracer_s2d_sysfs_groups);
 	if (ret) {
@@ -185,7 +199,7 @@ static int adv_tracer_s2d_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	dev_info(&pdev->dev, "%s successful.\n", __func__);
+	dev_info(&pdev->dev, "[EAT-] %s\n", __func__);
 	return 0;
 
 err_sysfs_probe:

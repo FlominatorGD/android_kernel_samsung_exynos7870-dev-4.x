@@ -31,6 +31,7 @@ struct s3c24xx_uart_info {
 	unsigned long		tx_fifomask;
 	unsigned long		tx_fifoshift;
 	unsigned long		tx_fifofull;
+	unsigned int		rts_trig_shift;
 	unsigned int		def_clk_sel;
 	unsigned long		num_clks;
 	unsigned long		clksel_mask;
@@ -50,41 +51,6 @@ struct s3c24xx_serial_drv_data {
 	unsigned int			fifosize[CONFIG_SERIAL_SAMSUNG_UARTS];
 };
 
-struct s3c24xx_uart_dma {
-	unsigned int			rx_chan_id;
-	unsigned int			tx_chan_id;
-
-	struct dma_slave_config		rx_conf;
-	struct dma_slave_config		tx_conf;
-
-	struct dma_chan			*rx_chan;
-	struct dma_chan			*tx_chan;
-
-	dma_addr_t			rx_addr;
-	dma_addr_t			tx_addr;
-
-	dma_cookie_t			rx_cookie;
-	dma_cookie_t			tx_cookie;
-
-	char				*rx_buf;
-
-	dma_addr_t			tx_transfer_addr;
-
-	size_t				rx_size;
-	size_t				tx_size;
-
-	struct dma_async_tx_descriptor	*tx_desc;
-	struct dma_async_tx_descriptor	*rx_desc;
-
-	int				tx_bytes_requested;
-	int				rx_bytes_requested;
-
-	struct samsung_dma_ops *ops;
-
-	spinlock_t rx_lock;
-	spinlock_t tx_lock;
-};
-
 struct uart_local_buf {
 	unsigned char *buffer;
 	unsigned int size;
@@ -96,14 +62,9 @@ struct s3c24xx_uart_port {
 	unsigned char			rx_claimed;
 	unsigned char			tx_claimed;
 	unsigned long			baudclk_rate;
-	unsigned int			min_dma_size;
 
 	unsigned int			rx_irq;
 	unsigned int			tx_irq;
-
-	unsigned int			tx_in_progress;
-	unsigned int			tx_mode;
-	unsigned int			rx_mode;
 
 	int				check_separated_clk;
 	unsigned int			src_clk_rate;
@@ -121,15 +82,15 @@ struct s3c24xx_uart_port {
 	unsigned long			qos_timeout;
 	unsigned int			usi_v2;
 	unsigned int			uart_panic_log;
+	struct pinctrl_state 	*uart_pinctrl_tx_dat;
 	struct pinctrl_state 	*uart_pinctrl_rts;
 	struct pinctrl_state 	*uart_pinctrl_default;
 	struct pinctrl *default_uart_pinctrl;
 	unsigned int		rts_control;
+	unsigned int		rts_trig_level;
 
 	/* reference to platform data */
 	struct s3c2410_uartcfg		*cfg;
-
-	struct s3c24xx_uart_dma		*dma;
 
 	struct platform_device		*pdev;
 
@@ -139,12 +100,11 @@ struct s3c24xx_uart_port {
 
 	unsigned int			in_band_wakeup;
 	unsigned int dbg_mode;
-
-	unsigned int dbg_uart_ch;
-	unsigned int dbg_uart_baud;
-	unsigned int dbg_word_len;
 	unsigned int			uart_logging;
 	struct uart_local_buf		uart_local_buf;
+
+	unsigned int wake_peer_en;
+	unsigned int wake_peer_pended;
 };
 
 /* conversion functions */
@@ -162,5 +122,7 @@ struct s3c24xx_uart_port {
 
 #define wr_regb(port, reg, val) writeb_relaxed(val, portaddr(port, reg))
 #define wr_regl(port, reg, val) writel_relaxed(val, portaddr(port, reg))
+static void uart_copy_to_local_buf(int dir, struct uart_local_buf *local_buf, unsigned char *trace_buf, int len);
+#define SS_UART_LOG(dir, local_buf, trace_buf) uart_copy_to_local_buf(dir, local_buf, trace_buf, sizeof(trace_buf))
 
 #endif

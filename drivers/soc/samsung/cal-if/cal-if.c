@@ -1,38 +1,33 @@
 #include <linux/module.h>
-#include <linux/of_address.h>
 #include <linux/debug-snapshot.h>
-
 #include <soc/samsung/ect_parser.h>
 #include <soc/samsung/cal-if.h>
+#ifdef CONFIG_EXYNOS9820_BTS
+#include <soc/samsung/bts.h>
+#endif
+#if defined(CONFIG_EXYNOS_BCM_DBG)
+#include <soc/samsung/exynos-bcm_dbg.h>
+#endif
 
-#ifdef CONFIG_PMUCAL
 #include "pwrcal-env.h"
 #include "pwrcal-rae.h"
-#endif
 #include "cmucal.h"
 #include "ra.h"
 #include "acpm_dvfs.h"
 #include "fvmap.h"
 #include "asv.h"
 
-#ifdef CONFIG_PMUCAL
 #include "pmucal_system.h"
 #include "pmucal_local.h"
 #include "pmucal_cpu.h"
+#include "pmucal_dbg.h"
 #include "pmucal_cp.h"
-#include "pmucal_gnss.h"
-#include "pmucal_shub.h"
 #include "pmucal_rae.h"
-#endif
-
-#ifdef CONFIG_EXYNOS_BCM_DBG
-#include <soc/samsung/exynos-bcm_dbg.h>
-#endif
-#ifdef CONFIG_FLEXPMU
 #include "pmucal_powermode.h"
 
+#include "../exynos-hiu.h"
+
 static DEFINE_SPINLOCK(pmucal_cpu_lock);
-#endif
 
 unsigned int cal_clk_is_enabled(unsigned int id)
 {
@@ -65,11 +60,14 @@ int cal_dfs_set_rate(unsigned int id, unsigned long rate)
 	int ret;
 
 	if (IS_ACPM_VCLK(id)) {
-		ret = exynos_acpm_set_rate(GET_IDX(id), rate);
+		if (cal_check_hiu_dvfs_id && cal_check_hiu_dvfs_id(id))
+			ret = exynos_hiu_set_freq(id, rate);
+		else
+			ret = exynos_acpm_set_rate(GET_IDX(id), rate);
 		if (!ret) {
 			vclk = cmucal_get_node(id);
 			if (vclk)
-				vclk->vrate = rate;
+				vclk->vrate = (unsigned int)rate;
 		}
 	} else {
 		ret = vclk_set_rate(id, rate);
@@ -108,6 +106,9 @@ unsigned long cal_dfs_cached_get_rate(unsigned int id)
 unsigned long cal_dfs_get_rate(unsigned int id)
 {
 	int ret;
+
+	if (cal_check_hiu_dvfs_id && cal_check_hiu_dvfs_id(id))
+		return exynos_hiu_get_freq(id);
 
 	ret = vclk_recalc_rate(id);
 
@@ -178,7 +179,6 @@ unsigned int cal_dfs_get_resume_freq(unsigned int id)
 	return vclk_get_resume_freq(id);
 }
 
-#ifdef CONFIG_EXYNOS_PD
 int cal_pd_control(unsigned int id, int on)
 {
 	unsigned int index;
@@ -191,11 +191,19 @@ int cal_pd_control(unsigned int id, int on)
 
 	if (on) {
 		ret = pmucal_local_enable(index);
+#ifdef CONFIG_EXYNOS9820_BTS
+		if (index == 0x7)
+			bts_pd_sync(id, on);
+#endif
 #if defined(CONFIG_EXYNOS_BCM_DBG)
 		if (cal_pd_status(id))
 			exynos_bcm_dbg_pd_sync(id, true);
 #endif
 	} else {
+#ifdef CONFIG_EXYNOS9820_BTS
+		if (index == 0x7)
+			bts_pd_sync(id, on);
+#endif
 #if defined(CONFIG_EXYNOS_BCM_DBG)
 		if (cal_pd_status(id))
 			exynos_bcm_dbg_pd_sync(id, false);
@@ -231,9 +239,7 @@ int cal_pd_set_smc_id(unsigned int id, int need_smc)
 
 	return 0;
 }
-#endif /* CONFIG_EXYNOS_PD */
 
-#ifdef CONFIG_EXYNOS_PM
 int cal_pm_enter(int mode)
 {
 	return pmucal_system_enter(mode);
@@ -251,7 +257,6 @@ int cal_pm_earlywakeup(int mode)
 
 int cal_cpu_enable(unsigned int cpu)
 {
-#ifdef CONFIG_FLEXPMU
 	int ret;
 
 	spin_lock(&pmucal_cpu_lock);
@@ -259,14 +264,10 @@ int cal_cpu_enable(unsigned int cpu)
 	spin_unlock(&pmucal_cpu_lock);
 
 	return ret;
-#else
-	return pmucal_cpu_enable(cpu);
-#endif
 }
 
 int cal_cpu_disable(unsigned int cpu)
 {
-#ifdef CONFIG_FLEXPMU
 	int ret;
 
 	spin_lock(&pmucal_cpu_lock);
@@ -274,14 +275,10 @@ int cal_cpu_disable(unsigned int cpu)
 	spin_unlock(&pmucal_cpu_lock);
 
 	return ret;
-#else
-	return pmucal_cpu_disable(cpu);
-#endif
 }
 
 int cal_cpu_status(unsigned int cpu)
 {
-#ifdef CONFIG_FLEXPMU
 	int ret;
 
 	spin_lock(&pmucal_cpu_lock);
@@ -289,14 +286,10 @@ int cal_cpu_status(unsigned int cpu)
 	spin_unlock(&pmucal_cpu_lock);
 
 	return ret;
-#else
-	return pmucal_cpu_is_enabled(cpu);
-#endif
 }
 
 int cal_cluster_enable(unsigned int cluster)
 {
-#ifdef CONFIG_FLEXPMU
 	int ret;
 
 	spin_lock(&pmucal_cpu_lock);
@@ -304,14 +297,10 @@ int cal_cluster_enable(unsigned int cluster)
 	spin_unlock(&pmucal_cpu_lock);
 
 	return ret;
-#else
-	return pmucal_cpu_cluster_enable(cluster);
-#endif
 }
 
 int cal_cluster_disable(unsigned int cluster)
 {
-#ifdef CONFIG_FLEXPMU
 	int ret;
 
 	spin_lock(&pmucal_cpu_lock);
@@ -319,14 +308,10 @@ int cal_cluster_disable(unsigned int cluster)
 	spin_unlock(&pmucal_cpu_lock);
 
 	return ret;
-#else
-	return pmucal_cpu_cluster_disable(cluster);
-#endif
 }
 
 int cal_cluster_status(unsigned int cluster)
 {
-#ifdef CONFIG_FLEXPMU
 	int ret;
 
 	spin_lock(&pmucal_cpu_lock);
@@ -334,21 +319,23 @@ int cal_cluster_status(unsigned int cluster)
 	spin_unlock(&pmucal_cpu_lock);
 
 	return ret;
-#else
-	return pmucal_cpu_cluster_is_enabled(cluster);
-#endif
+}
+
+int cal_cluster_req_emulation(unsigned int cluster, bool en)
+{
+	int ret;
+
+	spin_lock(&pmucal_cpu_lock);
+	ret = pmucal_cpu_cluster_req_emulation(cluster, en);
+	spin_unlock(&pmucal_cpu_lock);
+
+	return ret;
 }
 
 extern int cal_is_lastcore_detecting(unsigned int cpu)
 {
-#ifdef CONFIG_FLEXPMU
 	return pmucal_is_lastcore_detecting(cpu);
-#else
-	return 0;
-#endif
 }
-
-#endif /* CONFIG_EXYNOS_PM */
 
 int cal_dfs_get_asv_table(unsigned int id, unsigned int *table)
 {
@@ -441,45 +428,10 @@ void cal_cp_disable_dump_pc_no_pg(void)
 }
 #endif
 
-#ifdef CONFIG_GNSS_PMUCAL
-void cal_gnss_init(void)
-{
-	pmucal_gnss_init();
-}
-
-int cal_gnss_status(void)
-{
-	return pmucal_gnss_status();
-}
-
-void cal_gnss_reset_assert(void)
-{
-	pmucal_gnss_reset_assert();
-}
-
-void cal_gnss_reset_release(void)
-{
-	pmucal_gnss_reset_release();
-}
-
-void cal_gnss_reset_req_clear(void)
-{
-	pmucal_gnss_reset_req_clear();
-}
-
-void cal_gnss_active_clear(void)
-{
-	pmucal_gnss_active_clear();
-}
-#endif
-
 int __init cal_if_init(void *dev)
 {
 	static int cal_initialized;
-	struct resource res;
 	int ret;
-
-	(void)ret; /* might be unused */
 
 	if (cal_initialized == 1)
 		return 0;
@@ -491,7 +443,6 @@ int __init cal_if_init(void *dev)
 	if (cal_data_init)
 		cal_data_init();
 
-#ifdef CONFIG_PMUCAL
 	ret = pmucal_rae_init();
 	if (ret < 0)
 		return ret;
@@ -507,13 +458,14 @@ int __init cal_if_init(void *dev)
 	ret = pmucal_cpu_init();
 	if (ret < 0)
 		return ret;
-#endif
 
-#ifdef CONFIG_FLEXPMU
 	ret = pmucal_cpuinform_init();
 	if (ret < 0)
 		return ret;
-#endif
+
+	ret = pmucal_dbg_init();
+	if (ret < 0)
+		return ret;
 
 #ifdef CONFIG_CP_PMUCAL
 	ret = pmucal_cp_initialize();
@@ -521,22 +473,7 @@ int __init cal_if_init(void *dev)
 		return ret;
 #endif
 
-#ifdef CONFIG_GNSS_PMUCAL
-	ret = pmucal_gnss_initialize();
-	if (ret < 0)
-		return ret;
-#endif
-
-#ifdef CONFIG_SHUB_PMUCAL
-	ret = pmucal_shub_initialize();
-	if (ret < 0)
-		return ret;
-
-#endif
 	exynos_acpm_set_device(dev);
-
-	if (of_address_to_resource(dev, 0, &res) == 0)
-		cmucal_dbg_set_cmu_top_base(res.start);
 
 	cal_initialized = 1;
 

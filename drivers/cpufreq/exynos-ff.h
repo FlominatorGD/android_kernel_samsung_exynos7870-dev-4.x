@@ -11,7 +11,9 @@ struct exynos_ff_driver {
 	struct cpumask		cpus;
 };
 
-static bool hwi_dvfs_req;
-static atomic_t boost_throttling = ATOMIC_INIT(0);
+#ifdef CONFIG_EXYNOS_PSTATE_HAFM_TB
+extern bool hwi_dvfs_req;
+extern atomic_t boost_throttling;
+#endif
 
 #endif

@@ -88,7 +88,6 @@ obj-$(CONFIG_MMC_SDHCI_BCM_KONA)	+= sdhci-bcm-kona.o
 obj-$(CONFIG_MMC_SDHCI_IPROC)		+= sdhci-iproc.o
 obj-$(CONFIG_MMC_SDHCI_MSM)		+= sdhci-msm.o
 obj-$(CONFIG_MMC_SDHCI_ST)		+= sdhci-st.o
-obj-$(CONFIG_MMC_CQ_HCI)                += cmdq_hci.o
 obj-$(CONFIG_MMC_SDHCI_MICROCHIP_PIC32)	+= sdhci-pic32.o
 obj-$(CONFIG_MMC_SDHCI_BRCMSTB)		+= sdhci-brcmstb.o
 
@@ -99,7 +98,6 @@ endif
 obj-$(CONFIG_MMC_SDHCI_XENON)	+= sdhci-xenon-driver.o
 sdhci-xenon-driver-y		+= sdhci-xenon.o sdhci-xenon-phy.o
 
-ifneq (,$(filter $(CONFIG_MMC_DW_EXYNOS_SMU) $(CONFIG_MMC_DW_EXYNOS_FMP),y))
-obj-y += dw_mmc-exynos-fmp.o
-endif
+obj-$(CONFIG_MMC_DW_EXYNOS_FMP) += dw_mmc-exynos-fmp.o
+obj-$(CONFIG_MMC_DW_EXYNOS_SMU) += dw_mmc-exynos-smu.o
 obj-$(CONFIG_MMC_SRPMB)		+= dw_mmc-srpmb.o

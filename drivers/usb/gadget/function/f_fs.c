@@ -616,9 +616,11 @@ static int ffs_ep0_release(struct inode *inode, struct file *file)
 {
 	struct ffs_data *ffs = file->private_data;
 
-	pr_info("%s\n", __func__);
-
+#ifdef VERBOSE_DEBUG
 	ENTER();
+#else
+	pr_info("%s\n", __func__);
+#endif
 
 	ffs_data_closed(ffs);
 
@@ -966,13 +968,12 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 
 	spin_lock_irq(&epfile->ffs->eps_lock);
 
-	if (epfile->ep != ep) {
+	if ((epfile->ep != ep) || !(ep->ep && ep->req)) {
 		/* In the meantime, endpoint got disabled or changed. */
 		ret = -ESHUTDOWN;
 	} else if (halt) {
-		ret = usb_ep_set_halt(ep->ep);
-		if (!ret)
-			ret = -EBADMSG;
+		usb_ep_set_halt(ep->ep);
+		ret = -EBADMSG;
 	} else if (unlikely(data_len == -EINVAL)) {
 		/*
 		 * Sanity Check: even though data_len can't be used
@@ -1011,12 +1012,14 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 			 * status. usb_ep_dequeue API should guarantee no race
 			 * condition with req->complete callback.
 			 */
-			usb_ep_dequeue(ep->ep, req);
-			wait_for_completion(&done);
-			interrupted = ep->status < 0;
+			if (epfile->ep == ep) {
+				usb_ep_dequeue(ep->ep, req);
+				interrupted = ep->status < 0;
+			} else
+				interrupted = 1;
 		}
 
-		if (interrupted)
+		if (interrupted || (epfile->ep != ep))
 			ret = -EINTR;
 		else if (io_data->read && ep->status > 0) {
 			if (ep->status > 0xFFFFFF) {
@@ -1733,6 +1736,10 @@ static void ffs_data_reset(struct ffs_data *ffs)
 	ffs->state = FFS_READ_DESCRIPTORS;
 	ffs->setup_state = FFS_NO_SETUP;
 	ffs->flags = 0;
+
+	ffs->ms_os_descs_ext_prop_count = 0;
+	ffs->ms_os_descs_ext_prop_name_len = 0;
+	ffs->ms_os_descs_ext_prop_data_len = 0;
 }
 
 
@@ -2923,7 +2930,6 @@ static inline struct f_fs_opts *ffs_do_functionfs_bind(struct usb_function *f,
 	struct f_fs_opts *ffs_opts =
 		container_of(f->fi, struct f_fs_opts, func_inst);
 	int ret;
-	int retries = 100;
 
 	ENTER();
 
@@ -2934,20 +2940,14 @@ static inline struct f_fs_opts *ffs_do_functionfs_bind(struct usb_function *f,
 	 *
 	 * Configfs-enabled gadgets however do need ffs_dev_lock.
 	 */
-	do {
-		if (!ffs_opts->no_configfs)
-			ffs_dev_lock();
-		ret = ffs_opts->dev->desc_ready ? 0 : -ENODEV;
-		func->ffs = ffs_opts->dev->ffs_data;
-		if (!ffs_opts->no_configfs)
-			ffs_dev_unlock();
-		if (ret)
-			msleep(20);
-		else
-			break;
-	} while (--retries);
+	if (!ffs_opts->no_configfs)
+		ffs_dev_lock();
+	ret = ffs_opts->dev->desc_ready ? 0 : -ENODEV;
+	func->ffs = ffs_opts->dev->ffs_data;
+	if (!ffs_opts->no_configfs)
+		ffs_dev_unlock();
 
-	pr_info("ffs_do_functionfs_bind %d %d\n", ret, retries);
+	pr_info("ffs_do_functionfs_bind %d\n", ret);
 
 	if (ret)
 		return ERR_PTR(ret);
@@ -3495,6 +3495,7 @@ static void ffs_func_unbind(struct usb_configuration *c,
 static struct usb_function *ffs_alloc(struct usb_function_instance *fi)
 {
 	struct ffs_function *func;
+	struct ffs_dev *dev;
 
 	ENTER();
 
@@ -3502,7 +3503,8 @@ static struct usb_function *ffs_alloc(struct usb_function_instance *fi)
 	if (unlikely(!func))
 		return ERR_PTR(-ENOMEM);
 
-	func->function.name    = "Function FS Gadget";
+	dev = to_f_fs_opts(fi)->dev;
+	func->function.name    = dev->name;
 
 	func->function.bind    = ffs_func_bind;
 	func->function.unbind  = ffs_func_unbind;

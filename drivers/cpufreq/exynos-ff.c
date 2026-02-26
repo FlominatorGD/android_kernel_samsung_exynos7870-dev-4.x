@@ -19,9 +19,13 @@
 #include <linux/tick.h>
 #include <linux/delay.h>
 #include <soc/samsung/cal-if.h>
+#include <trace/events/power.h>
 #include "exynos-ff.h"
 #include "exynos-acme.h"
 #include "../../../kernel/sched/sched.h"
+
+bool hwi_dvfs_req;
+atomic_t boost_throttling = ATOMIC_INIT(0);
 
 static struct exynos_ff_driver *eff_driver;
 static int (*eff_target)(struct cpufreq_policy *policy,
@@ -107,6 +111,8 @@ int __cpufreq_driver_target(struct cpufreq_policy *policy,
 		 */
 		if (!hwi_dvfs_req && target_freq > eff_driver->boost_threshold)
 			target_freq = eff_driver->boost_threshold;
+
+		trace_cpu_frequency_filter(target_freq, hwi_dvfs_req);
 #endif
 	}
 

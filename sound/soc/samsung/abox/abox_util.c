@@ -2,7 +2,6 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/of.h>
-#include <linux/slab.h>
 #include <sound/pcm.h>
 
 #include "abox_util.h"
@@ -128,7 +127,7 @@ u64 width_range_to_bits(unsigned int width_min, unsigned int width_max)
 		{ 32, SNDRV_PCM_FMTBIT_S32 },
 	};
 
-	size_t i;
+	int i;
 	u64 fmt = 0;
 
 	for (i = 0; i < ARRAY_SIZE(map); i++) {
@@ -142,35 +141,6 @@ u64 width_range_to_bits(unsigned int width_min, unsigned int width_max)
 char substream_to_char(struct snd_pcm_substream *substream)
 {
 	return (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) ? 'p' : 'c';
-}
-
-struct property *of_samsung_find_property(struct device *dev,
-		const struct device_node *np,
-		const char *propname, int *lenp)
-{
-	char *name;
-	struct property *ret;
-
-	name = kasprintf(GFP_KERNEL, "samsung,%s", propname);
-	ret = of_find_property(np, name, lenp);
-	if (IS_ERR_OR_NULL(ret))
-		dev_dbg(dev, "Failed to find %s: %ld\n", name, PTR_ERR(ret));
-	kfree(name);
-
-	return ret;
-}
-
-bool of_samsung_property_read_bool(struct device *dev,
-		const struct device_node *np, const char *propname)
-{
-	char *name;
-	bool ret;
-
-	name = kasprintf(GFP_KERNEL, "samsung,%s", propname);
-	ret = of_property_read_bool(np, name);
-	kfree(name);
-
-	return ret;
 }
 
 int of_samsung_property_read_u32(struct device *dev,

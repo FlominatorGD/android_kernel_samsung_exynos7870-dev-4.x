@@ -1,7 +1,7 @@
 /*
  * s2mpb03.h
  *
- * Copyright (c) 2019 Samsung Electronics Co., Ltd
+ * Copyright (c) 2016 Samsung Electronics Co., Ltd
  *              http://www.samsung.com
  *
  *  This program is free software; you can redistribute  it and/or modify it

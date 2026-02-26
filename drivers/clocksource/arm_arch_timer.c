@@ -98,20 +98,20 @@ void arch_timer_reg_write(int access, enum arch_timer_reg reg, u32 val,
 		struct arch_timer *timer = to_arch_timer(clk);
 		switch (reg) {
 		case ARCH_TIMER_REG_CTRL:
-			writel_relaxed_no_log(val, timer->base + CNTP_CTL);
+			writel_relaxed(val, timer->base + CNTP_CTL);
 			break;
 		case ARCH_TIMER_REG_TVAL:
-			writel_relaxed_no_log(val, timer->base + CNTP_TVAL);
+			writel_relaxed(val, timer->base + CNTP_TVAL);
 			break;
 		}
 	} else if (access == ARCH_TIMER_MEM_VIRT_ACCESS) {
 		struct arch_timer *timer = to_arch_timer(clk);
 		switch (reg) {
 		case ARCH_TIMER_REG_CTRL:
-			writel_relaxed_no_log(val, timer->base + CNTV_CTL);
+			writel_relaxed(val, timer->base + CNTV_CTL);
 			break;
 		case ARCH_TIMER_REG_TVAL:
-			writel_relaxed_no_log(val, timer->base + CNTV_TVAL);
+			writel_relaxed(val, timer->base + CNTV_TVAL);
 			break;
 		}
 	} else {
@@ -129,20 +129,20 @@ u32 arch_timer_reg_read(int access, enum arch_timer_reg reg,
 		struct arch_timer *timer = to_arch_timer(clk);
 		switch (reg) {
 		case ARCH_TIMER_REG_CTRL:
-			val = readl_relaxed_no_log(timer->base + CNTP_CTL);
+			val = readl_relaxed(timer->base + CNTP_CTL);
 			break;
 		case ARCH_TIMER_REG_TVAL:
-			val = readl_relaxed_no_log(timer->base + CNTP_TVAL);
+			val = readl_relaxed(timer->base + CNTP_TVAL);
 			break;
 		}
 	} else if (access == ARCH_TIMER_MEM_VIRT_ACCESS) {
 		struct arch_timer *timer = to_arch_timer(clk);
 		switch (reg) {
 		case ARCH_TIMER_REG_CTRL:
-			val = readl_relaxed_no_log(timer->base + CNTV_CTL);
+			val = readl_relaxed(timer->base + CNTV_CTL);
 			break;
 		case ARCH_TIMER_REG_TVAL:
-			val = readl_relaxed_no_log(timer->base + CNTV_TVAL);
+			val = readl_relaxed(timer->base + CNTV_TVAL);
 			break;
 		}
 	} else {
@@ -299,6 +299,13 @@ static u64 notrace arm64_858921_read_cntvct_el0(void)
 }
 #endif
 
+#ifdef CONFIG_ARM64_ERRATUM_1188873
+static u64 notrace arm64_1188873_read_cntvct_el0(void)
+{
+	return read_sysreg(cntvct_el0);
+}
+#endif
+
 #ifdef CONFIG_ARM_ARCH_TIMER_OOL_WORKAROUND
 DEFINE_PER_CPU(const struct arch_timer_erratum_workaround *,
 	       timer_unstable_counter_workaround);
@@ -380,6 +387,14 @@ static const struct arch_timer_erratum_workaround ool_workarounds[] = {
 		.id = (void *)ARM64_WORKAROUND_858921,
 		.desc = "ARM erratum 858921",
 		.read_cntvct_el0 = arm64_858921_read_cntvct_el0,
+	},
+#endif
+#ifdef CONFIG_ARM64_ERRATUM_1188873
+	{
+		.match_type = ate_match_local_cap_id,
+		.id = (void *)ARM64_WORKAROUND_1188873,
+		.desc = "ARM erratum 1188873",
+		.read_cntvct_el0 = arm64_1188873_read_cntvct_el0,
 	},
 #endif
 };
@@ -810,10 +825,8 @@ static int arch_timer_starting_cpu(unsigned int cpu)
 	 * it doesn't need to setup clockevent configuration.
 	 * this is only for exynos soc
 	 */
-	if (arch_timer_use_clocksource_only) {
-		arch_timer_check_ool_workaround(ate_match_local_cap_id, NULL);
+	if (arch_timer_use_clocksource_only)
 		goto skip_clockevent_setup;
-	}
 
 	__arch_timer_setup(ARCH_TIMER_TYPE_CP15, clk);
 
@@ -881,9 +894,9 @@ static u64 arch_counter_get_cntvct_mem(void)
 	u32 vct_lo, vct_hi, tmp_hi;
 
 	do {
-		vct_hi = readl_relaxed_no_log(arch_counter_base + CNTVCT_HI);
-		vct_lo = readl_relaxed_no_log(arch_counter_base + CNTVCT_LO);
-		tmp_hi = readl_relaxed_no_log(arch_counter_base + CNTVCT_HI);
+		vct_hi = readl_relaxed(arch_counter_base + CNTVCT_HI);
+		vct_lo = readl_relaxed(arch_counter_base + CNTVCT_LO);
+		tmp_hi = readl_relaxed(arch_counter_base + CNTVCT_HI);
 	} while (vct_hi != tmp_hi);
 
 	return ((u64) vct_hi << 32) | vct_lo;
@@ -1241,7 +1254,7 @@ arch_timer_mem_frame_get_cntfrq(struct arch_timer_mem_frame *frame)
 		return 0;
 	}
 
-	rate = readl_relaxed_no_log(base + CNTFRQ);
+	rate = readl_relaxed(base + CNTFRQ);
 
 	iounmap(base);
 
@@ -1263,7 +1276,7 @@ arch_timer_mem_find_best_frame(struct arch_timer_mem *timer_mem)
 		return NULL;
 	}
 
-	cnttidr = readl_relaxed_no_log(cntctlbase + CNTTIDR);
+	cnttidr = readl_relaxed(cntctlbase + CNTTIDR);
 
 	/*
 	 * Try to find a virtual capable frame. Otherwise fall back to a
@@ -1278,8 +1291,8 @@ arch_timer_mem_find_best_frame(struct arch_timer_mem *timer_mem)
 			continue;
 
 		/* Try enabling everything, and see what sticks */
-		writel_relaxed_no_log(cntacr, cntctlbase + CNTACR(i));
-		cntacr = readl_relaxed_no_log(cntctlbase + CNTACR(i));
+		writel_relaxed(cntacr, cntctlbase + CNTACR(i));
+		cntacr = readl_relaxed(cntctlbase + CNTACR(i));
 
 		if ((cnttidr & CNTTIDR_VIRT(i)) &&
 		    !(~cntacr & (CNTACR_RWVT | CNTACR_RVCT))) {

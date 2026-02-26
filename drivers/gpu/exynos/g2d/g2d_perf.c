@@ -23,11 +23,10 @@
 #include <linux/workqueue.h>
 
 #ifdef CONFIG_PM_DEVFREQ
-static void g2d_pm_qos_update_devfreq(struct pm_qos_request *req, u32 freq,
-				      int class)
+static void g2d_pm_qos_update_devfreq(struct pm_qos_request *req, u32 freq)
 {
 	if (!pm_qos_request_active(req))
-		pm_qos_add_request(req, class, 0);
+		pm_qos_add_request(req, PM_QOS_DEVICE_THROUGHPUT, 0);
 
 	pm_qos_update_request(req, freq);
 }
@@ -38,7 +37,7 @@ static void g2d_pm_qos_remove_devfreq(struct pm_qos_request *req)
 		pm_qos_remove_request(req);
 }
 #else
-#define g2d_pm_qos_update_devfreq(req, freq, class) do { } while (0)
+#define g2d_pm_qos_update_devfreq(req, freq) do { } while (0)
 #define g2d_pm_qos_remove_devfreq(req) do { } while (0)
 #endif
 
@@ -149,15 +148,10 @@ static void g2d_set_device_frequency(struct g2d_context *g2d_ctx,
 		}
 	}
 
-	if (!ip_clock) {
-		g2d_pm_qos_remove_devfreq(&g2d_ctx->dev_req);
-		g2d_pm_qos_remove_devfreq(&g2d_ctx->bus_req);
-	} else if (ip_clock) {
-		g2d_pm_qos_update_devfreq(&g2d_ctx->dev_req, ip_clock,
-					  PM_QOS_DEVICE_THROUGHPUT);
-		g2d_pm_qos_update_devfreq(&g2d_ctx->bus_req, 845000,
-					  PM_QOS_BUS_THROUGHPUT);
-	}
+	if (!ip_clock)
+		g2d_pm_qos_remove_devfreq(&g2d_ctx->req);
+	else if (ip_clock)
+		g2d_pm_qos_update_devfreq(&g2d_ctx->req, ip_clock);
 }
 
 static void g2d_set_qos_frequency(struct g2d_context *g2d_ctx,

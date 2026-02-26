@@ -262,6 +262,8 @@ static ssize_t store_state_##_name(struct cpuidle_state *state, \
 { \
 	unsigned long long value; \
 	int err; \
+	if (!capable(CAP_SYS_ADMIN)) \
+		return -EPERM; \
 	err = kstrtoull(buf, 0, &value); \
 	if (err) \
 		return err; \

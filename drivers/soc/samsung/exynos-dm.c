@@ -370,7 +370,7 @@ static int exynos_dm_parse_dt(struct device_node *np, struct exynos_dm_device *d
 		}
 #ifdef CONFIG_EXYNOS_ACPM
 		if (of_property_read_string(child_np, "policy_use", &policy_use)) {
-			dev_info(dm->dev, "[%s] This doesn't need to send policy to ACPM\n", child_np->name);
+			dev_info(dm->dev, "This doesn't need to send policy to ACPM\n");
 		} else {
 			if (!strcmp(policy_use, "true"))
 				dm->dm_data[index].policy_use = true;
@@ -672,9 +672,8 @@ static int __policy_update_call_to_DM(int dm_type, u32 min_freq, u32 max_freq)
 #endif
 	s32 time = 0, pre_time = 0;
 
-#ifdef CONFIG_DEBUG_SNAPSHOT
 	dbg_snapshot_dm((int)dm_type, min_freq, max_freq, pre_time, time);
-#endif
+
 	do_gettimeofday(&pre);
 	do_gettimeofday(&before);
 
@@ -720,9 +719,7 @@ out:
 	time = (after.tv_sec - before.tv_sec) * USEC_PER_SEC +
 		(after.tv_usec - before.tv_usec);
 
-#ifdef CONFIG_DEBUG_SNAPSHOT
 	dbg_snapshot_dm((int)dm_type, min_freq, max_freq, pre_time, time);
-#endif
 
 	return 0;
 }
@@ -787,9 +784,8 @@ static int __DM_CALL(int dm_type, unsigned long *target_freq)
 	struct timeval pre, before, after;
 	s32 time = 0, pre_time = 0;
 
-#ifdef CONFIG_DEBUG_SNAPSHOT
 	dbg_snapshot_dm((int)dm_type, *target_freq, 1, pre_time, time);
-#endif
+
 	do_gettimeofday(&pre);
 	do_gettimeofday(&before);
 
@@ -851,9 +847,7 @@ static int __DM_CALL(int dm_type, unsigned long *target_freq)
 	time = (after.tv_sec - before.tv_sec) * USEC_PER_SEC +
 		(after.tv_usec - before.tv_usec);
 
-#ifdef CONFIG_DEBUG_SNAPSHOT
 	dbg_snapshot_dm((int)dm_type, *target_freq, 3, pre_time, time);
-#endif
 
 	return 0;
 }

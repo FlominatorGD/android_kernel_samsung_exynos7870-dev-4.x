@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_dump.h
+/* sound/soc/samsung/abox/abox_dump.h
  *
  * ALSA SoC Audio Layer - Samsung Abox Internal Buffer Dumping driver
  *
@@ -31,7 +31,7 @@ extern void abox_dump_period_elapsed(int id, size_t pointer);
 extern void abox_dump_transfer(int id, const char *buf, size_t bytes);
 
 /**
- * Register abox dump
+ * Register abox dump buffer
  * @param[in]	dev		pointer to abox device
  * @param[in]	id		unique buffer id
  * @param[in]	name		unique buffer name
@@ -40,7 +40,7 @@ extern void abox_dump_transfer(int id, const char *buf, size_t bytes);
  * @param[in]	bytes		buffer size in bytes
  * @return	error code if any
  */
-extern int abox_dump_register(struct device *dev, int id,
+extern int abox_dump_register_buffer(struct device *dev, int id,
 		const char *name, void *area, phys_addr_t addr, size_t bytes);
 
 /**

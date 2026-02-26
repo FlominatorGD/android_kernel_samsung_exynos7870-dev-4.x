@@ -50,9 +50,12 @@ static struct mfd_cell s2mu004_devs[] = {
 #if defined(CONFIG_CHARGER_S2MU004)
 	{ .name = "s2mu004-charger", },
 #endif
-#if defined(CONFIG_BATTERY_S2MU00X_ERD)
+#if defined(CONFIG_BATTERY_S2MU00X)
 	{ .name = "s2mu00x-battery", },
 #endif
+#if 0 // defined(CONFIG_MOTOR_DRV_S2MU004)
+	{ .name = "s2mu004-haptic", },
+#endif /* CONFIG_S2MU004_HAPTIC */
 #if defined(CONFIG_LEDS_S2MU004_RGB)
 	{ .name = "leds-s2mu004-rgb", },
 #endif /* CONFIG_LEDS_S2MU004_RGB */
@@ -67,8 +70,8 @@ int s2mu004_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest)
 	ret = i2c_smbus_read_byte_data(i2c, reg);
 	mutex_unlock(&s2mu004->i2c_lock);
 	if (ret < 0) {
-		pr_err("%s:%s reg(0x%x), ret(%d)\n", MFD_DEV_NAME,
-				__func__, reg, ret);
+		pr_info("%s:%s reg(0x%x), ret(%d)\n", MFD_DEV_NAME,
+						 __func__, reg, ret);
 		return ret;
 	}
 
@@ -117,7 +120,7 @@ int s2mu004_write_reg(struct i2c_client *i2c, u8 reg, u8 value)
 	ret = i2c_smbus_write_byte_data(i2c, reg, value);
 	mutex_unlock(&s2mu004->i2c_lock);
 	if (ret < 0)
-		pr_err("%s:%s reg(0x%x), ret(%d)\n",
+		pr_info("%s:%s reg(0x%x), ret(%d)\n",
 				MFD_DEV_NAME, __func__, reg, ret);
 
 	return ret;
@@ -176,20 +179,14 @@ static int of_s2mu004_dt(struct device *dev,
 				struct s2mu004_platform_data *pdata)
 {
 	struct device_node *np_s2mu004 = dev->of_node;
-	int ret = 0;
 
 	if (!np_s2mu004)
 		return -EINVAL;
 
-	ret = of_get_named_gpio(np_s2mu004, "s2mu004,irq-gpio", 0);
-	if (ret < 0)
-		return ret;
-	else
-		pdata->irq_gpio = ret;
-
+	pdata->irq_gpio = of_get_named_gpio(np_s2mu004, "s2mu004,irq-gpio", 0);
 	pdata->wakeup = of_property_read_bool(np_s2mu004, "s2mu004,wakeup");
 
-	pr_debug("%s: irq-gpio: %u\n", __func__, pdata->irq_gpio);
+	pr_info("%s: irq-gpio: %u\n", __func__, pdata->irq_gpio);
 
 	return 0;
 }
@@ -291,8 +288,6 @@ err_irq_init:
 	i2c_unregister_device(s2mu004->i2c);
 err:
 	kfree(s2mu004);
-	i2c_set_clientdata(i2c, NULL);
-
 	return ret;
 }
 
@@ -303,7 +298,6 @@ static int s2mu004_i2c_remove(struct i2c_client *i2c)
 	mfd_remove_devices(s2mu004->dev);
 	i2c_unregister_device(s2mu004->i2c);
 	kfree(s2mu004);
-	i2c_set_clientdata(i2c, NULL);
 
 	return 0;
 }
@@ -340,7 +334,9 @@ static int s2mu004_resume(struct device *dev)
 	struct i2c_client *i2c = container_of(dev, struct i2c_client, dev);
 	struct s2mu004_dev *s2mu004 = i2c_get_clientdata(i2c);
 
-	pr_debug("%s:%s\n", MFD_DEV_NAME, __func__);
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+	pr_info("%s:%s\n", MFD_DEV_NAME, __func__);
+#endif /* CONFIG_SAMSUNG_PRODUCT_SHIP */
 
 	if (device_may_wakeup(dev))
 		disable_irq_wake(s2mu004->irq);

@@ -27,7 +27,10 @@ static void exynos_ufs_smu_entry0_init(struct exynos_ufs *ufs)
 
 int exynos_ufs_smu_init(struct exynos_ufs *ufs)
 {
-	if (!ufs || (ufs->smu == SMU_ID_MAX)) {
+	if (!ufs)
+		return 0;
+
+	if (ufs->smu == SMU_ID_MAX) {
 		exynos_ufs_smu_entry0_init(ufs);
 		return 0;
 	}
@@ -71,6 +74,11 @@ int exynos_ufs_fmp_sec_cfg(struct exynos_ufs *ufs)
 {
 	if (!ufs || (ufs->fmp == SMU_ID_MAX))
 		return 0;
+
+	if (ufs->fmp != SMU_EMBEDDED)
+		dev_err(ufs->dev, "%s is fails id:%d\n",
+				__func__, ufs->fmp);
+
 
 	dev_info(ufs->dev, "%s with id:%d\n", __func__, ufs->fmp);
 	return exynos_fmp_sec_config(ufs->fmp);
@@ -117,9 +125,8 @@ int exynos_ufs_fmp_cfg(struct ufs_hba *hba,
 		return 0;
 
 	dtfm = crypto_diskcipher_get(bio);
-	if (unlikely(IS_ERR(dtfm)) || (dtfm && !virt_addr_valid(dtfm))) {
-		pr_warn("%s: fails to get crypt: %p, valid:%d\n", __func__, dtfm,
-			virt_addr_valid(dtfm));
+	if (unlikely(IS_ERR(dtfm))) {
+		pr_warn("%s: fails to get crypt\n", __func__);
 		return -EINVAL;
 	} else if (dtfm) {
 #ifdef CONFIG_CRYPTO_DISKCIPHER_DUN
@@ -185,7 +192,7 @@ int exynos_ufs_fmp_clear(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 				if (ret) {
 					pr_warn("%s: fails to clear fips\n",
 						__func__);
-					break;
+					return 0;
 				}
 			}
 			return 0;
@@ -202,11 +209,11 @@ int exynos_ufs_fmp_clear(struct ufs_hba *hba, struct ufshcd_lrb *lrbp)
 				if (ret) {
 					pr_err("%s: fail to clear desc (%d)\n",
 						__func__, ret);
-					break;
+					return 0;
 				}
 			}
 		}
 	}
-	return ret;
+	return 0;
 }
 #endif

@@ -93,9 +93,11 @@
 #define	TBPWRTHRESH_INC_SHIFT	(0x0)
 
 /* HIU Turbo Boost Power Threshold Register */
-#define	HIUTBPWRTHRESH1		(0xE34)
-#define	HIUTBPWRTHRESH2		(0xE38)
-#define	HIUTBPWRTHRESH3		(0xE3C)
+#define	HIUTBPWRTHRESH_NUM	(0x6)
+#define	HIUTBPWRTHRESH_FIELDS	(0x4)
+#define	HIUTBPWRTHRESH_BASE	(0xE34)
+#define	HIUTBPWRTHRESH_OFFSET	(0x4)
+#define	HIUTBPWRTHRESH_MASK	(0x3F << 24 | 0xF << 20 | 0xF << 16 | 0xFFFF << 0)
 #define	R_MASK			(0x3F)
 #define	R_SHIFT			(24)
 #define	MONINTERVAL_MASK	(0xF)
@@ -124,30 +126,40 @@ struct hiu_cfg {
 
 struct exynos_hiu_data {
 	bool			enabled;
-	bool			pc_enabled;
-	bool			tb_enabled;
+
+	bool			normdvfs_req;
+	bool			normdvfs_done;
 	bool			hwidvfs_done;
-	bool			pb_delivered;
+	bool			boosting_activated;
+	bool			cpd_blocked;
 
 	int			operation_mode;
 
 	int			irq;
 	struct work_struct	work;
+	struct work_struct	hwi_work;
 	struct mutex		lock;
+	wait_queue_head_t	normdvfs_wait;
 	wait_queue_head_t	hwidvfs_wait;
 	wait_queue_head_t	polling_wait;
 
 	struct cpumask		cpus;
 	unsigned int		cpu;
 
-	unsigned int		cur_budget;
+	unsigned int		cal_id;
 
 	unsigned int		cur_freq;
+	unsigned int		norm_target_freq;
 	unsigned int		clipped_freq;
 	unsigned int		boost_threshold;
 	unsigned int		boost_max;
 	unsigned int		level_offset;
 	unsigned int		sw_pbl;
+	unsigned int		pc_enabled;
+	unsigned int		tb_enabled;
+
+	unsigned int		last_req_level;
+	unsigned int		last_req_freq;
 
 	void __iomem *		base;
 

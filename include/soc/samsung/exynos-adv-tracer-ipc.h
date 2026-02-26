@@ -1,12 +1,6 @@
 #ifndef __EXYNOS_ADV_TRACER_IPC_H_
 #define __EXYNOS_ADV_TRACER_IPC_H_
 
-struct adv_tracer_info {
-	unsigned int plugin_num;
-	struct device *dev;
-	unsigned int enter_wfi;
-};
-
 struct adv_tracer_ipc_cmd_raw {
 	u32 cmd			:16;
 	u32 response		:1;
@@ -111,11 +105,10 @@ enum ipc_frmk_cmd_id {
 #define INTR_FLAG_OFFSET                        16
 #define FRAMEWORK_NAME				"FRM"
 
-#ifdef CONFIG_EXYNOS_ADV_TRACER
-int adv_tracer_ipc_init(struct platform_device *pdev);
-void *adv_tracer_memcpy_align_4(void *dest, const void *src, unsigned int n);
-int adv_tracer_arraydump(void);
+extern int adv_tracer_ipc_init(struct platform_device *pdev);
 
+#ifdef CONFIG_EXYNOS_ADV_TRACER
+int adv_tracer_arraydump(void);
 int adv_tracer_ipc_request_channel(struct device_node *np,
 		ipc_callback handler, unsigned int *id, unsigned int *len);
 int adv_tracer_ipc_release_channel(unsigned int id);
@@ -124,18 +117,9 @@ int adv_tracer_ipc_send_data_polling(unsigned int id, struct adv_tracer_ipc_cmd 
 int adv_tracer_ipc_send_data_polling_timeout(unsigned int id, struct adv_tracer_ipc_cmd *cmd,
 					unsigned long timeout_ns);
 int adv_tracer_ipc_send_data_async(unsigned int id, struct adv_tracer_ipc_cmd *cmd);
+void exynos_adv_tracer_reboot(void);
 void adv_tracer_ipc_release_channel_by_name(const char *name);
 #else
-static inline int adv_tracer_ipc_init(struct platform_device *pdev)
-{
-	return 0;
-}
-static inline void *adv_tracer_memcpy_align_4(void *dest, const void *src, unsigned int n)
-{
-}
-static inline int adv_tracer_arraydump(void)
-{
-}
 static inline int adv_tracer_ipc_request_channel(struct device_node *np,
 		ipc_callback handler, unsigned int *id, unsigned int *len)
 {
@@ -161,6 +145,10 @@ int adv_tracer_ipc_send_data_polling_timeout(unsigned int id, struct adv_tracer_
 int adv_tracer_ipc_send_data_async(unsigned int id, struct adv_tracer_ipc_cmd *cmd)
 {
 	return 0;
+}
+static inline void exynos_adv_tracer_reboot(void)
+{
+	return;
 }
 inline void adv_tracer_ipc_release_channel_by_name(const char *name)
 {

@@ -30,14 +30,14 @@
 #include "../../pinctrl/core.h"
 #include "i2c-exynos5.h"
 
-#ifdef CONFIG_CPU_IDLE
 #ifdef CONFIG_ARM64_EXYNOS_CPUIDLE
 #include <soc/samsung/exynos-cpupm.h>
 #endif
+#ifdef CONFIG_CPU_IDLE
 #include <soc/samsung/exynos-pm.h>
 #endif
 
-#if defined(CONFIG_EXYNOS_PM) && defined(CONFIG_CPU_IDLE)
+#if defined(CONFIG_CPU_IDLE)
 static LIST_HEAD(drvdata_list);
 #endif
 
@@ -184,7 +184,7 @@ static LIST_HEAD(drvdata_list);
 #define HSI2C_SLV_ADDR_SLV(x)			((x & 0x3ff) << 0)
 #define HSI2C_SLV_ADDR_MAS(x)			((x & 0x3ff) << 10)
 #define HSI2C_MASTER_ID(x)			((x & 0xff) << 24)
-#define MASTER_ID(x)				((x & 0x7) + 0x08)
+#define MASTER_ID(x)				((((x << 1) + 0x1) & 0x7) + 0x08)
 
 /*
  * Controller operating frequency, timing values for operation
@@ -195,10 +195,10 @@ static LIST_HEAD(drvdata_list);
 #define HSI2C_FS_TX_CLOCK			400000
 #define HSI2C_STAND_TX_CLOCK		100000
 
-#define HSI2C_STAND_SPD			0
-#define HSI2C_FAST_SPD			1
+#define HSI2C_STAND_SPD			3
 #define HSI2C_FAST_PLUS_SPD		2
-#define HSI2C_HIGH_SPD			3
+#define HSI2C_HIGH_SPD			1
+#define HSI2C_FAST_SPD			0
 
 #define HSI2C_POLLING 0
 #define HSI2C_INTERRUPT 1
@@ -423,10 +423,7 @@ static int exynos5_i2c_set_timing(struct exynos5_i2c *i2c, int mode)
 		if (!op_clk)
 			op_clk = HSI2C_FAST_PLUS_TX_CLOCK;
 
-		//fs_div = ipclk / (op_clk * 15);
-		//from the spec, fs and hs div calculation formula: Fscl = ipc/((CLK_DIV_FS+1)*16).
-		fs_div = ipclk / (op_clk * 16) -1;
-
+		fs_div = ipclk / (op_clk * 15);
 		fs_div &= 0xFF;
 		utemp = readl(i2c->regs + HSI2C_TIMING_FS3) & ~0x00FF0000;
 		writel(utemp | (fs_div << 16), i2c->regs + HSI2C_TIMING_FS3);
@@ -514,21 +511,19 @@ static int exynos5_i2c_set_timing(struct exynos5_i2c *i2c, int mode)
 
 static int exynos5_hsi2c_clock_setup(struct exynos5_i2c *i2c)
 {
-	/* Configure the standard mode timing values */
-	if (i2c->speed_mode == HSI2C_STAND_SPD) {
-		if (exynos5_i2c_set_timing(i2c, HSI2C_STAND_SPD)) {
-			dev_err(i2c->dev, "HSI2C STAND Clock set up failed\n");
-			return -EINVAL;
-		}
-	}
-
 	/*
 	 * Configure the Fast speed timing values
 	 * Even the High Speed mode initially starts with Fast mode
 	 */
-	if (i2c->speed_mode == HSI2C_FAST_SPD) {
-		if (exynos5_i2c_set_timing(i2c, HSI2C_FAST_SPD)) {
-			dev_err(i2c->dev, "HSI2C FS Clock set up failed\n");
+	if (exynos5_i2c_set_timing(i2c, HSI2C_FAST_SPD)) {
+		dev_err(i2c->dev, "HSI2C FS Clock set up failed\n");
+		return -EINVAL;
+	}
+
+	/* configure the High speed timing values */
+	if (i2c->speed_mode == HSI2C_HIGH_SPD) {
+		if (exynos5_i2c_set_timing(i2c, HSI2C_HIGH_SPD)) {
+			dev_err(i2c->dev, "HSI2C HS Clock set up failed\n");
 			return -EINVAL;
 		}
 	}
@@ -541,18 +536,14 @@ static int exynos5_hsi2c_clock_setup(struct exynos5_i2c *i2c)
 		}
 	}
 
-	/* configure the High speed timing values */
-	if (i2c->speed_mode == HSI2C_HIGH_SPD) {
-		if (exynos5_i2c_set_timing(i2c, HSI2C_FAST_SPD)) {
-			dev_err(i2c->dev, "HSI2C FS Clock set up for HS mode failed\n");
-			return -EINVAL;
-		}
-
-		if (exynos5_i2c_set_timing(i2c, HSI2C_HIGH_SPD)) {
-			dev_err(i2c->dev, "HSI2C HS Clock set up failed\n");
+	/* Configure the standard mode timing values */
+	if (i2c->speed_mode == HSI2C_STAND_SPD) {
+		if (exynos5_i2c_set_timing(i2c, HSI2C_STAND_SPD)) {
+			dev_err(i2c->dev, "HSI2C STAND Clock set up failed\n");
 			return -EINVAL;
 		}
 	}
+
 	return 0;
 }
 
@@ -764,7 +755,10 @@ static int exynos5_i2c_xfer_msg(struct exynos5_i2c *i2c,
 	i2c_addr = readl(i2c->regs + HSI2C_ADDR);
 	i2c_addr &= ~(0x3ff << 10);
 	i2c_addr &= ~(0x3ff << 0);
-	i2c_addr &= ~(0xff << 24);
+	if (i2c->speed_mode != HSI2C_HIGH_SPD) {
+		i2c_addr &= ~(0xff << 24);
+		i2c_addr |= (0x7 << 24);
+	}
 	i2c_addr |= ((msgs->addr & 0x7f) << 10);
 	writel(i2c_addr, i2c->regs + HSI2C_ADDR);
 
@@ -988,34 +982,6 @@ static int exynos5_i2c_xfer(struct i2c_adapter *adap,
 		exynos5_i2c_init(i2c);
 	}
 
-	if (i2c->multi_slave_mode) {
-		dev_err(i2c->dev, "HSI2C mode has been changed\n");
-
-		if (!msgs_ptr->freq) {
-			dev_err(i2c->dev, "No FREQ info Check the slave device driver\n");
-			goto out;
-		}
-
-		if (msgs_ptr->freq <= HSI2C_STAND_TX_CLOCK) {
-			i2c->speed_mode = HSI2C_STAND_SPD;
-			i2c->stand_clock = msgs_ptr->freq;
-		}
-		else if (msgs_ptr->freq <= HSI2C_FS_TX_CLOCK) {
-			i2c->speed_mode = HSI2C_FAST_SPD;
-			i2c->fs_clock = msgs_ptr->freq;
-		}
-		else if (msgs_ptr->freq <= HSI2C_FAST_PLUS_TX_CLOCK) {
-			i2c->speed_mode = HSI2C_FAST_PLUS_SPD;
-			i2c->fs_plus_clock = msgs_ptr->freq;
-		}
-		else {
-			i2c->speed_mode = HSI2C_HIGH_SPD;
-			i2c->hs_clock = msgs_ptr->freq;
-		}
-
-		exynos5_hsi2c_clock_setup(i2c);
-	}
-
 	for (retry = 0; retry < adap->retries; retry++) {
 		for (i = 0; i < num; i++) {
 			stop = (i == num - 1);
@@ -1081,7 +1047,7 @@ static const struct i2c_algorithm exynos5_i2c_algorithm = {
 	.functionality		= exynos5_i2c_func,
 };
 
-#if defined(CONFIG_EXYNOS_PM) && defined(CONFIG_CPU_IDLE)
+#ifdef CONFIG_CPU_IDLE
 static int exynos5_i2c_notifier(struct notifier_block *self,
 				unsigned long cmd, void *v)
 {
@@ -1100,7 +1066,7 @@ static int exynos5_i2c_notifier(struct notifier_block *self,
 static struct notifier_block exynos5_i2c_notifier_block = {
 	.notifier_call = exynos5_i2c_notifier,
 };
-#endif /* CONFIG_EXYNOS_PM && CONFIG_CPU_IDLE */
+#endif /* CONFIG_CPU_IDLE */
 
 static int exynos5_i2c_probe(struct platform_device *pdev)
 {
@@ -1123,27 +1089,23 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 	if (of_property_read_u32(np, "default-clk", &i2c->default_clk))
 		dev_err(i2c->dev, "Failed to get default clk info\n");
 
-	if (of_get_property(np, "samsung,multi-slave-mode", NULL)) {
-		i2c->multi_slave_mode = 1;
+	/* Mode of operation High/Fast/Fast+ Speed mode */
+	if (of_get_property(np, "samsung,fast-plus-mode", NULL)) {
+		i2c->speed_mode = HSI2C_FAST_PLUS_SPD;
+		if (of_property_read_u32(np, "clock-frequency", &i2c->fs_plus_clock))
+			i2c->fs_plus_clock = HSI2C_FAST_PLUS_TX_CLOCK;
+	} else if (of_get_property(np, "samsung,hs-mode", NULL)) {
+		i2c->speed_mode = HSI2C_HIGH_SPD;
+		if (of_property_read_u32(np, "clock-frequency", &i2c->hs_clock))
+			i2c->hs_clock = HSI2C_HS_TX_CLOCK;
+	} else if (of_get_property(np, "samsung,stand-mode", NULL)) {
+		i2c->speed_mode = HSI2C_STAND_SPD;
+		if (of_property_read_u32(np, "clock-frequency", &i2c->stand_clock))
+			i2c->stand_clock = HSI2C_STAND_TX_CLOCK;
 	} else {
-		/* Mode of operation High/Fast/Fast+ Speed mode */
-		if (of_get_property(np, "samsung,fast-plus-mode", NULL)) {
-			i2c->speed_mode = HSI2C_FAST_PLUS_SPD;
-			if (of_property_read_u32(np, "clock-frequency", &i2c->fs_plus_clock))
-				i2c->fs_plus_clock = HSI2C_FAST_PLUS_TX_CLOCK;
-		} else if (of_get_property(np, "samsung,hs-mode", NULL)) {
-			i2c->speed_mode = HSI2C_HIGH_SPD;
-			if (of_property_read_u32(np, "clock-frequency", &i2c->hs_clock))
-				i2c->hs_clock = HSI2C_HS_TX_CLOCK;
-		} else if (of_get_property(np, "samsung,stand-mode", NULL)) {
-			i2c->speed_mode = HSI2C_STAND_SPD;
-			if (of_property_read_u32(np, "clock-frequency", &i2c->stand_clock))
-				i2c->stand_clock = HSI2C_STAND_TX_CLOCK;
-		} else {
-			i2c->speed_mode = HSI2C_FAST_SPD;
-			if (of_property_read_u32(np, "clock-frequency", &i2c->fs_clock))
-				i2c->fs_clock = HSI2C_FS_TX_CLOCK;
-		}
+		i2c->speed_mode = HSI2C_FAST_SPD;
+		if (of_property_read_u32(np, "clock-frequency", &i2c->fs_clock))
+			i2c->fs_clock = HSI2C_FS_TX_CLOCK;
 	}
 
 	/* Mode of operation Polling/Interrupt mode */
@@ -1293,7 +1255,7 @@ static int exynos5_i2c_probe(struct platform_device *pdev)
 #endif
 #endif
 
-#if defined(CONFIG_EXYNOS_PM) && defined(CONFIG_CPU_IDLE)
+#if defined(CONFIG_CPU_IDLE)
 	list_add_tail(&i2c->node, &drvdata_list);
 #endif
 
@@ -1446,6 +1408,75 @@ static int exynos5_i2c_resume_noirq(struct device *dev)
 }
 #endif
 
+#ifdef CONFIG_SAMSUNG_TUI
+#ifdef CONFIG_PM_RUNTIME
+static int stui_pm_ret;
+#endif /* CONFIG_PM_RUNTIME */
+int stui_i2c_lock(struct i2c_adapter *adap)
+{
+	int ret = 0;
+	static struct exynos5_i2c *stui_i2c;
+
+	if (!adap) {
+		pr_err("cannot get adapter\n");
+		return -1;
+	}
+
+	i2c_lock_adapter(adap);
+	stui_i2c = (struct exynos5_i2c *)adap->algo_data;
+
+#ifdef CONFIG_PM_RUNTIME
+	stui_pm_ret = pm_runtime_get_sync(stui_i2c->dev);
+	if (stui_pm_ret < 0) {
+		ret = clk_enable(stui_i2c->clk);
+		if (ret)
+			goto out_err;
+	}
+#else /* CONFIG_PM_RUNTIME */
+	ret = clk_enable(stui_i2c->clk);
+	if (ret)
+		goto out_err;
+#endif /* CONFIG_PM_RUNTIME */
+
+	exynos_update_ip_idle_status(stui_i2c->idle_ip_index, 0);
+
+	return 0;
+
+out_err:
+	i2c_unlock_adapter(adap);
+	return ret;
+}
+
+int stui_i2c_unlock(struct i2c_adapter *adap)
+{
+	static struct exynos5_i2c *stui_i2c;
+
+	if (!adap) {
+		pr_err("cannot get adapter\n");
+		return -1;
+	}
+
+	stui_i2c = (struct exynos5_i2c *)adap->algo_data;
+
+#ifdef CONFIG_PM_RUNTIME
+	if (stui_pm_ret < 0) {
+		clk_disable(stui_i2c->clk);
+	} else {
+		pm_runtime_mark_last_busy(stui_i2c->dev);
+		pm_runtime_put_autosuspend(stui_i2c->dev);
+	}
+#else /* CONFIG_PM_RUNTIME */
+	clk_disable(stui_i2c->clk);
+#endif /* CONFIG_PM_RUNTIME */
+
+	exynos_update_ip_idle_status(stui_i2c->idle_ip_index, 1);
+
+	i2c_unlock_adapter(adap);
+
+	return 0;
+}
+#endif /* CONFIG_SAMSUNG_TUI */
+
 static const struct dev_pm_ops exynos5_i2c_pm = {
 	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(exynos5_i2c_suspend_noirq,
 				      exynos5_i2c_resume_noirq)
@@ -1465,7 +1496,7 @@ static struct platform_driver exynos5_i2c_driver = {
 
 static int __init i2c_adap_exynos5_init(void)
 {
-#if defined(CONFIG_EXYNOS_PM) && defined(CONFIG_CPU_IDLE)
+#ifdef CONFIG_CPU_IDLE
 	exynos_pm_register_notifier(&exynos5_i2c_notifier_block);
 #endif
 	return platform_driver_register(&exynos5_i2c_driver);

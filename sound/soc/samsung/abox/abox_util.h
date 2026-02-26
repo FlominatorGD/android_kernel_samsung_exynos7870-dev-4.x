@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_util.h
+/* sound/soc/samsung/abox/abox_util.h
  *
  * ALSA SoC - Samsung Abox utility
  *
@@ -70,7 +70,7 @@ static inline int atomic_inc_unless_in_range(atomic_t *v, int r)
 {
 	int ret;
 
-	while ((ret = atomic_add_unless(v, 1, r)) == r) {
+	while ((ret = __atomic_add_unless(v, 1, r)) == r) {
 		ret = atomic_cmpxchg(v, r, 0);
 		if (ret == r)
 			break;
@@ -89,7 +89,7 @@ static inline int atomic_dec_unless_in_range(atomic_t *v, int r)
 {
 	int ret;
 
-	while ((ret = atomic_add_unless(v, -1, 0)) == 0) {
+	while ((ret = __atomic_add_unless(v, -1, 0)) == 0) {
 		ret = atomic_cmpxchg(v, 0, r);
 		if (ret == 0)
 			break;
@@ -119,28 +119,6 @@ extern u64 width_range_to_bits(unsigned int width_min,
  * @return	'p' if direction is playback. 'c' if not.
  */
 extern char substream_to_char(struct snd_pcm_substream *substream);
-
-/**
- * Find property with samsung, prefix
- * @param[in]	dev		pointer to device invoking this API
- * @param[in]	np		device node
- * @param[in]	propname	name of the property
- * @param[out]	lenp		length of the property
- * @return	property or NULL
- */
-extern struct property *of_samsung_find_property(struct device *dev,
-		const struct device_node *np,
-		const char *propname, int *lenp);
-
-/**
- * Get whether the property is exist or not with samsung, prefix
- * @param[in]	dev		pointer to device invoking this API
- * @param[in]	np		device node
- * @param[in]	propname	name of the property
- * @return	true or false
- */
-extern bool of_samsung_property_read_bool(struct device *dev,
-		const struct device_node *np, const char *propname);
 
 /**
  * Get property value with samsung, prefix

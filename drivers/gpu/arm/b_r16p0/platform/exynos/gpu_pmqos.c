@@ -89,10 +89,8 @@ int gpu_pm_qos_command(struct exynos_context *platform, gpu_pmqos_state state)
 			pm_qos_remove_request(&exynos5_g3d_mif_max_qos);
 		pm_qos_remove_request(&exynos5_g3d_cpu_cluster0_min_qos);
 		pm_qos_remove_request(&exynos5_g3d_cpu_cluster1_max_qos);
-#if PM_QOS_CPU_CLUSTER_NUM == 2
 		if (platform->boost_egl_min_lock)
 			pm_qos_remove_request(&exynos5_g3d_cpu_cluster1_min_qos);
-#endif
 #if PM_QOS_CPU_CLUSTER_NUM == 3
 		pm_qos_remove_request(&exynos5_g3d_cpu_cluster1_min_qos);
 		pm_qos_remove_request(&exynos5_g3d_cpu_cluster2_max_qos);

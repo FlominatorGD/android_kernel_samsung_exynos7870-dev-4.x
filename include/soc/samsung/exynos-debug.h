@@ -16,8 +16,11 @@
 #ifndef EXYNOS_DEBUG_H
 #define EXYNOS_DEBUG_H
 
-#if defined(CONFIG_S3C2410_WATCHDOG) && defined(CONFIG_DEBUG_SNAPSHOT)
+#ifdef CONFIG_S3C2410_WATCHDOG
 extern int s3c2410wdt_set_emergency_stop(int index);
+#ifdef CONFIG_SEC_DEBUG
+extern int __s3c2410wdt_set_emergency_reset(unsigned int timeout_cnt, int index, unsigned long addr);
+#endif
 extern int s3c2410wdt_set_emergency_reset(unsigned int timeout, int index);
 extern int s3c2410wdt_keepalive_emergency(bool reset, int index);
 extern void s3c2410wdt_reset_confirm(unsigned long mtime, int index);

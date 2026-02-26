@@ -295,7 +295,7 @@ config ACPI_CPPC_CPUFREQ
 
 config ARM_EXYNOS_ACME
 	bool "SAMSUNG EXYNOS ACME(A Cpufreq that Meets Every chipset) driver"
-	depends on ARCH_EXYNOS && ECT
+	depends on ARCH_EXYNOS
 	  help
 	  This adds the CPUFreq driver for every exynos chipset. Exynos
 	  ACME supported SoC must use the exynos CAL framework.
@@ -303,18 +303,17 @@ config ARM_EXYNOS_ACME
 	  If in doubt, say N.
 
 config ARM_EXYNOS_UFC
-        bool "SAMSUNG EXYNOS UFC(User Frequency Control) driver"
-        depends on ARM_EXYNOS_ACME
-         help
-         This adds the User CPU Frequency Control driver for every exynos chipset.
-         Exynos UFC suppored SoC must use the exynos ACME driver.
+	bool "SAMSUNG EXYNOS UFC(User Frequency Control) driver"
+	depends on ARM_EXYNOS_ACME
+	 help
+	 This adds the User CPU Frequency Control driver for every exynos chipset.
+	 Exynos UFC suppored SoC must use the exynos ACME driver.
 
-         If in doubt, say N.
+	 If in doubt, say N.
 
 config ARM_EXYNOS_FF
 	bool "SAMSUNG EXYNOS FF(Frequency Filter) driver"
-	depends on ARCH_EXYNOS && (EXYNOS_PSTATE_HAFM || EXYNOS_PSTATE_HAFM_TB)
-	default y
+	depends on ARCH_EXYNOS && EXYNOS_PSTATE_HAFM_TB
 	  help
 	  This adds the CPUFreq driver for exynos chipsets which needs
 	  frequency filtering due to unnecessary frequency change request

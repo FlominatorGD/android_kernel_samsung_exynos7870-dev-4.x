@@ -175,6 +175,10 @@ void machine_restart(char *cmd)
 	while (1);
 }
 
+#ifdef CONFIG_SEC_DEBUG_AVOID_UNNECESSARY_TRAP
+extern unsigned long long incorrect_addr;
+#endif
+
 /*
  * dump a block of kernel memory from around the given address
  */
@@ -182,6 +186,9 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 {
 	int	i, j;
 	int	nlines;
+#ifdef CONFIG_SEC_DEBUG_AVOID_UNNECESSARY_TRAP
+	int	nbytes_offset = nbytes;
+#endif
 	u32	*p;
 
 	/*
@@ -191,12 +198,17 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 	if (addr < PAGE_OFFSET || addr > -256UL) {
 		/*
 		 * If kaslr is enabled, Kernel code is able to
-		 * locate in VMALLOC address.
+		 * located in VMALLOC address.
 		 */
 		if (IS_ENABLED(CONFIG_RANDOMIZE_BASE)) {
+#ifdef CONFIG_VMAP_STACK
+			if (!is_vmalloc_addr((const void *)addr))
+				return;
+#else
 			if (addr < (unsigned long)KERNEL_START ||
 			    addr > (unsigned long)KERNEL_END)
 				return;
+#endif
 		} else {
 			return;
 		}
@@ -212,7 +224,6 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 	nbytes += (addr & (sizeof(u32) - 1));
 	nlines = (nbytes + 31) / 32;
 
-
 	for (i = 0; i < nlines; i++) {
 		/*
 		 * just display low 16 bits of address to keep
@@ -221,7 +232,18 @@ static void show_data(unsigned long addr, int nbytes, const char *name)
 		printk("%04lx :", (unsigned long)p & 0xffff);
 		for (j = 0; j < 8; j++) {
 			u32	data;
+
+#ifdef CONFIG_SEC_DEBUG_AVOID_UNNECESSARY_TRAP
+			if ((incorrect_addr != 0) && (((unsigned long long)p >= (incorrect_addr - nbytes_offset)) && ((unsigned long long)p <= (incorrect_addr + nbytes_offset)))) {
+				if (j == 7)
+					pr_cont(" ********\n");
+				else
+					pr_cont(" ********");
+			}
+			else if (probe_kernel_address(p, data)) {
+#else
 			if (probe_kernel_address(p, data)) {
+#endif
 				if (j == 7)
 					pr_cont(" ********\n");
 				else
@@ -277,10 +299,11 @@ void __show_regs(struct pt_regs *regs)
 		 *  you should modify dbg_snapshot_set_enable's function 2nd parameter
 		 *  to true.
 		 */
-		dbg_snapshot_set_enable_item("log_kevents", false);
+		dbg_snapshot_set_enable("log_kevents", false);
 	}
 
 	pr_info("TIF_FOREIGN_FPSTATE: %d, FP/SIMD depth %d, cpu: %d\n",
+			test_thread_flag(TIF_FOREIGN_FPSTATE),
 			atomic_read(&current->thread.fpsimd_kernel_state.depth),
 			current->thread.fpsimd_kernel_state.cpu);
 
@@ -304,8 +327,8 @@ void __show_regs(struct pt_regs *regs)
 
 		pr_cont("\n");
 	}
-	if (!user_mode(regs) && !dbg_snapshot_is_hardlockup())
-		show_extra_register_data(regs, 128);
+	if (!user_mode(regs))
+		show_extra_register_data(regs, 256);
 	printk("\n");
 }
 
@@ -398,6 +421,10 @@ int copy_thread(unsigned long clone_flags, unsigned long stack_start,
 		if (IS_ENABLED(CONFIG_ARM64_UAO) &&
 		    cpus_have_const_cap(ARM64_HAS_UAO))
 			childregs->pstate |= PSR_UAO_BIT;
+
+		if (arm64_get_ssbd_state() == ARM64_SSBD_FORCE_DISABLE)
+			set_ssbs_bit(childregs);
+
 		p->thread.cpu_context.x19 = stack_start;
 		p->thread.cpu_context.x20 = stk_sz;
 	}
@@ -438,6 +465,32 @@ void uao_thread_switch(struct task_struct *next)
 }
 
 /*
+ * Force SSBS state on context-switch, since it may be lost after migrating
+ * from a CPU which treats the bit as RES0 in a heterogeneous system.
+ */
+static void ssbs_thread_switch(struct task_struct *next)
+{
+	struct pt_regs *regs = task_pt_regs(next);
+
+	/*
+	 * Nothing to do for kernel threads, but 'regs' may be junk
+	 * (e.g. idle task) so check the flags and bail early.
+	 */
+	if (unlikely(next->flags & PF_KTHREAD))
+		return;
+
+	/* If the mitigation is enabled, then we leave SSBS clear. */
+	if ((arm64_get_ssbd_state() == ARM64_SSBD_FORCE_ENABLE) ||
+	    test_tsk_thread_flag(next, TIF_SSBD))
+		return;
+
+	if (compat_user_mode(regs))
+		set_compat_ssbs_bit(regs);
+	else if (user_mode(regs))
+		set_ssbs_bit(regs);
+}
+
+/*
  * We store our current task in sp_el0, which is clobbered by userspace. Keep a
  * shadow copy so that we can restore this upon entry from userspace.
  *
@@ -465,6 +518,7 @@ __notrace_funcgraph struct task_struct *__switch_to(struct task_struct *prev,
 	contextidr_thread_switch(next);
 	entry_task_switch(next);
 	uao_thread_switch(next);
+	ssbs_thread_switch(next);
 
 	/*
 	 * Complete any pending TLB or cache maintenance on this CPU in case

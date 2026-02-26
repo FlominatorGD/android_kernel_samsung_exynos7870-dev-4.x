@@ -543,56 +543,8 @@ void get_blend_value(unsigned int *cfg, u32 val, bool pre_multi)
 		*cfg |= (1 << SCALER_OP_SEL_INV_SHIFT);
 }
 
-void sc_hwset_blend_src_addr(struct sc_dev *sc, struct sc_frame *frame)
-{
-	writel(frame->addr.ioaddr[SC_PLANE_Y],
-			sc->regs + SCALER_BLEND_SRC_BASE_REG);
-}
-
-void sc_set_blendsrc_cfg(struct sc_dev *sc, bool pre_multi,
-				struct sc_src_blend_cfg *src_blend_cfg)
-{
-	u32 val = 0;
-
-	if (!pre_multi && src_blend_cfg->pre_multi)
-		val |= (1 << SCALER_SRC_ALPHA_MUL_EN_SHIFT);
-	else if (pre_multi && !src_blend_cfg->pre_multi)
-		val |= (1 << SCALER_SRC_ALPHA_DIV_EN_SHIFT);
-
-	val |= (src_blend_cfg->blend_src_color_byte_swap
-				<< SCALER_BLEND_SRC_COLOR_BYTE_SWAP_SHIFT);
-	val |= (src_blend_cfg->blend_src_color_format
-				<< SCALER_BLEND_SRC_COLOR_FORMAT_SHIFT);
-
-	/* setting it to 2, as suggested by AP team engineer
-	 * JINWOOK LEE <jdmcjini.lee@samsung.com>
-	 */
-	val |= (2 << SCALER_BLEND_DST_CSC_HOFFSET_SHIFT);
-	val |= (2 << SCALER_BLEND_DST_CSC_VOFFSET_SHIFT);
-	writel(val, sc->regs + SCALER_BLEND_CFG_REG);
-}
-
-void sc_set_blend_src_span(struct sc_dev *sc, u32 val)
-{
-	writel(val, sc->regs + SCALER_BLEND_SRC_SPAN_REG);
-}
-
-void sc_blend_src_pos(struct sc_dev *sc, u32 hpos, u32 vpos)
-{
-	writel((hpos << SCALER_BLEND_SRC_H_POS_SHIFT) |
-				(vpos << SCALER_BLEND_SRC_V_POS_SHIFT),
-				sc->regs + SCALER_BLEND_SRC_POS_REG);
-}
-
-void sc_blend_src_wh(struct sc_dev *sc, u32 width, u32 height)
-{
-	writel((width << SCALER_BLEND_SRC_WH_WIDTH_SHIFT) |
-				(height << SCALER_BLEND_SRC_WH_HEIGHT_SHIFT),
-				sc->regs + SCALER_BLEND_SRC_WH_REG);
-}
-
 void sc_hwset_blend(struct sc_dev *sc, enum sc_blend_op bl_op, bool pre_multi,
-		unsigned char g_alpha, struct sc_src_blend_cfg *src_blend_cfg)
+		unsigned char g_alpha)
 {
 	unsigned int cfg = readl(sc->regs + SCALER_CFG);
 	int idx = bl_op - 1;
@@ -615,8 +567,7 @@ void sc_hwset_blend(struct sc_dev *sc, enum sc_blend_op bl_op, bool pre_multi,
 	sc_dbg("src_blend_alpha is 0x%x\n", cfg);
 
 	cfg = readl(sc->regs + SCALER_DST_BLEND_COLOR);
-	get_blend_value(&cfg, sc_bl_op_tbl[idx].dst_color,
-			src_blend_cfg->pre_multi);
+	get_blend_value(&cfg, sc_bl_op_tbl[idx].dst_color, pre_multi);
 	if (g_alpha < 0xff)
 		cfg |= ((INV_SAGA & 0xf) << SCALER_OP_SEL_SHIFT);
 	writel(cfg, sc->regs + SCALER_DST_BLEND_COLOR);
@@ -639,21 +590,6 @@ void sc_hwset_blend(struct sc_dev *sc, enum sc_blend_op bl_op, bool pre_multi,
 		cfg = readl(sc->regs + SCALER_CFG);
 		cfg |= SCALER_CFG_BL_DIV_ALPHA_EN;
 		writel(cfg, sc->regs + SCALER_CFG);
-	}
-
-	/* Set source blending configuration */
-	if (sc->variant->blending) {
-		sc_set_blendsrc_cfg(sc, pre_multi, src_blend_cfg);
-
-		/* span in the units of pixels */
-		sc_set_blend_src_span(sc, src_blend_cfg->blend_src_width);
-
-		sc_blend_src_pos(sc,
-				src_blend_cfg->blend_src_h_pos,
-				src_blend_cfg->blend_src_v_pos);
-		sc_blend_src_wh(sc,
-				src_blend_cfg->blend_src_crop_width,
-				src_blend_cfg->blend_src_crop_height);
 	}
 }
 
@@ -857,17 +793,13 @@ void sc_hwset_src_imgsize(struct sc_dev *sc, struct sc_frame *frame)
 	 */
 	if (frame->sc_fmt->num_comp == 2)
 		cfg |= (frame->width << frame->sc_fmt->cspan) << 16;
-	else if (frame->sc_fmt->num_comp == 3) {
-		if (frame->sc_fmt->is_alphablend_fmt)
-			cfg |= (frame->width << frame->sc_fmt->cspan) << 16;
-		else {
-			if (sc_fmt_is_ayv12(frame->sc_fmt->pixelformat))
-				cfg |= ALIGN(frame->width >> 1, 16) << 16;
-			else if (frame->sc_fmt->cspan) /* YUV444 */
-				cfg |= frame->width << 16;
-			else
-				cfg |= (frame->width >> 1) << 16;
-		}
+	if (frame->sc_fmt->num_comp == 3) {
+		if (sc_fmt_is_ayv12(frame->sc_fmt->pixelformat))
+			cfg |= ALIGN(frame->width >> 1, 16) << 16;
+		else if (frame->sc_fmt->cspan) /* YUV444 */
+			cfg |= frame->width << 16;
+		else
+			cfg |= (frame->width >> 1) << 16;
 	}
 
 	writel(cfg, sc->regs + SCALER_SRC_SPAN);
@@ -991,90 +923,83 @@ void sc_hwset_dst_addr(struct sc_dev *sc, struct sc_frame *frame)
 		sc_hwset_dst_2bit_addr(sc, frame);
 }
 
-#define PREFIX_LEN	40
-#define ROW_LEN		16
-void sc_print_hex_dump(struct sc_dev *sc, const void *buf, size_t len)
-{
-	char prefix_buf[PREFIX_LEN];
-	unsigned long p;
-	int i, row;
-
-	for (i = 0; i < len; i += ROW_LEN) {
-		p = buf - sc->regs + i;
-
-		if (len - i < ROW_LEN)
-			row = len - i;
-		else
-			row = ROW_LEN;
-
-		snprintf(prefix_buf, sizeof(prefix_buf), "[%08lX] ", p);
-		print_hex_dump(KERN_NOTICE, prefix_buf, DUMP_PREFIX_NONE,
-				16, 4, buf + i, row, false);
-	}
-}
-
 void sc_hwregs_dump(struct sc_dev *sc)
 {
 	dev_notice(sc->dev, "Dumping control registers...\n");
 	pr_notice("------------------------------------------------\n");
 
-	sc_print_hex_dump(sc, sc->regs + 0x000, 0x044 - 0x000 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x050, 0x058 - 0x050 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x060, 0x134 - 0x060 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x140, 0x214 - 0x140 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x220, 0x240 - 0x220 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x250, 4);
-	sc_print_hex_dump(sc, sc->regs + 0x260, 4);
-	sc_print_hex_dump(sc, sc->regs + 0x278, 4);
-
-	if (sc->version <= SCALER_VERSION(2, 1, 1) ||
-			sc->version == SCALER_VERSION(4, 2, 0))
-		sc_print_hex_dump(sc, sc->regs + 0x280, 0x28C - 0x280 + 4);
-	if (sc->version >= SCALER_VERSION(5, 0, 0))
-		sc_print_hex_dump(sc, sc->regs + 0x280, 0x288 - 0x280 + 4);
-
-	sc_print_hex_dump(sc, sc->regs + 0x290, 0x298 - 0x290 + 4);
-
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x000, 0x044 - 0x000 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x050, 0x058 - 0x050 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x060, 0x134 - 0x060 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x140, 0x214 - 0x140 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x220, 0x240 - 0x220 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x250, 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x260, 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x278, 4, false);
 	if (sc->version <= SCALER_VERSION(2, 1, 1))
-		sc_print_hex_dump(sc, sc->regs + 0x2A8, 0x2A8 - 0x2A0 + 4);
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x280, 0x28C - 0x280 + 4, false);
 	if (sc->version >= SCALER_VERSION(5, 0, 0))
-		sc_print_hex_dump(sc, sc->regs + 0x2A0, 0x2A8 - 0x2A0 + 4);
-
-	sc_print_hex_dump(sc, sc->regs + 0x2B0, 0x2CC - 0x2B0 + 4);
-
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x280, 0x288 - 0x280 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x290, 0x298 - 0x290 + 4, false);
+	if (sc->version <= SCALER_VERSION(2, 1, 1))
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x2A8, 0x2A8 - 0x2A0 + 4, false);
+	if (sc->version >= SCALER_VERSION(5, 0, 0))
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x2A0, 0x2A8 - 0x2A0 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x2B0, 0x2C4 - 0x2B0 + 4, false);
 	if (sc->version >= SCALER_VERSION(3, 0, 0))
-		sc_print_hex_dump(sc, sc->regs + 0x2D0, 0x2DC - 0x2D0 + 4);
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x2D0, 0x2DC - 0x2D0 + 4, false);
 	if (sc->version >= SCALER_VERSION(5, 0, 0))
-		sc_print_hex_dump(sc, sc->regs + 0x2E0, 0x2E8 - 0x2E0 + 4);
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x2E0, 0x2E8 - 0x2E0 + 4, false);
 
 	if (sc->version >= SCALER_VERSION(5, 0, 0))
 		goto end;
 
-	if (sc->version == SCALER_VERSION(4, 2, 0)) {
-		sc_print_hex_dump(sc, sc->regs + 0x300, 0x304 - 0x300 + 4);
-		sc_print_hex_dump(sc, sc->regs + 0x310, 0x318 - 0x310 + 4);
-	}
-
 	/* shadow registers */
-	sc_print_hex_dump(sc, sc->regs + 0x1004, 0x1004 - 0x1004 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x1010, 0x1044 - 0x1010 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x1050, 0x1058 - 0x1050 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x1060, 0x1134 - 0x1060 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x1140, 0x1214 - 0x1140 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x1220, 0x1240 - 0x1220 + 4);
-	sc_print_hex_dump(sc, sc->regs + 0x1250, 4);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1004, 0x1004 - 0x1004 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1010, 0x1044 - 0x1010 + 4, false);
 
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1050, 0x1058 - 0x1050 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1060, 0x1134 - 0x1060 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1140, 0x1214 - 0x1140 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1220, 0x1240 - 0x1220 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1250, 4, false);
 	if (sc->version <= SCALER_VERSION(2, 1, 1) ||
 			sc->version <= SCALER_VERSION(4, 2, 0))
-		sc_print_hex_dump(sc, sc->regs + 0x1280, 0x128C - 0x1280 + 4);
-
-	sc_print_hex_dump(sc, sc->regs + 0x1290, 0x1298 - 0x1290 + 4);
-
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1280, 0x128C - 0x1280 + 4, false);
+	print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1290, 0x1298 - 0x1290 + 4, false);
 	if (sc->version >= SCALER_VERSION(3, 0, 0))
-		sc_print_hex_dump(sc, sc->regs + 0x12D0, 0x12DC - 0x12D0 + 4);
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x12D0, 0x12DC - 0x12D0 + 4, false);
 	if (sc->version >= SCALER_VERSION(4, 2, 0)) {
-		sc_print_hex_dump(sc, sc->regs + 0x1300, 0x1304 - 0x1300 + 4);
-		sc_print_hex_dump(sc, sc->regs + 0x1310, 0x1318 - 0x1310 + 4);
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1300, 0x1304 - 0x1300 + 4, false);
+		print_hex_dump(KERN_NOTICE, "", DUMP_PREFIX_ADDRESS, 16, 4,
+			sc->regs + 0x1310, 0x1318 - 0x1310 + 4, false);
 	}
 
 end:
@@ -1106,7 +1031,6 @@ const static char *sc_irq_err_status[] = {
 	[20] = "illigal dst width",
 	[21] = "illigal dst height",
 	[23] = "illigal scaling ratio",
-	[24] = "illegal format/width/height of blending source",
 	[25] = "illigal pre-scaler width/height",
 	[28] = "AXI Write Error Response",
 	[29] = "AXI Read Error Response",

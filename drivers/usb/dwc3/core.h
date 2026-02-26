@@ -38,6 +38,8 @@
 
 #include <linux/phy/phy.h>
 
+#include "../../battery_v2/include/sec_charging_common.h"
+
 #define DWC3_MSG_MAX	500
 
 /* Global constants */
@@ -135,6 +137,8 @@
 #define DWC3_GEVNTCOUNT(n)	(0xc40c + ((n) * 0x10))
 
 #define DWC3_GHWPARAMS8		0xc600
+#define DWC3_GUCTL3		0xc60c
+
 #define DWC3_GFLADJ		0xc630
 
 /* Device Registers */
@@ -363,6 +367,9 @@
 /* Global User Control Register 2 */
 #define DWC3_GUCTL2_RST_ACTBITLATER		BIT(14)
 
+/* Global User Control Register 2 */
+#define DWC3_GUCTL3_USB20_RETRY_DISABLE		BIT(16)
+
 /* Device Configuration Register */
 #define DWC3_DCFG_DEVADDR(addr)	((addr) << 3)
 #define DWC3_DCFG_DEVADDR_MASK	DWC3_DCFG_DEVADDR(0x7f)
@@ -548,6 +555,9 @@
 #define DWC3_DEV_IMOD_INTERVAL_SHIFT	0
 #define DWC3_DEV_IMOD_INTERVAL_MASK	(0xffff << 0)
 
+#define DWC3_LINK_STATE_INFO_LIMIT 15
+#define DWC3_LINK_STATE_LAST_INFO_MEM 8
+
 /* Structures */
 
 struct dwc3_trb;
@@ -704,6 +714,11 @@ enum dwc3_link_state {
 	DWC3_LINK_STATE_RESET		= 0x0e,
 	DWC3_LINK_STATE_RESUME		= 0x0f,
 	DWC3_LINK_STATE_MASK		= 0x0f,
+};
+
+enum {
+	RELEASE	= 0,
+	NOTIFY	= 1,
 };
 
 /* TRB Length, PCM and Status */
@@ -1049,10 +1064,16 @@ struct dwc3 {
 #define DWC3_REVISION_IS_DWC31		0x80000000
 #define DWC3_USB31_REVISION_110A	(0x3131302a | DWC3_REVISION_IS_DWC31)
 #define DWC3_USB31_REVISION_120A	(0x3132302a | DWC3_REVISION_IS_DWC31)
+#define DWC3_USB31_REVISION_170A	(0x3137302a | DWC3_REVISION_IS_DWC31)
+#define DWC3_USB31_REVISION_180A	(0x3138302a | DWC3_REVISION_IS_DWC31)
+#define DWC3_USB31_REVISION_190A	(0x3139302a | DWC3_REVISION_IS_DWC31)
 
 	enum dwc3_ep0_next	ep0_next_event;
 	enum dwc3_ep0_state	ep0state;
 	enum dwc3_link_state	link_state;
+	u16 max_cnt_link_info;
+	unsigned int linkstate_record[DWC3_LINK_STATE_LAST_INFO_MEM];
+	u8 linkstate_ai;
 
 	u16			isoch_delay;
 	u16			u2sel;
@@ -1132,7 +1153,18 @@ struct dwc3 {
 	unsigned		sparse_transfer_control:1;
 	unsigned		is_not_vbus_pad:1;
 	unsigned		start_config_issued:1;
+	unsigned		vbus_state:1;
+
+	struct work_struct      set_vbus_current_work;
+	int			vbus_current; /* 100mA,  500mA,  900mA */
+	struct delayed_work usb_event_work;
+	ktime_t rst_time_before;
+	ktime_t rst_time_first;
+	int rst_err_cnt;
+	bool rst_err_noti;
+	bool event_state;
 };
+#define ERR_RESET_CNT	3
 
 #define work_to_dwc(w)		(container_of((w), struct dwc3, drd_work))
 

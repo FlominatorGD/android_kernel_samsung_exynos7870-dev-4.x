@@ -89,7 +89,8 @@ struct g2d_commands {
 #define G2D_BUFTYPE_USERPTR	2
 #define G2D_BUFTYPE_DMABUF	3
 
-#define G2D_BUFTYPE_VALID(type)	!(((type) & G2D_BUFTYPE_DMABUF) == 0)
+#define G2D_BUFTYPE_VALID(type) \
+	(((type) > 0) && ((type) <= G2D_BUFTYPE_DMABUF))
 
 /*
  * struct g2d_buffer_data - Layer buffer description
@@ -214,7 +215,9 @@ struct g2d_task_data {
 #define G2D_PERF_LAYER_SCALING		(1 << 1)
 #define G2D_PERF_LAYER_YUV2P		(1 << 4)
 #define G2D_PERF_LAYER_YUV2P_82		(1 << 5)
-#define G2D_PERF_LAYER_FMTMASK		(3 << 4)
+#define G2D_PERF_LAYER_COMPRESSED	(1 << 6)
+
+#define G2D_PERF_LAYER_FMTMASK		(7 << 4)
 
 /*
  * struct g2d_performance_frame_data - description of needed performance.

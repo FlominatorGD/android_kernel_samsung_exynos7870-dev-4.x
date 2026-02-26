@@ -30,12 +30,14 @@
 #include <linux/ratelimit.h>
 #include <linux/debug-snapshot.h>
 
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+#include <linux/sec_debug.h>
+#endif
+
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
 
 int panic_on_oops = CONFIG_PANIC_ON_OOPS_VALUE;
-bool in_panic;
-
 static unsigned long tainted_mask;
 static int pause_on_oops;
 static int pause_on_oops_flag;
@@ -141,12 +143,18 @@ void panic(const char *fmt, ...)
 	int state = 0;
 	int old_cpu, this_cpu;
 	bool _crash_kexec_post_notifiers = crash_kexec_post_notifiers;
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	struct pt_regs regs;
+
+	regs.regs[30] = _RET_IP_;
+	regs.pc = regs.regs[30] - sizeof(unsigned int);
+#endif
 
 	/*
-	* dbg_snapshot_early_panic is for supporting wapper functions
-	* to users need to run SoC specific function in NOT interrupt
-	* context
-	*/
+	 * dbg_snapshot_early_panic is for supporting wapper functions
+	 * to users need to run SoC specific function in NOT interrupt
+	 * context
+	 */
 	dbg_snapshot_early_panic();
 
 	/*
@@ -156,7 +164,7 @@ void panic(const char *fmt, ...)
 	 * after setting panic_cpu) from invoking panic() again.
 	 */
 	local_irq_disable();
-	in_panic = true;
+
 	/*
 	 * It's possible to come here directly from a panic-assertion and
 	 * not have preempt disabled. Some functions called from here want
@@ -185,7 +193,16 @@ void panic(const char *fmt, ...)
 	va_start(args, fmt);
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
-	pr_emerg("Kernel panic - not syncing: %s\n", buf);
+
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
+	if (buf[strlen(buf) - 1] == '\n')
+		buf[strlen(buf) - 1] = '\0';
+#endif
+#ifdef CONFIG_SEC_DEBUG_EXTRA_INFO
+	if (strncmp(buf, "Fatal exception", 15))
+		sec_debug_set_extra_info_fault(PANIC_FAULT, (unsigned long)regs.pc, &regs);
+#endif
+	pr_auto(ASL5, "Kernel panic - not syncing: %s\n", buf);
 
 	dbg_snapshot_prepare_panic();
 	dbg_snapshot_dump_panic(buf, (size_t)strnlen(buf, sizeof(buf)));

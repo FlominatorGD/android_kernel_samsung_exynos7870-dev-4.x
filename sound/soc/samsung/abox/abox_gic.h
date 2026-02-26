@@ -1,4 +1,4 @@
-/* sound/soc/samsung/abox_v2/abox_gic.h
+/* sound/soc/samsung/abox/abox_gic.h
  *
  * ALSA SoC Audio Layer - Samsung Abox GIC driver
  *
@@ -13,7 +13,10 @@
 #define __SND_SOC_ABOX_GIC_H
 
 #include <linux/interrupt.h>
-#include "abox_soc.h"
+
+#define ABOX_GIC_SGI_COUNT 16
+#define ABOX_GIC_SPI_COUNT 103
+#define ABOX_GIC_IRQ_COUNT (ABOX_GIC_SGI_COUNT + ABOX_GIC_SPI_COUNT)
 
 struct abox_gic_irq_handler_t {
 	irq_handler_t handler;
@@ -25,10 +28,8 @@ struct abox_gic_data {
 	void __iomem *gicc_base;
 	phys_addr_t gicd_base_phys;
 	phys_addr_t gicc_base_phys;
-	size_t gicd_size;
-	size_t gicc_size;
 	int irq;
-	struct abox_gic_irq_handler_t handler[IRQ_COUNT];
+	struct abox_gic_irq_handler_t handler[ABOX_GIC_IRQ_COUNT];
 	bool disabled;
 };
 
@@ -40,16 +41,6 @@ enum abox_gic_target {
 	ABOX_GIC_CORE2,
 	ABOX_GIC_CORE3,
 };
-
-/**
- * Dump ABOX GIC Distributor SFR
- * @param[in]	dev	pointer to abox_gic device
- * @param[in]	dump	gpr dump
- * @param[in]	off	dump start offset
- * @param[in]	size	size of dump
- */
-extern void abox_gicd_dump(struct device *dev, char *dump,
-		size_t off, size_t size);
 
 /**
  * Enable or disable an IRQ

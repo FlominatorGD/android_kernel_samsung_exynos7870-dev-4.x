@@ -119,6 +119,64 @@
 		.pctl_res_idx   = pctl_idx,			\
 	}							\
 
+#define EXYNOS7870_PIN_BANK_EINTN(types, pins, reg, id)	\
+	{						\
+		.type		= &types,		\
+		.pctl_offset	= reg,			\
+		.nr_pins	= pins,			\
+		.eint_type	= EINT_TYPE_NONE,	\
+		.name		= id			\
+	}
+
+#define EXYNOS7870_PIN_BANK_EINTG(types, pins, reg, id, offs)	\
+	{						\
+		.type		= &types,		\
+		.pctl_offset	= reg,			\
+		.nr_pins	= pins,			\
+		.eint_type	= EINT_TYPE_GPIO,	\
+		.eint_offset	= offs,			\
+		.name		= id			\
+	}
+
+#define EXYNOS7870_PIN_BANK_EINTW(types, pins, reg, id, offs)	\
+	{						\
+		.type		= &types,		\
+		.pctl_offset	= reg,			\
+		.nr_pins	= pins,			\
+		.eint_type	= EINT_TYPE_WKUP,	\
+		.eint_offset	= offs,			\
+		.name		= id			\
+	}						\
+
+#define EXYNOS8890_PIN_BANK_EINTN(types, pins, reg, id)	\
+	{						\
+		.type		= &types,		\
+		.pctl_offset	= reg,			\
+		.nr_pins	= pins,			\
+		.eint_type	= EINT_TYPE_NONE,	\
+		.name		= id			\
+	}
+
+#define EXYNOS8890_PIN_BANK_EINTG(types, pins, reg, id, offs)	\
+	{						\
+		.type		= &types,		\
+		.pctl_offset	= reg,			\
+		.nr_pins	= pins,			\
+		.eint_type	= EINT_TYPE_GPIO,	\
+		.eint_offset	= offs,			\
+		.name		= id			\
+	}
+
+#define EXYNOS8890_PIN_BANK_EINTW(types, pins, reg, id, offs)	\
+	{						\
+		.type		= &types,		\
+		.pctl_offset	= reg,			\
+		.nr_pins	= pins,			\
+		.eint_type	= EINT_TYPE_WKUP,	\
+		.eint_offset	= offs,			\
+		.name		= id			\
+	}	
+
 #define EXYNOS9_PIN_BANK_EINTN(types, pins, reg, id)	\
 	{						\
 		.type		= &types,		\

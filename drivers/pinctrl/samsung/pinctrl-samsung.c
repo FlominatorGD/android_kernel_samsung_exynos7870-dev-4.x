@@ -1441,6 +1441,10 @@ static const struct of_device_id samsung_pinctrl_dt_match[] = {
 		.data = &exynos5433_of_data },
 	{ .compatible = "samsung,exynos7-pinctrl",
 		.data = &exynos7_of_data },
+	{ .compatible = "samsung,exynos7870-pinctrl",
+		.data = &exynos7870_of_data },
+	{ .compatible = "samsung,exynos8890-pinctrl",
+		.data = &exynos8890_of_data },
 	{ .compatible = "samsung,exynos9810-pinctrl",
 		.data = &exynos9810_of_data },
 	{ .compatible = "samsung,exynos9820-pinctrl",
@@ -1715,6 +1719,12 @@ static void check_gpio_status(unsigned char phonestate, const char *skip_grps)
 		gpiodvs_check_gpio_regs(drvdata, phonestate, skip_grps);
 	}
 }
+
+struct gpio_dvs_t exynos7870_secgpio_dvs = {
+	.result = &gpiomap_result,
+	.check_gpio_status = check_gpio_status,
+	.get_nr_gpio = exynos7870_secgpio_get_nr_gpio,
+};
 
 static int __init exynos9820_secgpio_get_nr_gpio(void)
 {

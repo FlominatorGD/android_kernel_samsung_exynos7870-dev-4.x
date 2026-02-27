@@ -11,6 +11,7 @@ obj-$(CONFIG_EXYNOS_PM_DOMAINS) += pm_domains.o
 obj-$(CONFIG_EXYNOS_CHIPID)	+= exynos-chipid.o
 
 # CAL
+obj-$(CONFIG_PWRCAL)            += pwrcal/
 obj-$(CONFIG_CAL_IF)            += cal-if/
 obj-$(CONFIG_EXYNOS_CHIPID)     += exynos-chipid.o
 obj-$(CONFIG_EXYNOS_PD)        += exynos-pd.o exynos-pd-dbg.o

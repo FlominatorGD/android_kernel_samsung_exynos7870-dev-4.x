@@ -26,7 +26,14 @@ ifeq ($(CONFIG_SOC_EXYNOS9820_EVT0), y)
 else
 	obj-$(CONFIG_SOC_EXYNOS9820)	+= clk-exynos9820.o
 endif
-
+	obj-$(CONFIG_SOC_EXYNOS7870)	+= clk-exynos7870.o
+ifeq ($(CONFIG_SOC_EXYNOS8890), y)
+	ifeq ($(CONFIG_SOC_EXYNOS8890_EVT1), y)
+		obj-y += clk-exynos8890.o
+	else
+		obj-y += clk-exynos8890_evt0.o
+	endif
+endif
 else
 	obj-$(CONFIG_COMMON_CLK)        += clk.o clk-pll.o clk-cpu.o
 	obj-$(CONFIG_EXYNOS_ARM64_COMMON_CLK)	+= clk-exynos5433.o

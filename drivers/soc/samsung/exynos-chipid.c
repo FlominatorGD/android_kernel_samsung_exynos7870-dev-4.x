@@ -19,15 +19,21 @@
 #include <linux/sys_soc.h>
 #include <linux/soc/samsung/exynos-soc.h>
 
+#define EXYNOS_SUBREV_MASK	(0xF << 4)
+#define EXYNOS_MAINREV_MASK	(0xF << 0)
+#define EXYNOS_REV_MASK		(EXYNOS_SUBREV_MASK | EXYNOS_MAINREV_MASK)
+
+static void __iomem *exynos_chipid_base;
+
 struct exynos_chipid_info exynos_soc_info;
 EXPORT_SYMBOL(exynos_soc_info);
 
 static const char *soc_ap_id;
-
+	
 static const char * __init product_id_to_name(unsigned int product_id)
 {
 	const char *soc_name;
-	unsigned int soc_id = product_id;
+	unsigned int soc_id = product_id & EXYNOS_SOC_MASK;
 
 	switch (soc_id) {
 	case EXYNOS3250_SOC_ID:
@@ -60,219 +66,56 @@ static const char * __init product_id_to_name(unsigned int product_id)
 	case EXYNOS5800_SOC_ID:
 		soc_name = "EXYNOS5800";
 		break;
-	case EXYNOS7872_SOC_ID:
-		soc_name = "EXYNOS7872";
+	case EXYNOS7870_SOC_ID:
+		soc_name = "EXYNOS7870";
 		break;
 	case EXYNOS8890_SOC_ID:
 		soc_name = "EXYNOS8890";
-		break;
-	case EXYNOS8895_SOC_ID:
-		soc_name = "EXYNOS8895";
-		break;
-	case EXYNOS9810_SOC_ID:
-		soc_name = "EXYNOS9810";
-		break;
-	case EXYNOS9820_SOC_ID:
-		soc_name = "EXYNOS9820";
 		break;
 	default:
 		soc_name = "UNKNOWN";
 	}
 	return soc_name;
 }
-static const struct exynos_chipid_variant drv_data_exynos8890 = {
-	.product_ver	= 1,
-	.unique_id_reg	= 0x14,
-	.rev_reg	= 0x0,
-	.main_rev_bit	= 0,
-	.sub_rev_bit	= 4,
-};
 
-static const struct exynos_chipid_variant drv_data_exynos8895 = {
-	.product_ver	= 1,
-	.unique_id_reg	= 0x04,
-	.rev_reg	= 0x10,
-	.main_rev_bit	= 20,
-	.sub_rev_bit	= 16,
-};
-
-static const struct exynos_chipid_variant drv_data_exynos7872 = {
-	.product_ver	= 2,
-	.unique_id_reg	= 0x04,
-	.rev_reg	= 0x10,
-	.main_rev_bit	= 20,
-	.sub_rev_bit	= 16,
-};
-
-static const struct exynos_chipid_variant drv_data_exynos9810 = {
-	.product_ver	= 1,
-	.unique_id_reg	= 0x04,
-	.rev_reg	= 0x10,
-	.main_rev_bit	= 20,
-	.sub_rev_bit	= 16,
-};
-
-static const struct of_device_id of_exynos_chipid_ids[] = {
+static const struct of_device_id of_exynos_chipid_ids[] __initconst = {
 	{
-		.compatible	= "samsung,exynos8890-chipid",
-		.data		= &drv_data_exynos8890,
-	},
-	{
-		.compatible	= "samsung,exynos8895-chipid",
-		.data		= &drv_data_exynos8895,
-	},
-	{
-		.compatible	= "samsung,exynos7872-chipid",
-		.data		= &drv_data_exynos8895,
-	},
-	{
-		.compatible	= "samsung,exynos9810-chipid",
-		.data		= &drv_data_exynos9810,
+		.compatible	= "samsung,exynos4210-chipid",
 	},
 	{},
 };
-
-static char lot_id[6];
-
-static u32 chipid_reverse_value(u32 val, u32 bitcnt)
-{
-	u32 temp, ret = 0;
-	u32 i;
-
-	for (i = 0; i < bitcnt; i++) {
-		temp = (val >> i) & 0x1;
-		ret += temp << ((bitcnt - 1) - i);
-	}
-
-	return ret;
-}
-
-static void chipid_dec_to_36(u32 in, char *p)
-{
-	const struct exynos_chipid_variant *data = exynos_soc_info.drv_data;
-
-	u32 mod;
-	u32 i;
-	u32 val;
-
-	for (i = 4; i >= 1; i--) {
-		mod = in % 36;
-		in /= 36;
-		p[i] = (mod < 10) ? (mod + '0') : (mod - 10 + 'A');
-	}
-
-	val = __raw_readl(exynos_soc_info.reg + data->unique_id_reg + 0x4);
-	val = (val >> 10) & 0x3;
-
-	switch (val) {
-	case 0:
-		p[0] = 'N';
-		break;
-	case 1:
-		p[0] = 'S';
-		break;
-	case 2:
-		p[0] = 'A';
-		break;
-	case 3:
-	default:
-		break;
-	}
-
-	p[5] = 0;
-}
-
-static void __init exynos_chipid_get_chipid_info(void)
-{
-	const struct exynos_chipid_variant *data = exynos_soc_info.drv_data;
-	u64 val;
-	u32 temp;
-
-	val = __raw_readl(exynos_soc_info.reg);
-
-	switch (data->product_ver) {
-	case 2:
-		exynos_soc_info.product_id = val & EXYNOS_SOC_MASK_V2;
-		break;
-	case 1:
-	default:
-		exynos_soc_info.product_id = val & EXYNOS_SOC_MASK;
-		break;
-	}
-
-	val = __raw_readl(exynos_soc_info.reg + data->rev_reg);
-	exynos_soc_info.main_rev = (val >> data->main_rev_bit) & EXYNOS_REV_MASK;
-	exynos_soc_info.sub_rev = (val >> data->sub_rev_bit) & EXYNOS_REV_MASK;
-	exynos_soc_info.revision = (exynos_soc_info.main_rev << 4) | exynos_soc_info.sub_rev;
-
-	val = __raw_readl(exynos_soc_info.reg + data->unique_id_reg);
-	val |= (u64)__raw_readl(exynos_soc_info.reg + data->unique_id_reg + 4) << 32UL;
-	exynos_soc_info.unique_id  = val;
-	exynos_soc_info.lot_id = val & EXYNOS_LOTID_MASK;
-
-	temp = __raw_readl(exynos_soc_info.reg + data->unique_id_reg);
-	temp = chipid_reverse_value(temp, 32);
-	temp = (temp >> 11) & EXYNOS_LOTID_MASK;
-	chipid_dec_to_36(temp, lot_id);
-	exynos_soc_info.lot_id2 = lot_id;
-}
-
-#if defined(CONFIG_SEC_FACTORY)
-#define POWER_BASE	0x15860000
-#define DREX_CAL6	0x09B8
-
-struct exynos_ddr_info {
-	unsigned int lot_id;
-	unsigned int rev;
-};
-
-struct exynos_ddr_info ddr_info;
-
-static void __init exynos_chipid_get_dram_info(void)
-{
-	unsigned int reg;
-	void __iomem *rev_addr;
-
-	rev_addr = ioremap(POWER_BASE, SZ_32);
-
-	reg = readl(rev_addr + DREX_CAL6);
-
-	ddr_info.lot_id = (reg & 0x3f)*100 + ((reg >> 6) & 0x3f)* 10 + ((reg >> 12) & 0xf);
-	ddr_info.rev = (reg >> 16) & 0xffff;	
-
-	iounmap(rev_addr);
-	return;
-}
-#else
-static void __init exynos_chipid_get_dram_info(void)
-{
-	return;
-}
-#endif
 
 /**
  *  exynos_chipid_early_init: Early chipid initialization
  *  @dev: pointer to chipid device
  */
-void __init exynos_chipid_early_init(void)
+void __init exynos_chipid_early_init(struct device *dev)
 {
 	struct device_node *np;
 	const struct of_device_id *match;
 
-	if (exynos_soc_info.reg)
+	if (exynos_chipid_base)
 		return;
 
-	np = of_find_matching_node_and_match(NULL, of_exynos_chipid_ids, &match);
-	if (!np || !match)
-		panic("%s, failed to find chipid node or match\n", __func__);
+	if (!dev)
+		np = of_find_matching_node_and_match(NULL,
+			of_exynos_chipid_ids, &match);
+	else
+		np = dev->of_node;
 
-	exynos_soc_info.drv_data = (struct exynos_chipid_variant *)match->data;
-	exynos_soc_info.reg = of_iomap(np, 0);
-	if (!exynos_soc_info.reg)
+	if (!np)
+		panic("%s, failed to find chipid node\n", __func__);
+
+	exynos_chipid_base = of_iomap(np, 0);
+
+	if (!exynos_chipid_base)
 		panic("%s: failed to map registers\n", __func__);
 
-	exynos_chipid_get_chipid_info();
-	exynos_chipid_get_dram_info();
+	exynos_soc_info.product_id  = __raw_readl(exynos_chipid_base);
+	exynos_soc_info.lot_id = __raw_readl(exynos_chipid_base + UNIQUE_ID1) & EXYNOS_LOTID_MASK;
+	exynos_soc_info.unique_id  = __raw_readl(exynos_chipid_base + UNIQUE_ID1);
+	exynos_soc_info.unique_id  |= (u64)__raw_readl(exynos_chipid_base + UNIQUE_ID2) << 32;
+	exynos_soc_info.revision = exynos_soc_info.product_id & EXYNOS_REV_MASK;
 }
 
 static int __init exynos_chipid_probe(struct platform_device *pdev)
@@ -281,6 +124,8 @@ static int __init exynos_chipid_probe(struct platform_device *pdev)
 	struct soc_device *soc_dev;
 	struct device_node *root;
 	int ret;
+
+	exynos_chipid_early_init(&pdev->dev);
 
 	soc_dev_attr = kzalloc(sizeof(*soc_dev_attr), GFP_KERNEL);
 	if (!soc_dev_attr)
@@ -306,6 +151,7 @@ static int __init exynos_chipid_probe(struct platform_device *pdev)
 		goto free_rev;
 
 	soc_device_to_device(soc_dev);
+
 	dev_info(&pdev->dev, "Exynos: CPU[%s] CPU_REV[0x%x] Detected\n",
 			product_id_to_name(exynos_soc_info.product_id),
 			exynos_soc_info.revision);
@@ -327,7 +173,6 @@ static struct platform_driver exynos_chipid_driver __refdata = {
 
 static int __init exynos_chipid_init(void)
 {
-	exynos_chipid_early_init();
 	return platform_driver_register(&exynos_chipid_driver);
 }
 core_initcall(exynos_chipid_init);
@@ -348,6 +193,13 @@ static ssize_t chipid_product_id_show(struct kobject *kobj,
 	return snprintf(buf, 10, "%08X\n", exynos_soc_info.product_id);
 }
 
+/* [BigData] For display of HRM Apk */
+static ssize_t chipid_ap_id_show(struct kobject *kobj,
+			         struct kobj_attribute *attr, char *buf)
+{
+	return snprintf(buf, 30, "%s EVT%d.%d\n", soc_ap_id, exynos_soc_info.revision>>4, exynos_soc_info.revision%16);
+}
+
 static ssize_t chipid_unique_id_show(struct kobject *kobj,
 			         struct kobj_attribute *attr, char *buf)
 {
@@ -360,12 +212,6 @@ static ssize_t chipid_lot_id_show(struct kobject *kobj,
 	return snprintf(buf, 14, "%08X\n", exynos_soc_info.lot_id);
 }
 
-static ssize_t chipid_lot_id2_show(struct kobject *kobj,
-			         struct kobj_attribute *attr, char *buf)
-{
-	return snprintf(buf, 14, "%s\n", exynos_soc_info.lot_id2);
-}
-
 static ssize_t chipid_revision_show(struct kobject *kobj,
 			         struct kobj_attribute *attr, char *buf)
 {
@@ -373,41 +219,10 @@ static ssize_t chipid_revision_show(struct kobject *kobj,
 }
 
 static ssize_t chipid_evt_ver_show(struct kobject *kobj,
-			         struct kobj_attribute *attr, char *buf)
+                                   struct kobj_attribute *attr, char *buf)
 {
-	if (exynos_soc_info.revision == 0)
-		return snprintf(buf, 14, "EVT0\n");
-	else
-		return snprintf(buf, 14, "EVT%1X.%1X\n",
-				exynos_soc_info.main_rev,
-				exynos_soc_info.sub_rev);
+         return snprintf(buf, 14, "EVT%d.%d\n", exynos_soc_info.revision>>4, exynos_soc_info.revision%16);
 }
-
-static ssize_t chipid_ap_id_show(struct kobject *kobj,
-                                 struct kobj_attribute *attr, char *buf)
-{
-	if (exynos_soc_info.revision == 0)
-		return snprintf(buf, 30, "%s EVT0\n", soc_ap_id);
-	else
-		return snprintf(buf, 30, "%s EVT%1X.%1X\n",
-				soc_ap_id,
-				exynos_soc_info.main_rev,
-				exynos_soc_info.sub_rev);
-}
-
-#ifdef CONFIG_SEC_FACTORY
-static ssize_t chipid_ddr_lot_id_show(struct kobject *kobj,
-			         struct kobj_attribute *attr, char *buf)
-{
-	return snprintf(buf, 14, "%d\n", ddr_info.lot_id);
-}
-
-static ssize_t chipid_ddr_rev_show(struct kobject *kobj,
-			         struct kobj_attribute *attr, char *buf)
-{
-	return snprintf(buf, 14, "%d\n", ddr_info.rev);
-}
-#endif
 
 static struct kobj_attribute chipid_product_id_attr =
         __ATTR(product_id, 0644, chipid_product_id_show, NULL);
@@ -421,35 +236,19 @@ static struct kobj_attribute chipid_unique_id_attr =
 static struct kobj_attribute chipid_lot_id_attr =
         __ATTR(lot_id, 0644, chipid_lot_id_show, NULL);
 
-static struct kobj_attribute chipid_lot_id2_attr =
-        __ATTR(lot_id2, 0644, chipid_lot_id2_show, NULL);
-
 static struct kobj_attribute chipid_revision_attr =
         __ATTR(revision, 0644, chipid_revision_show, NULL);
 
 static struct kobj_attribute chipid_evt_ver_attr =
         __ATTR(evt_ver, 0644, chipid_evt_ver_show, NULL);
 
-#ifdef CONFIG_SEC_FACTORY	
-static struct kobj_attribute chipid_ddr_lot_id_attr =
-        __ATTR(ddr_lot_id, 0644, chipid_ddr_lot_id_show, NULL);
-
-static struct kobj_attribute chipid_ddr_rev_attr =
-        __ATTR(ddr_rev, 0644, chipid_ddr_rev_show, NULL);
-#endif
-
 static struct attribute *chipid_sysfs_attrs[] = {
 	&chipid_product_id_attr.attr,
 	&chipid_ap_id_attr.attr,
 	&chipid_unique_id_attr.attr,
 	&chipid_lot_id_attr.attr,
-	&chipid_lot_id2_attr.attr,
 	&chipid_revision_attr.attr,
 	&chipid_evt_ver_attr.attr,
-#if defined(CONFIG_SEC_FACTORY)
-	&chipid_ddr_lot_id_attr.attr,
-	&chipid_ddr_rev_attr.attr,
-#endif	
 	NULL,
 };
 

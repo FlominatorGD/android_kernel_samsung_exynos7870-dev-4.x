@@ -1,6 +1,5 @@
 #include <soc/samsung/ect_parser.h>
 
-#include <asm/uaccess.h>
 #include <asm/map.h>
 #include <asm/memory.h>
 
@@ -15,15 +14,11 @@
 
 #define S5P_VA_ECT (VMALLOC_START + 0xF6000000 + 0x02D00000)
 
-#define ARRAY_SIZE32(array)		((u32)ARRAY_SIZE(array))
-
 /* Variable */
 
 static struct ect_info ect_list[];
 
 static char ect_signature[] = "PARA";
-
-static struct class *ect_class;
 
 static phys_addr_t ect_address;
 static phys_addr_t ect_size;
@@ -38,18 +33,6 @@ static void ect_parse_integer(void **address, void *value)
 	*address += sizeof(uint32_t);
 }
 
-static void ect_parse_integer64(void **address, void *value)
-{
-	unsigned int top, half;
-
-	half = __raw_readl(*address);
-	*address += sizeof(uint32_t);
-	top = __raw_readl(*address);
-	*address += sizeof(uint32_t);
-
-       *(unsigned long long *)value = ((unsigned long long)top << 32 | half);
-}
-
 static int ect_parse_string(void **address, char **value, unsigned int *length)
 {
 	ect_parse_integer(address, length);
@@ -58,9 +41,9 @@ static int ect_parse_string(void **address, char **value, unsigned int *length)
 	*value = *address;
 
 	if (*length % ALIGNMENT_SIZE != 0)
-		*address += (unsigned long)(*length + ALIGNMENT_SIZE - (*length % ALIGNMENT_SIZE));
+		*address += *length + ALIGNMENT_SIZE - (*length % ALIGNMENT_SIZE);
 	else
-		*address += (unsigned long)*length;
+		*address += *length;
 
 	return 0;
 }
@@ -83,36 +66,22 @@ static int ect_parse_dvfs_domain(int parser_version, void *address, struct ect_d
 		domain->resume_level_idx = -1;
 	}
 
-	if (parser_version >= 3) {
-		ect_parse_integer(&address, &domain->mode);
-	} else {
-		domain->mode = e_dvfs_mode_clock_name;
-	}
-
 	ect_parse_integer(&address, &domain->num_of_clock);
 	ect_parse_integer(&address, &domain->num_of_level);
 
-	if (domain->mode == e_dvfs_mode_sfr_address) {
-		domain->list_sfr = address;
-		domain->list_clock = NULL;
+	domain->list_clock = kzalloc(sizeof(char *) * domain->num_of_clock, GFP_KERNEL);
+	if (domain->list_clock == NULL) {
+		ret = -ENOMEM;
+		goto err_list_clock_allocation;
+	}
 
-		address += sizeof(unsigned int) * domain->num_of_clock;
-	} else if (domain->mode == e_dvfs_mode_clock_name) {
-		domain->list_clock = kzalloc(sizeof(char *) * domain->num_of_clock, GFP_KERNEL);
-		domain->list_sfr = NULL;
-		if (domain->list_clock == NULL) {
-			ret = -ENOMEM;
-			goto err_list_clock_allocation;
+	for (i = 0; i < domain->num_of_clock; ++i) {
+		if (ect_parse_string(&address, &clock_name, &length)) {
+			ret = -EINVAL;
+			goto err_parse_string;
 		}
 
-		for (i = 0; i < domain->num_of_clock; ++i) {
-			if (ect_parse_string(&address, &clock_name, &length)) {
-				ret = -EINVAL;
-				goto err_parse_string;
-			}
-
-			domain->list_clock[i] = clock_name;
-		}
+		domain->list_clock[i] = clock_name;
 	}
 
 	domain->list_level = address;
@@ -749,14 +718,7 @@ static int ect_parse_timing_param_header(void *address, struct ect_info *info)
 	for (i = 0; i < ect_timing_param_header->num_of_size; ++i) {
 		ect_timing_param_size = &ect_timing_param_header->size_list[i];
 
-		if (ect_timing_param_header->parser_version >= 3) {
-			ect_parse_integer64(&address, &ect_timing_param_size->parameter_key);
-			ect_timing_param_size->memory_size = (unsigned int)ect_timing_param_size->parameter_key;
-		} else {
-			ect_parse_integer(&address, &ect_timing_param_size->memory_size);
-			ect_timing_param_size->parameter_key = ect_timing_param_size->memory_size;
-		}
-
+		ect_parse_integer(&address, &ect_timing_param_size->memory_size);
 		ect_parse_integer(&address, &ect_timing_param_size->offset);
 	}
 
@@ -790,8 +752,6 @@ static int ect_parse_minlock_domain(int parser_version, void *address, struct ec
 
 	return 0;
 }
-
-uint64_t ect_minlock_domain_0;	/* used for sec debug auto analysis */ 	
 
 static int ect_parse_minlock_header(void *address, struct ect_info *info)
 {
@@ -846,7 +806,6 @@ static int ect_parse_minlock_header(void *address, struct ect_info *info)
 	}
 
 	info->block_handle = ect_minlock_header;
-	ect_minlock_domain_0 = (uint64_t)ect_minlock_header->domain_list;
 
 	return 0;
 
@@ -1004,171 +963,6 @@ err_binary_list_allocation:
 	return ret;
 }
 
-static int ect_parse_new_timing_param_size(int parser_version, void *address, struct ect_new_timing_param_size *size)
-{
-	ect_parse_integer(&address, &size->mode);
-	ect_parse_integer(&address, &size->num_of_timing_param);
-	ect_parse_integer(&address, &size->num_of_level);
-
-	size->timing_parameter = address;
-
-	return 0;
-}
-
-static int ect_parse_new_timing_param_header(void *address, struct ect_info *info)
-{
-	int ret = 0;
-	int i;
-	struct ect_new_timing_param_header *ect_new_timing_param_header;
-	struct ect_new_timing_param_size *ect_new_timing_param_size;
-	void *address_param_header = address;
-
-	if (address == NULL)
-		return -EINVAL;
-
-	ect_new_timing_param_header = kzalloc(sizeof(struct ect_new_timing_param_header), GFP_KERNEL);
-	if (ect_new_timing_param_header == NULL)
-		return -ENOMEM;
-
-	ect_parse_integer(&address, &ect_new_timing_param_header->parser_version);
-	ect_parse_integer(&address, &ect_new_timing_param_header->version);
-	ect_parse_integer(&address, &ect_new_timing_param_header->num_of_size);
-
-	ect_new_timing_param_header->size_list = kzalloc(sizeof(struct ect_new_timing_param_size) * ect_new_timing_param_header->num_of_size,
-								GFP_KERNEL);
-	if (ect_new_timing_param_header->size_list == NULL) {
-		ret = -ENOMEM;
-		goto err_size_list_allocation;
-	}
-
-	for (i = 0; i < ect_new_timing_param_header->num_of_size; ++i) {
-		ect_new_timing_param_size = &ect_new_timing_param_header->size_list[i];
-
-		ect_parse_integer64(&address, &ect_new_timing_param_size->parameter_key);
-		ect_parse_integer(&address, &ect_new_timing_param_size->offset);
-	}
-
-	for (i = 0; i < ect_new_timing_param_header->num_of_size; ++i) {
-		ect_new_timing_param_size = &ect_new_timing_param_header->size_list[i];
-
-		if (ect_parse_new_timing_param_size(ect_new_timing_param_header->parser_version,
-							address_param_header + ect_new_timing_param_size->offset,
-							ect_new_timing_param_size)) {
-			ret = -EINVAL;
-			goto err_parse_new_timing_param_size;
-		}
-	}
-
-	info->block_handle = ect_new_timing_param_header;
-
-	return 0;
-
-err_parse_new_timing_param_size:
-	kfree(ect_new_timing_param_header->size_list);
-err_size_list_allocation:
-	kfree(ect_new_timing_param_header);
-	return ret;
-}
-
-static int ect_parse_pidtm_block(int parser_version, void *address, struct ect_pidtm_block *block)
-{
-	int ret = 0;
-	int i, length;
-
-	ect_parse_integer(&address, &block->num_of_temperature);
-	block->temperature_list = address;
-
-	address += sizeof(int32_t) * block->num_of_temperature;
-
-	ect_parse_integer(&address, &block->num_of_parameter);
-	block->param_name_list = kzalloc(sizeof(char *) * block->num_of_parameter, GFP_KERNEL);
-	if (block->param_name_list == NULL) {
-		ret = -ENOMEM;
-		goto err_param_name_list_allocation;
-	}
-
-	for (i = 0; i < block->num_of_parameter; ++i) {
-		if (ect_parse_string(&address, &block->param_name_list[i], &length)) {
-			ret = -EINVAL;
-			goto err_parse_param_name;
-		}
-	}
-
-	block->param_value_list = address;
-
-	return 0;
-
-err_parse_param_name:
-	kfree(block->param_name_list);
-err_param_name_list_allocation:
-	return ret;
-}
-
-static int ect_parse_pidtm_header(void *address, struct ect_info *info)
-{
-	int ret = 0;
-	int i;
-	struct ect_pidtm_header *ect_pidtm_header;
-	struct ect_pidtm_block *ect_pidtm_block;
-	void *address_param_header = address;
-	char *block_name;
-	int offset, length;
-
-	if (address == NULL)
-		return -EINVAL;
-
-	ect_pidtm_header = kzalloc(sizeof(struct ect_pidtm_header), GFP_KERNEL);
-	if (ect_pidtm_header == NULL)
-		return -ENOMEM;
-
-	ect_parse_integer(&address, &ect_pidtm_header->parser_version);
-	ect_parse_integer(&address, &ect_pidtm_header->version);
-	ect_parse_integer(&address, &ect_pidtm_header->num_of_block);
-
-	ect_pidtm_header->block_list = kzalloc(sizeof(struct ect_pidtm_block) * ect_pidtm_header->num_of_block,
-							GFP_KERNEL);
-	if (ect_pidtm_header->block_list == NULL) {
-		ret = -ENOMEM;
-		goto err_block_list_allocation;
-	}
-
-	for (i = 0; i < ect_pidtm_header->num_of_block; ++i) {
-		ect_pidtm_block = &ect_pidtm_header->block_list[i];
-
-		if (ect_parse_string(&address, &block_name, &length)) {
-			ret = -EINVAL;
-			goto err_parse_string;
-		}
-
-		ect_parse_integer(&address, &offset);
-		ect_pidtm_block->block_name = block_name;
-		ect_pidtm_block->offset = offset;
-	}
-
-	for (i = 0; i < ect_pidtm_header->num_of_block; ++i) {
-		ect_pidtm_block = &ect_pidtm_header->block_list[i];
-
-		if (ect_parse_pidtm_block(ect_pidtm_header->parser_version,
-							address_param_header + ect_pidtm_block->offset,
-							ect_pidtm_block)) {
-			ret = -EINVAL;
-			goto err_parse_pidtm_block;
-		}
-
-	}
-
-	info->block_handle = ect_pidtm_header;
-
-	return 0;
-
-err_parse_pidtm_block:
-err_parse_string:
-	kfree(ect_pidtm_header->block_list);
-err_block_list_allocation:
-	kfree(ect_pidtm_header);
-	return ret;
-}
-
 static void ect_present_test_data(char *version)
 {
 	if (version[1] == '.')
@@ -1200,8 +994,6 @@ static int ect_dump_timing_parameter(struct seq_file *s, void *data);
 static int ect_dump_minlock(struct seq_file *s, void *data);
 static int ect_dump_gen_parameter(struct seq_file *s, void *data);
 static int ect_dump_binary(struct seq_file *s, void *data);
-static int ect_dump_new_timing_parameter(struct seq_file *s, void *data);
-static int ect_dump_pidtm(struct seq_file *s, void *data);
 
 static int dump_open(struct inode *inode, struct file *file);
 
@@ -1219,8 +1011,6 @@ static int dump_open(struct inode *inode, struct file *file);
 #define ect_dump_minlock		NULL
 #define ect_dump_gen_parameter		NULL
 #define ect_dump_binary			NULL
-#define ect_dump_new_timing_parameter	NULL
-#define ect_dump_pidtm			NULL
 
 #define dump_open			NULL
 
@@ -1395,34 +1185,6 @@ static struct ect_info ect_list[] = {
 		.dump_node_name = SYSFS_NODE_BIN,
 		.block_handle = NULL,
 		.block_precedence = -1,
-	}, {
-		.block_name = BLOCK_NEW_TIMING_PARAM,
-		.block_name_length = sizeof(BLOCK_NEW_TIMING_PARAM) - 1,
-		.parser = ect_parse_new_timing_param_header,
-		.dump = ect_dump_new_timing_parameter,
-		.dump_ops = {
-			.open = dump_open,
-			.read = seq_read,
-			.llseek = seq_lseek,
-			.release = single_release,
-		},
-		.dump_node_name = SYSFS_NODE_NEW_TIMING_PARAM,
-		.block_handle = NULL,
-		.block_precedence = -1,
-	}, {
-		.block_name = BLOCK_PIDTM,
-		.block_name_length = sizeof(BLOCK_PIDTM) - 1,
-		.parser = ect_parse_pidtm_header,
-		.dump = ect_dump_pidtm,
-		.dump_ops = {
-			.open = dump_open,
-			.read = seq_read,
-			.llseek = seq_lseek,
-			.release = single_release,
-		},
-		.dump_node_name = SYSFS_NODE_PIDTM,
-		.block_handle = NULL,
-		.block_precedence = -1,
 	}
 };
 
@@ -1432,7 +1194,7 @@ static struct ect_info* ect_get_info(char *block_name)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE32(ect_list); ++i) {
+	for (i = 0; i < ARRAY_SIZE(ect_list); ++i) {
 		if (ect_strcmp(block_name, ect_list[i].block_name) == 0)
 			return &ect_list[i];
 	}
@@ -1493,32 +1255,12 @@ static int ect_dump_dvfs(struct seq_file *s, void *data)
 		domain = &ect_dvfs_header->domain_list[i];
 
 		seq_printf(s, "\t\t[DOMAIN NAME] : %s\n", domain->domain_name);
-		seq_printf(s, "\t\t[BOOT LEVEL IDX] : ");
-		if (domain->boot_level_idx == -1) {
-			seq_printf(s, "NONE\n");
-		} else {
-			seq_printf(s, "%d\n", domain->boot_level_idx);
-		}
-		seq_printf(s, "\t\t[RESUME LEVEL IDX] : ");
-		if (domain->resume_level_idx == -1) {
-			seq_printf(s, "NONE\n");
-		} else {
-			seq_printf(s, "%d\n", domain->resume_level_idx);
-		}
 		seq_printf(s, "\t\t[MAX FREQ] : %u\n", domain->max_frequency);
 		seq_printf(s, "\t\t[MIN FREQ] : %u\n", domain->min_frequency);
-		if (domain->mode == e_dvfs_mode_clock_name) {
-			seq_printf(s, "\t\t[NUM OF CLOCK] : %d\n", domain->num_of_clock);
+		seq_printf(s, "\t\t[NUM OF CLOCK] : %d\n", domain->num_of_clock);
 
-			for (j = 0; j < domain->num_of_clock; ++j) {
-				seq_printf(s, "\t\t\t[CLOCK NAME] : %s\n", domain->list_clock[j]);
-			}
-		} else if (domain->mode == e_dvfs_mode_sfr_address) {
-			seq_printf(s, "\t\t[NUM OF SFR] : %d\n", domain->num_of_clock);
-
-			for (j = 0; j < domain->num_of_clock; ++j) {
-				seq_printf(s, "\t\t\t[SFR ADDRESS] : %x\n", domain->list_sfr[j]);
-			}
+		for (j = 0; j < domain->num_of_clock; ++j) {
+			seq_printf(s, "\t\t\t[CLOCK NAME] : %s\n", domain->list_clock[j]);
 		}
 
 		seq_printf(s, "\t\t[NUM OF LEVEL] : %d\n", domain->num_of_level);
@@ -1621,18 +1363,7 @@ static int ect_dump_voltage(struct seq_file *s, void *data)
 
 		for (j = 0; j < domain->num_of_table; ++j) {
 			seq_printf(s, "\t\t\t[TABLE VERSION] : %d\n", domain->table_list[j].table_version);
-			seq_printf(s, "\t\t\t[BOOT LEVEL IDX] : ");
-			if (domain->table_list[j].boot_level_idx == -1) {
-				seq_printf(s, "NONE\n");
-			} else {
-				seq_printf(s, "%d\n", domain->table_list[j].boot_level_idx);
-			}
-			seq_printf(s, "\t\t\t[RESUME LEVEL IDX] : ");
-			if (domain->table_list[j].resume_level_idx == -1) {
-				seq_printf(s, "NONE\n");
-			} else {
-				seq_printf(s, "%d\n", domain->table_list[j].resume_level_idx);
-			}
+
 			seq_printf(s, "\t\t\t\t[TABLE]\n");
 			for (k = 0; k < domain->num_of_level; ++k) {
 				seq_printf(s, "\t\t\t\t");
@@ -1851,7 +1582,7 @@ static int ect_dump_timing_parameter(struct seq_file *s, void *data)
 	for (i = 0; i < ect_timing_param_header->num_of_size; ++i) {
 		size = &ect_timing_param_header->size_list[i];
 
-		seq_printf(s, "\t\t[PARAMETER KEY] : %p\n", (void *)size->parameter_key);
+		seq_printf(s, "\t\t[MEMORY SIZE] : %u\n", size->memory_size);
 		seq_printf(s, "\t\t[NUM OF TIMING PARAMETER] : %d\n", size->num_of_timing_param);
 		seq_printf(s, "\t\t[NUM OF LEVEL] : %d\n", size->num_of_level);
 
@@ -1859,7 +1590,7 @@ static int ect_dump_timing_parameter(struct seq_file *s, void *data)
 		for (j = 0; j < size->num_of_level; ++j) {
 			seq_printf(s, "\t\t\t");
 			for (k = 0; k < size->num_of_timing_param; ++k) {
-				seq_printf(s, "%X ", size->timing_parameter[j * size->num_of_timing_param + k]);
+				seq_printf(s, "%x", size->timing_parameter[j * size->num_of_timing_param + k]);
 			}
 			seq_printf(s, "\n");
 		}
@@ -1983,93 +1714,10 @@ static int ect_dump_binary(struct seq_file *s, void *data)
 	return 0;
 }
 
-static int ect_dump_new_timing_parameter(struct seq_file *s, void *data)
-{
-	int i, j, k;
-	struct ect_info *info = ect_get_info(BLOCK_NEW_TIMING_PARAM);
-	struct ect_new_timing_param_header *ect_new_timing_param_header = info->block_handle;
-	struct ect_new_timing_param_size *size;
-
-	if (ect_new_timing_param_header == NULL) {
-		seq_printf(s, "[ECT] : there is no new timing parameter information\n");
-		return 0;
-	}
-
-	seq_printf(s, "[ECT] : New Timing-Parameter Information\n");
-	seq_printf(s, "\t[PARSER VERSION] : %d\n", ect_new_timing_param_header->parser_version);
-	seq_printf(s, "\t[VERSION] : %c%c%c%c\n",
-			ect_new_timing_param_header->version[0],
-			ect_new_timing_param_header->version[1],
-			ect_new_timing_param_header->version[2],
-			ect_new_timing_param_header->version[3]);
-	seq_printf(s, "\t[NUM OF SIZE] : %d\n", ect_new_timing_param_header->num_of_size);
-
-	for (i = 0; i < ect_new_timing_param_header->num_of_size; ++i) {
-		size = &ect_new_timing_param_header->size_list[i];
-
-		seq_printf(s, "\t\t[PARAMETER KEY] : %llX\n", size->parameter_key);
-		seq_printf(s, "\t\t[NUM OF TIMING PARAMETER] : %d\n", size->num_of_timing_param);
-		seq_printf(s, "\t\t[NUM OF LEVEL] : %d\n", size->num_of_level);
-
-		seq_printf(s, "\t\t\t[TABLE]\n");
-		for (j = 0; j < size->num_of_level; ++j) {
-			seq_printf(s, "\t\t\t");
-			for (k = 0; k < size->num_of_timing_param; ++k) {
-				if (size->mode == e_mode_normal_value)
-					seq_printf(s, "%X ", size->timing_parameter[j * size->num_of_timing_param + k]);
-				else if (size->mode == e_mode_extend_value)
-					seq_printf(s, "%llX ", ect_read_value64(size->timing_parameter, j * size->num_of_timing_param + k));
-			}
-			seq_printf(s, "\n");
-		}
-	}
-
-	return 0;
-}
-
-static int ect_dump_pidtm(struct seq_file *s, void *data)
-{
-	int i, j;
-	struct ect_info *info = ect_get_info(BLOCK_PIDTM);
-	struct ect_pidtm_header *ect_pidtm_header = info->block_handle;
-	struct ect_pidtm_block *block;
-
-	if (ect_pidtm_header == NULL) {
-		seq_printf(s, "[ECT] : there is no pidtm parameter information\n");
-		return 0;
-	}
-
-	seq_printf(s, "[ECT] : PIDTM Parameter Information\n");
-	seq_printf(s, "\t[PARSER VERSION] : %d\n", ect_pidtm_header->parser_version);
-	seq_printf(s, "\t[VERSION] : %c%c%c%c\n",
-			ect_pidtm_header->version[0],
-			ect_pidtm_header->version[1],
-			ect_pidtm_header->version[2],
-			ect_pidtm_header->version[3]);
-	seq_printf(s, "\t[NUM OF BLOCK] : %d\n", ect_pidtm_header->num_of_block);
-
-	for (i = 0; i < ect_pidtm_header->num_of_block; ++i) {
-		block = &ect_pidtm_header->block_list[i];
-
-		seq_printf(s, "\t\t[BLOCK NAME] : %s\n", block->block_name);
-		seq_printf(s, "\t\t[NUM OF TEMPERATURE] : %d\n", block->num_of_temperature);
-
-		for (j = 0; j < block->num_of_temperature; ++j) {
-			seq_printf(s, "\t\t\t[TRIGGER TEMPERATURE] : %d\n", block->temperature_list[j]);
-		}
-
-		seq_printf(s, "\t\t[NUM OF PARAMETER] : %d\n", block->num_of_parameter);
-		for (j = 0; j < block->num_of_parameter; ++j) {
-			seq_printf(s, "\t\t\t[PARAMETER] : %s, %d\n", block->param_name_list[j], block->param_value_list[j]);
-		}
-	}
-
-	return 0;
-}
-
 static int dump_open(struct inode *inode, struct file *file)
 {
-	struct ect_info *info = (struct ect_info *)inode->i_private;
+	const struct file_operations *ops = file->f_op;
+	struct ect_info *info = container_of(ops, struct ect_info, dump_ops);
 
 	return single_open(file, info->dump, inode->i_private);
 }
@@ -2082,8 +1730,8 @@ static int ect_dump_all(struct seq_file *s, void *data)
 	if (ret)
 		return ret;
 
-	for (i = 0; i < ARRAY_SIZE32(ect_list); ++i) {
-		for (j = 0; j < ARRAY_SIZE32(ect_list); ++j) {
+	for (i = 0; i < ARRAY_SIZE(ect_list); ++i) {
+		for (j = 0; j < ARRAY_SIZE(ect_list); ++j) {
 			if (ect_list[j].block_precedence != i)
 				continue;
 
@@ -2108,49 +1756,6 @@ static struct file_operations ops_all_dump = {
 	.release = single_release,
 };
 
-static ssize_t create_binary_store(struct class *class,
-		struct class_attribute *attr, const char *buf, size_t size)
-{
-	char filename_buffer[512];
-	long pattern_fd;
-	mm_segment_t old_fs;
-	struct file *fp;
-	loff_t pos = 0;
-	int ret;
-
-	ret = sscanf(buf, "%511s", filename_buffer);
-	if (ret != 1)
-		return -EINVAL;
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-
-	pattern_fd = do_sys_open(AT_FDCWD, filename_buffer, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC | O_NOFOLLOW, 0664);
-	if (pattern_fd < 0) {
-		pr_err("[ECT] : error to open file\n");
-		set_fs(old_fs);
-		return -EINVAL;
-	}
-
-	fp = fget(pattern_fd);
-	if (fp) {
-		vfs_write(fp, (const char *)ect_address, ect_size, &pos);
-		vfs_fsync(fp, 0);
-		fput(fp);
-	} else {
-		pr_err("[ECT] : error to convert file\n");
-	}
-
-	get_close_on_exec(pattern_fd);
-	set_fs(old_fs);
-
-	return size;
-}
-
-
-static CLASS_ATTR_WO(create_binary);
-
-
 static int ect_dump_init(void)
 {
 	int i;
@@ -2167,30 +1772,19 @@ static int ect_dump_init(void)
 	if (!d)
 		return -ENOMEM;
 
-	d = debugfs_create_file(ect_header_info.dump_node_name, S_IRUGO, root, &ect_header_info,
+	d = debugfs_create_file(ect_header_info.dump_node_name, S_IRUGO, root, NULL,
 				&ect_header_info.dump_ops);
 	if (!d)
 		return -ENOMEM;
 
-	for (i = 0; i < ARRAY_SIZE32(ect_list); ++i) {
+	for (i = 0; i < ARRAY_SIZE(ect_list); ++i) {
 		if (ect_list[i].block_handle == NULL)
 			continue;
 
-		d = debugfs_create_file(ect_list[i].dump_node_name, S_IRUGO, root, &(ect_list[i]),
+		d = debugfs_create_file(ect_list[i].dump_node_name, S_IRUGO, root, NULL,
 					&ect_list[i].dump_ops);
 		if (!d)
 			return -ENOMEM;
-	}
-
-	ect_class = class_create(THIS_MODULE, "ect");
-	if (IS_ERR(ect_class)) {
-		pr_err("%s: couldn't create class\n", __FILE__);
-		return PTR_ERR(ect_class);
-	}
-
-	if (class_create_file(ect_class, &class_attr_create_binary)) {
-		pr_err("%s: couldn't create generate_data node\n", __FILE__);
-		return -EINVAL;
 	}
 
 	return 0;
@@ -2212,23 +1806,11 @@ void __init ect_init(phys_addr_t address, phys_addr_t size)
 	ect_size = size;
 }
 
-unsigned long long ect_read_value64(unsigned int *address, int index)
-{
-	unsigned int top, half;
-
-	index *= 2;
-
-	half = address[index];
-	top = address[index + 1];
-
-	return ((unsigned long long)top << 32 | half);
-}
-
 void *ect_get_block(char *block_name)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE32(ect_list); ++i) {
+	for (i = 0; i < ARRAY_SIZE(ect_list); ++i) {
 		if (ect_strcmp(block_name, ect_list[i].block_name) == 0)
 			return ect_list[i].block_handle;
 	}
@@ -2367,28 +1949,6 @@ struct ect_ap_thermal_function *ect_ap_thermal_get_function(void *block, char *f
 	return NULL;
 }
 
-struct ect_pidtm_block *ect_pidtm_get_block(void *block, char *block_name)
-{
-	int i;
-	struct ect_pidtm_header *header;
-	struct ect_pidtm_block *pidtm_block;
-
-	if (block == NULL ||
-		block_name == NULL)
-		return NULL;
-
-	header = (struct ect_pidtm_header *)block;
-
-	for (i = 0; i < header->num_of_block; ++i) {
-		pidtm_block = &header->block_list[i];
-
-		if (ect_strcmp(block_name, pidtm_block->block_name) == 0)
-			return pidtm_block;
-	}
-
-	return NULL;
-}
-
 struct ect_margin_domain *ect_margin_get_domain(void *block, char *domain_name)
 {
 	int i;
@@ -2426,27 +1986,6 @@ struct ect_timing_param_size *ect_timing_param_get_size(void *block, int dram_si
 		size = &header->size_list[i];
 
 		if (size->memory_size == dram_size)
-			return size;
-	}
-
-	return NULL;
-}
-
-struct ect_timing_param_size *ect_timing_param_get_key(void *block, unsigned long long key)
-{
-	int i;
-	struct ect_timing_param_header *header;
-	struct ect_timing_param_size *size;
-
-	if (block == NULL)
-		return NULL;
-
-	header = (struct ect_timing_param_header *)block;
-
-	for (i = 0; i < header->num_of_size; ++i) {
-		size = &header->size_list[i];
-
-		if (key == size->parameter_key)
 			return size;
 	}
 
@@ -2517,45 +2056,21 @@ struct ect_bin *ect_binary_get_bin(void *block, char *binary_name)
 	return NULL;
 }
 
-struct ect_new_timing_param_size *ect_new_timing_param_get_key(void *block, unsigned long long key)
-{
-	int i;
-	struct ect_new_timing_param_header *header;
-	struct ect_new_timing_param_size *size;
-
-	if (block == NULL)
-		return NULL;
-
-	header = (struct ect_new_timing_param_header *)block;
-
-	for (i = 0; i < header->num_of_size; ++i) {
-		size = &header->size_list[i];
-
-		if (key == size->parameter_key)
-			return size;
-	}
-
-	return NULL;
-}
-
-int ect_parse_binary_header(void)
+int __init ect_parse_binary_header(void)
 {
 	int ret = 0;
 	int i, j;
 	char *block_name;
-	void *address, *address_tmp;
+	void *address;
 	unsigned int length, offset;
 	struct ect_header *ect_header;
 
 	ect_init_map_io();
 
 	address = (void *)ect_address;
-	address_tmp = (void *)ect_address;
-	
-	if (address == NULL) {
-		pr_err("%s-%d ect_address is NULL\n", __func__, __LINE__);
+	if (address == NULL)
 		return -EINVAL;
-	}
+
 	ect_header = kzalloc(sizeof(struct ect_header), GFP_KERNEL);
 
 	ect_parse_integer(&address, ect_header->sign);
@@ -2565,18 +2080,6 @@ int ect_parse_binary_header(void)
 
 	if (memcmp(ect_header->sign, ect_signature, sizeof(ect_signature) - 1)) {
 		ret = -EINVAL;
-		pr_err("%s-%d ect_signature file!\n", __func__, __LINE__);
-		pr_err("ect_header->sign:%c%c%c%c\n", 
-				    ect_header->sign[0],
-				    ect_header->sign[1],
-				    ect_header->sign[2],
-				    ect_header->sign[3]);
-
-		pr_err("ect_header->version:%c%c%c%c\n",
-				   ect_header->version[0],
-				   ect_header->version[1],
-				   ect_header->version[2],
-				   ect_header->version[3]);
 		goto err_memcmp;
 	}
 
@@ -2590,7 +2093,7 @@ int ect_parse_binary_header(void)
 
 		ect_parse_integer(&address, &offset);
 
-		for (j = 0; j < ARRAY_SIZE32(ect_list); ++j) {
+		for (j = 0; j < ARRAY_SIZE(ect_list); ++j) {
 			if (strncmp(block_name, ect_list[j].block_name, ect_list[j].block_name_length) != 0)
 				continue;
 
@@ -2611,15 +2114,6 @@ int ect_parse_binary_header(void)
 err_parser:
 err_parse_string:
 err_memcmp:
-	pr_err("ect data dump\n");
-	for (i = 0; i < 50; i++) {
-		pr_err("%8x %8x %8x %8x\n",
-			__raw_readl(address_tmp + 16 * i),
-			__raw_readl(address_tmp + 16 * i + 4),
-			__raw_readl(address_tmp + 16 * i + 8),
-			__raw_readl(address_tmp + 16 * i + 12));
-	}
-
 	kfree(ect_header);
 
 	return ret;
@@ -2634,21 +2128,7 @@ int ect_strcmp(char *src1, char *src2)
 	return ((*(unsigned char *)src1 < *(unsigned char *)src2) ? -1 : +1);
 }
 
-int ect_strncmp(char *src1, char *src2, int length)
-{
-	int i;
-
-	if (length <= 0)
-		return -1;
-
-	for (i = 0; i < length; i++, src1++, src2++)
-		if (*src1 != *src2)
-			return ((*(unsigned char *)src1 < *(unsigned char *)src2) ? -1 : +1);
-
-	return 0;
-}
-
-void ect_init_map_io(void)
+void __init ect_init_map_io(void)
 {
 	int page_size, i;
 	struct page *page;

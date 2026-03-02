@@ -63,56 +63,38 @@ static struct attribute_group exynos_mcinfo_attr_group = {
 };
 #endif /* MCINFO_SYSFS */
 
+#if defined(CONFIG_SOC_EXYNOS7870)
 static irqreturn_t exynos_mc_irq_handler(int irq, void *p)
 {
+	unsigned int memory_stat;
+	unsigned int mr4;
 	struct mcinfo_data *data = p;
-	unsigned int tmp;
 	int i;
 
-	if (!data->base)
-		return IRQ_HANDLED;
-
+	pr_err("DREX high temperature\n");
 	for (i = 0; i < data->basecnt; i++) {
-		tmp = __raw_readl(data->base[i])
-			<< (31 - data->bit_array[0] - data->bit_array[1])
-			>> (31 - data->bit_array[1]);
-		pr_info("[SW Trip] HwTempRange#%d: 0x%x\n", i, tmp);
+		memory_stat = __raw_readl(data->base[i]);
+		mr4 = memory_stat << (31 - data->bit_array[0] - data->bit_array[1])
+				  >> (31 - data->bit_array[1]);
+		pr_err("DREX(%d): MEMORY_STATUS_SFR(%u) MR4(%u)\n", i, memory_stat, mr4);
 	}
-
-	panic("[SW Trip] Memory temperature is too high (irqnum: %d)\n", irq);
 
 	return IRQ_HANDLED;
 }
-
-struct mcinfo_data *ext_data;
-unsigned int get_mcinfo_base_count(void)
+#else
+static irqreturn_t exynos_mc_irq_handler(int irq, void *p)
 {
-	if (ext_data == NULL)
-		return 0;
+	panic("[SW Trip]Memory temperature is too high");
 
-	return ext_data->basecnt;
+	return IRQ_HANDLED;
 }
-
-void get_refresh_rate(unsigned int *result)
-{
-	int i;
-
-	if (ext_data == NULL)
-		return;
-
-	for (i = 0; i < ext_data->basecnt; i++) {
-		result[i] = __raw_readl(ext_data->base[i])
-			<< (31 - ext_data->bit_array[0] - ext_data->bit_array[1])
-			>> (31 - ext_data->bit_array[1]);
-	}
-
-	return;
-}
+#endif
 
 #if defined(CONFIG_OF)
 static int exynos_mcinfo_parse_dt(struct device_node *np, struct mcinfo_data *data)
 {
-	int ret = 0;
+	int i, ret = 0;
+	unsigned int irqnum = 0;
 
 	if (!np)
 		return -ENODEV;
@@ -136,6 +118,20 @@ static int exynos_mcinfo_parse_dt(struct device_node *np, struct mcinfo_data *da
 		return ret;
 	}
 
+	/* Register IRQ for SW trip */
+	for (i = 0; i < data->irqcnt; i++) {
+		irqnum = irq_of_parse_and_map(data->dev->of_node, i);
+		if (!irqnum) {
+			dev_err(data->dev, "Failed to get IRQ map\n");
+			return -EINVAL;
+		}
+		ret = devm_request_irq(data->dev, irqnum,
+			exynos_mc_irq_handler,
+			IRQF_SHARED, dev_name(data->dev), data);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 #else
@@ -145,22 +141,20 @@ static int exynos_mcinfo_parse_dt(struct device_node *np, struct mcinfo_data *da
 }
 #endif /* OF */
 
-static int exynos_mcinfo_probe(struct platform_device *pdev)
+static int __devinit exynos_mcinfo_probe(struct platform_device *pdev)
 {
 	struct mcinfo_data *data;
 	struct resource *res;
 	int i, ret = 0;
-	unsigned int irqnum = 0;
 
 	data = devm_kzalloc(&pdev->dev, sizeof(struct mcinfo_data), GFP_KERNEL);
 	if (!data) {
-		pr_err("%s: Not enough memory\n", __func__);
+		dev_err(&pdev->dev, "Not enough memory\n");
 		return -ENOMEM;
 	}
 
 	data->dev = &pdev->dev;
 	dev_set_drvdata(data->dev, data);
-	ext_data = data;
 
 	ret = exynos_mcinfo_parse_dt(data->dev->of_node, data);
 	if (ret) {
@@ -179,26 +173,9 @@ static int exynos_mcinfo_probe(struct platform_device *pdev)
 		for (i = 0; i < data->basecnt; i++) {
 			res = platform_get_resource(pdev, IORESOURCE_MEM, i);
 			data->base[i] = devm_ioremap_resource(&pdev->dev, res);
-			if (IS_ERR(data->base[i])) {
-				ret = PTR_ERR(data->base[i]);
-				kfree(data->base);
-				return ret;
-			}
+			if (IS_ERR(data->base[i]))
+				return PTR_ERR(data->base[i]);
 		}
-	}
-
-	/* Register IRQ for SW trip */
-	for (i = 0; i < data->irqcnt; i++) {
-		irqnum = irq_of_parse_and_map(data->dev->of_node, i);
-		if (!irqnum) {
-			dev_err(data->dev, "Failed to get IRQ map\n");
-			return -EINVAL;
-		}
-		ret = devm_request_irq(data->dev, irqnum,
-			exynos_mc_irq_handler,
-			IRQF_SHARED, dev_name(data->dev), data);
-		if (ret)
-			return ret;
 	}
 
 #if defined(CONFIG_MCINFO_SYSFS)
@@ -212,7 +189,7 @@ static int exynos_mcinfo_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int exynos_mcinfo_remove(struct platform_device *pdev)
+static int __devexit exynos_mcinfo_remove(struct platform_device *pdev)
 {
 	struct mcinfo_data *data = platform_get_drvdata(pdev);
 	int i;
@@ -230,7 +207,6 @@ static int exynos_mcinfo_remove(struct platform_device *pdev)
 
 	kfree(data->base);
 	kfree(data);
-	ext_data = NULL;
 
 	return 0;
 }
@@ -242,6 +218,7 @@ static const struct of_device_id exynos_mcinfo_match[] = {
 MODULE_DEVICE_TABLE(of, exynos_mcinfo_match);
 
 static struct platform_driver exynos_mcinfo_driver = {
+	.probe		= exynos_mcinfo_probe,
 	.remove		= exynos_mcinfo_remove,
 	.driver	= {
 		.name	= "exynos-mcinfo",
@@ -249,12 +226,7 @@ static struct platform_driver exynos_mcinfo_driver = {
 		.of_match_table = of_match_ptr(exynos_mcinfo_match),
 	},
 };
-
-static int __init mcinfo_init(void)
-{
-	return platform_driver_probe(&exynos_mcinfo_driver, exynos_mcinfo_probe);
-}
-subsys_initcall(mcinfo_init);
+module_platform_driver(exynos_mcinfo_driver);
 
 MODULE_AUTHOR("Eunok Jo <eunok25.jo@samsung.com");
 MODULE_DESCRIPTION("Samsung EXYNOS Memory controller specific information");

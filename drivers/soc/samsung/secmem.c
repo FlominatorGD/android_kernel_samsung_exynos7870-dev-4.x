@@ -12,7 +12,6 @@
 #include <linux/device.h>
 #include <linux/uaccess.h>
 #include <linux/fs.h>
-#include <linux/module.h>
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
@@ -23,9 +22,8 @@
 #include <linux/export.h>
 #include <linux/pm_qos.h>
 #include <linux/dma-contiguous.h>
-#include <linux/ion_exynos.h>
+#include <linux/exynos_ion.h>
 #include <linux/smc.h>
-#include <linux/dma-buf.h>
 
 #include <asm/memory.h>
 #include <asm/cacheflush.h>
@@ -61,6 +59,23 @@ static char *secmem_regions_name[] = {
 	NULL
 };
 #elif defined(CONFIG_SOC_EXYNOS7420)
+static uint32_t secmem_regions[] = {
+	ION_EXYNOS_ID_G2D_WFD,
+	ION_EXYNOS_ID_VIDEO,
+	ION_EXYNOS_ID_VIDEO_EXT,
+	ION_EXYNOS_ID_MFC_FW,
+	ION_EXYNOS_ID_MFC_NFW,
+};
+
+static char *secmem_regions_name[] = {
+	"g2d_wfd",	/* 0 */
+	"video",	/* 1 */
+	"video_ext",	/* 2 */
+	"mfc_fw",	/* 3 */
+	"mfc_nfw",	/* 4 */
+	NULL
+};
+#elif defined(CONFIG_SOC_EXYNOS8890) && !defined(CONFIG_SOC_EXYNOS8890_EVT1)
 static uint32_t secmem_regions[] = {
 	ION_EXYNOS_ID_G2D_WFD,
 	ION_EXYNOS_ID_VIDEO,
@@ -157,48 +172,94 @@ static int secmem_release(struct inode *inode, struct file *file)
 static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct secmem_info *info = filp->private_data;
+#if defined(CONFIG_SOC_EXYNOS8890) && !defined(CONFIG_SOC_EXYNOS8890_EVT1)
+	static int nbufs = 0;
+#endif
 
 	switch (cmd) {
+#if defined(CONFIG_SOC_EXYNOS8890) && !defined(CONFIG_SOC_EXYNOS8890_EVT1)
+	case (uint32_t)SECMEM_IOC_GET_CHUNK_NUM:
+	{
+		nbufs = sizeof(secmem_regions) / sizeof(uint32_t);
+
+		if (nbufs == 0)
+			return -ENOMEM;
+
+		if (copy_to_user((void __user *)arg, &nbufs, sizeof(int)))
+			return -EFAULT;
+		break;
+	}
+	case (uint32_t)SECMEM_IOC_CHUNKINFO:
+	{
+		struct secchunk_info minfo;
+
+		if (copy_from_user(&minfo, (void __user *)arg, sizeof(minfo)))
+			return -EFAULT;
+
+		memset(&minfo.name, 0, MAX_NAME_LEN);
+
+		if (minfo.index < 0)
+			return -EINVAL;
+
+		if (minfo.index >= nbufs) {
+			minfo.index = -1; /* No more memory region */
+		} else {
+			if (ion_exynos_contig_heap_info(secmem_regions[minfo.index],
+					&minfo.base, &minfo.size))
+				return -EINVAL;
+
+			memcpy(minfo.name, secmem_regions_name[minfo.index], MAX_NAME_LEN);
+		}
+
+		if (copy_to_user((void __user *)arg, &minfo, sizeof(minfo)))
+			return -EFAULT;
+		break;
+	}
+#endif
 #if defined(CONFIG_ION) || defined(CONFIG_ION_EXYNOS)
 	case (uint32_t)SECMEM_IOC_GET_FD_PHYS_ADDR:
 	{
+		struct ion_client *client;
 		struct secfd_info fd_info;
-		struct dma_buf *dmabuf;
-		struct dma_buf_attachment *attachment;
-		struct sg_table *sgt;
+		struct ion_fd_data data;
+		struct ion_handle *ion_handle;
+		size_t len;
 
 		if (copy_from_user(&fd_info, (int __user *)arg,
 					sizeof(fd_info)))
 			return -EFAULT;
 
-		dmabuf = dma_buf_get(fd_info.fd);
-		if (IS_ERR_OR_NULL(dmabuf)) {
-			pr_err("smem ioctl error(%d)\n", __LINE__);
+		client = ion_client_create(ion_exynos, "DRM");
+		if (IS_ERR(client)) {
+			pr_err("%s: Failed to get ion_client of DRM\n",
+				__func__);
 			return -ENOMEM;
 		}
 
-		attachment = dma_buf_attach(dmabuf, info->dev);
-		if (!attachment) {
-			pr_err("smem ioctl error(%d)\n", __LINE__);
-			dma_buf_put(dmabuf);
+		data.fd = fd_info.fd;
+		ion_handle = ion_import_dma_buf(client, data.fd);
+		pr_debug("%s: fd from user space = %d\n",
+				__func__, fd_info.fd);
+		if (IS_ERR(ion_handle)) {
+			pr_err("%s: Failed to get ion_handle of DRM\n",
+				__func__);
+			ion_client_destroy(client);
 			return -ENOMEM;
 		}
 
-		sgt = dma_buf_map_attachment(attachment, DMA_TO_DEVICE);
-		if (!sgt) {
-			pr_err("smem ioctl error(%d)\n", __LINE__);
-			dma_buf_detach(dmabuf, attachment);
-			dma_buf_put(dmabuf);
+		if (ion_phys(client, ion_handle, &fd_info.phys, &len)) {
+			pr_err("%s: Failed to get phys. addr of DRM. fd(%d)\n",
+				__func__, fd_info.fd);
+			ion_free(client, ion_handle);
+			ion_client_destroy(client);
 			return -ENOMEM;
 		}
 
-		fd_info.phys = sg_phys(sgt->sgl);
 		pr_debug("%s: physical addr from kernel space = 0x%08x\n",
 				__func__, (unsigned int)fd_info.phys);
 
-		dma_buf_unmap_attachment(attachment, sgt, DMA_TO_DEVICE);
-		dma_buf_detach(dmabuf, attachment);
-		dma_buf_put(dmabuf);
+		ion_free(client, ion_handle);
+		ion_client_destroy(client);
 
 		if (copy_to_user((void __user *)arg, &fd_info, sizeof(fd_info)))
 			return -EFAULT;
@@ -207,7 +268,7 @@ static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 #endif
 	case (uint32_t)SECMEM_IOC_GET_DRM_ONOFF:
 		smp_rmb();
-		if (copy_to_user((void __user *)arg, &drm_onoff, sizeof(bool)))
+		if (copy_to_user((void __user *)arg, &drm_onoff, sizeof(int)))
 			return -EFAULT;
 		break;
 	case (uint32_t)SECMEM_IOC_SET_DRM_ONOFF:
@@ -265,7 +326,11 @@ static long secmem_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	{
 		int val;
 
+#if defined(CONFIG_SOC_EXYNOS8890) && !defined(CONFIG_SOC_EXYNOS8890_EVT1)
+		val = DRM_PROT_VER_CHUNK_BASED_PROT;
+#else
 		val = DRM_PROT_VER_BUFFER_BASED_PROT;
+#endif
 		if (copy_to_user((void __user *)arg, &val, sizeof(int)))
 			return -EFAULT;
 

@@ -155,6 +155,11 @@ snd-soc-sirf-audio-codec-objs := sirf-audio-codec.o
 snd-soc-sn95031-objs := sn95031.o
 snd-soc-spdif-tx-objs := spdif_transmitter.o
 snd-soc-spdif-rx-objs := spdif_receiver.o
+ifeq ($(CONFIG_SND_SOC_EXYNOS_AUDMIXER_VER),2)
+snd-soc-audmixer-v2-objs := exynos-audmixer-v2.o
+else
+snd-soc-audmixer-objs := exynos-audmixer.o
+endif
 snd-soc-ssm2518-objs := ssm2518.o
 snd-soc-ssm2602-objs := ssm2602.o
 snd-soc-ssm2602-spi-objs := ssm2602-spi.o
@@ -404,6 +409,11 @@ obj-$(CONFIG_SND_SOC_SI476X)	+= snd-soc-si476x.o
 obj-$(CONFIG_SND_SOC_SN95031)	+=snd-soc-sn95031.o
 obj-$(CONFIG_SND_SOC_SPDIF)	+= snd-soc-spdif-rx.o snd-soc-spdif-tx.o
 obj-$(CONFIG_SND_SOC_SIRF_AUDIO_CODEC) += sirf-audio-codec.o
+ifeq ($(CONFIG_SND_SOC_EXYNOS_AUDMIXER_VER),2)
+obj-$(CONFIG_SND_SOC_EXYNOS_AUDMIXER)   += snd-soc-audmixer-v2.o
+else
+obj-$(CONFIG_SND_SOC_EXYNOS_AUDMIXER)   += snd-soc-audmixer.o
+endif
 obj-$(CONFIG_SND_SOC_SSM2518)	+= snd-soc-ssm2518.o
 obj-$(CONFIG_SND_SOC_SSM2602)	+= snd-soc-ssm2602.o
 obj-$(CONFIG_SND_SOC_SSM2602_SPI)	+= snd-soc-ssm2602-spi.o

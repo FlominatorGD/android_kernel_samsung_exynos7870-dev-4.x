@@ -891,6 +891,21 @@ config SND_SOC_SN95031
 config SND_SOC_SPDIF
 	tristate "S/PDIF CODEC"
 
+config SND_SOC_EXYNOS_AUDMIXER
+	tristate "Exynos Audio Mixer"
+	select REGMAP_MMIO
+	select REGMAP_I2C
+
+config SND_SOC_EXYNOS_AUDMIXER_VER
+	int "Driver version of Exynos Audio Mixer"
+	range 1 2
+	default 2 if SND_SOC_SAMSUNG_UNIVERSAL7870_COD3026X
+	default 1
+	depends on SND_SOC_EXYNOS_AUDMIXER
+	help
+	  Set version 1 for legacy driver
+	  Set version 2 for independent ASoC compliant driver
+
 config SND_SOC_SSM2518
 	tristate
 

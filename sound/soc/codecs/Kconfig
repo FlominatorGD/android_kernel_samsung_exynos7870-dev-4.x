@@ -542,6 +542,9 @@ config SND_SOC_CX20442
 	tristate
 	depends on TTY
 
+config SND_SOC_COD3026X
+	tristate "COD3026X CODEC"
+
 config SND_SOC_JZ4740_CODEC
 	select REGMAP_MMIO
 	tristate

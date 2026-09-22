@@ -3,3 +3,4 @@
 #
 
 obj-$(CONFIG_SENSORS_SSP_BBD)	+= brcm/
+obj-$(CONFIG_SENSORS_SSP_STM32)	+= stm32/

@@ -228,6 +228,7 @@ source "drivers/bts/Kconfig"
 source "drivers/vision/Kconfig"
 
 source "drivers/sensorhub/brcm/Kconfig"
+source "drivers/sensorhub/stm32/Kconfig"
 
 source "drivers/optics/Kconfig"
 

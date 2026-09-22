@@ -23,6 +23,7 @@ fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS_Y771_D) += tsp_sec/y771_d1.bin tsp_sec/y7
 # tsp_imagis/ist3038h_a3x_cmcs.bin (ic-version "ist3038h", project "a3x").
 fw-shipped-$(CONFIG_TOUCHSCREEN_IST3038H) += tsp_imagis/ist3038h_a3x.fw \
 						tsp_imagis/ist3038h_a3x_cmcs.bin
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_T316) += abov/a96t316_a3y17.fw
 
 fw-shipped-$(CONFIG_EPEN_WACOM_W9020) += epen/w9020_d2.fw epen/w9020_d1.fw epen/w9020_d1_bringup.fw
 ifdef CONFIG_SEC_FACTORY

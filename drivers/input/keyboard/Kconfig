@@ -756,6 +756,19 @@ config KEYBOARD_BCM
 	  To compile this driver as a module, choose M here: the
 	  module will be called bcm-keypad.
 
+config TOUCHKEY_GRIP
+	tristate "touchkey grip for sar"
+	depends on I2C
+	help
+	  Say Y here if you want to use touchkey grip.
+
+config KEYBOARD_ABOV_TOUCH_T316
+	tristate "Abov T316 touchkey"
+	depends on I2C
+	help
+	  Say Y here if you want to use ABOV MC96T316AU chip as touchkey.
+	  Used on Samsung Galaxy A3 (2017) (a3y17lte).
+
 source "drivers/input/keyboard/stm/fsr1ad04/Kconfig"
 
 endif

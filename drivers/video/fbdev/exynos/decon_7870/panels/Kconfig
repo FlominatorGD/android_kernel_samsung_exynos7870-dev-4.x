@@ -4,17 +4,17 @@ config EXYNOS_DECON_LCD
 
 config EXYNOS_DECON_LCD_SYSFS
 	depends on EXYNOS_DECON_LCD
-	bool "Support LCD SYSFS"
+	tristate "Support LCD SYSFS"
 	default y
 
 config PANEL_AID_DIMMING
 	depends on EXYNOS_DECON_LCD
-	bool "Support AID Dimming"
+	tristate "Support AID Dimming"
 	default n
 
 config EXYNOS_DECON_MDNIE_LITE
 	depends on EXYNOS_DECON_LCD
-	bool "Support MDNIE LITE"
+	tristate "Support MDNIE LITE"
 	default n
 
 config LCD_DOZE_MODE
@@ -24,7 +24,7 @@ config LCD_DOZE_MODE
 
 config DISPLAY_USE_INFO
 	depends on EXYNOS_DECON_LCD
-	bool "Support display use info logging"
+	tristate "Support display use info logging"
 	default n
 
 config LOGGING_BIGDATA_BUG

@@ -9,6 +9,18 @@ config EXYNOS_THERMAL
 	  This driver uses the Exynos core thermal APIs and TMU configuration
 	  data from the supported SoCs.
 
+config EXYNOS_THERMAL_CORE
+	bool "Exynos7870 thermal management unit driver"
+	depends on SOC_EXYNOS7870
+	help
+	  If you say yes here you get support for the Exynos7870 TMU
+	  (Thermal Management Unit) driver taken from the 3.18 based
+	  samsungexynos7870 lineage-20 kernel, including the per-sensor
+	  CPUCL0/CPUCL1/G3D trigger points, cpufreq/gpufreq cooling and
+	  cluster hotplug throttling configured from the device tree.
+	  The 4.14 Exynos thermal driver above it handles the Exynos9820
+	  based SoCs, so the two coexist and only match their own SoC.
+
 config EXYNOS_ACPM_THERMAL
 	bool
 	prompt "Exynos ACPM TMU plug-in support"

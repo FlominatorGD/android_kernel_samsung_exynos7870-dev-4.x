@@ -82,6 +82,13 @@ struct cpufreq_cooling_device {
 struct thermal_cooling_device *
 cpufreq_cooling_register(struct cpufreq_policy *policy);
 
+/**
+ * cpufreq_cooling_get_level - for a given cpu, return the cooling level.
+ * @cpu: cpu id to get cooling level
+ * @freq: target frequency
+ */
+unsigned long cpufreq_cooling_get_level(unsigned int cpu, unsigned int freq);
+
 struct thermal_cooling_device *
 cpufreq_power_cooling_register(struct cpufreq_policy *policy,
 			       u32 capacitance, get_static_t plat_static_func);
@@ -141,6 +148,11 @@ static inline struct thermal_cooling_device *
 cpufreq_cooling_register(struct cpufreq_policy *policy)
 {
 	return ERR_PTR(-ENOSYS);
+}
+static inline unsigned long
+cpufreq_cooling_get_level(unsigned int cpu, unsigned int freq)
+{
+	return THERMAL_CSTATE_INVALID;
 }
 static inline struct thermal_cooling_device *
 cpufreq_power_cooling_register(struct cpufreq_policy *policy,

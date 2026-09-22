@@ -39,6 +39,12 @@ struct sec_therm_info {
 #ifdef CONFIG_OF
 static const struct of_device_id sec_therm_match[] = {
 	{ .compatible = "samsung,sec-thermistor", },
+	/* Exynos7870 boards name the node by thermistor type */
+	{ .compatible = "samsung,sec-ap-thermistor", },
+	{ .compatible = "samsung,sec-pa-thermistor", },
+	{ .compatible = "samsung,sec-cf-thermistor", },
+	{ .compatible = "samsung,sec-wf-thermistor", },
+	{ .compatible = "samsung,sec-bk-thermistor", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, sec_therm_match);
@@ -48,6 +54,7 @@ static int sec_therm_parse_dt(struct platform_device *pdev)
 	struct sec_therm_info *info = platform_get_drvdata(pdev);
 	struct sec_therm_platform_data *pdata;
 	const char *name;
+	const char *compat;
 	int adc_arr_len, temp_arr_len;
 	int i;
 	u32 adc, tp;
@@ -57,13 +64,20 @@ static int sec_therm_parse_dt(struct platform_device *pdev)
 
 	info->np = pdev->dev.of_node;
 
-	if (of_property_read_u32(info->np, "id", &info->id)) {
-		dev_err(info->dev, "failed to get thermistor ID\n");
-		return -EINVAL;
-	}
+	/* Exynos9820 boards carry the id and thermistor_name properties,
+	 * Exynos7870 boards only carry the adc/temp tables, so fall back
+	 * to the compatible string for the name and id 0 for the AP
+	 * thermistor.
+	 */
+	if (of_property_read_u32(info->np, "id", &info->id))
+		info->id = 0;
 
 	if (!of_property_read_string(info->np, "thermistor_name", &name)) {
 		strlcpy(info->name, name, sizeof(info->name));
+	} else if (of_property_read_string(info->np, "compatible", &compat) == 0 &&
+			strncmp(compat, "samsung,", sizeof("samsung,") - 1) == 0) {
+		strlcpy(info->name, compat + sizeof("samsung,") - 1,
+				sizeof(info->name));
 	} else {
 		dev_err(info->dev, "failed to get thermistor name\n");
 		return -EINVAL;

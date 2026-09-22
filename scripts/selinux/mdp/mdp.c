@@ -32,7 +32,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/socket.h>
+/* NOTE: do not include host <sys/socket.h>; its PF_MAX (newer than the
+ * kernel's) trips the PF_MAX check in classmap.h. Nothing here uses it. */
 
 static void usage(char *name)
 {

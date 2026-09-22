@@ -3,6 +3,9 @@
 hostprogs-y	:= dtc
 always		:= $(hostprogs-y)
 
+# DTC predates GCC 10's -fno-common default (multiple definition of yylloc)
+HOST_EXTRACFLAGS += -fcommon
+
 dtc-objs	:= dtc.o flattree.o fstree.o data.o livetree.o treesource.o \
 		   srcpos.o checks.o util.o
 dtc-objs	+= dtc-lexer.lex.o dtc-parser.tab.o

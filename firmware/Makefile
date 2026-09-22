@@ -19,6 +19,11 @@ fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS_Y771) += tsp_sec/y761_beyond0_phole.bin t
 fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS_Y771_D) += tsp_sec/y771_d1.bin tsp_sec/y771_d2.bin \
 						tsp_sec/y771_d1_bringup.bin tsp_sec/y771_davinci_bringup.bin tsp_sec/y771_davinci_bringup2nd.bin
 
+# Galaxy A3 (2017): IST3038H requests tsp_imagis/ist3038h_a3x.fw and
+# tsp_imagis/ist3038h_a3x_cmcs.bin (ic-version "ist3038h", project "a3x").
+fw-shipped-$(CONFIG_TOUCHSCREEN_IST3038H) += tsp_imagis/ist3038h_a3x.fw \
+						tsp_imagis/ist3038h_a3x_cmcs.bin
+
 fw-shipped-$(CONFIG_EPEN_WACOM_W9020) += epen/w9020_d2.fw epen/w9020_d1.fw epen/w9020_d1_bringup.fw
 ifdef CONFIG_SEC_FACTORY
 fw-shipped-$(CONFIG_EPEN_WACOM_W9020) += epen/w9020_d2_unit.fw epen/w9020_d1_unit.fw

@@ -324,12 +324,22 @@ config SND_SOC_SAMSUNG_TM2_WM5110
 config SND_SOC_SAMSUNG_UNIVERSAL7870_COD3026X
 	tristate "SoC I2S Audio support for COD3026X on UNIVERSAL7870"
 	select SND_SAMSUNG_I2S
-	select SND_SOC_DUMMY_CODEC
 	select SND_SOC_COD3026X
 	select SND_SOC_EXYNOS_AUDMIXER
 	help
 	  Say Y if you want to add support for SoC audio on the
 	  Universal7870 board.
+
+config SND_SOC_SAMSUNG_VERBOSE_DEBUG
+	tristate "Enable verbose debugging of Audio on Samsung Platforms"
+
+config SND_SOC_SEC_HS_SYSFS
+	bool "EarJack & BTN adc sysfs KSND"
+	depends on SND_SOC_COD3026X
+	default n
+	help
+	  This is sysfs for headset driver jack type and
+	  btn type adc values.
 
 config SND_SOC_SAMSUNG_AUDIO
 	tristate "Audio support for Samsung Projects"

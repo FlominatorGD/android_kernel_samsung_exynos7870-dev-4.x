@@ -321,6 +321,16 @@ config SND_SOC_SAMSUNG_TM2_WM5110
 	help
 	  Say Y if you want to add support for SoC audio on the TM2 board.
 
+config SND_SOC_SAMSUNG_UNIVERSAL7870_COD3026X
+	tristate "SoC I2S Audio support for COD3026X on UNIVERSAL7870"
+	select SND_SAMSUNG_I2S
+	select SND_SOC_DUMMY_CODEC
+	select SND_SOC_COD3026X
+	select SND_SOC_EXYNOS_AUDMIXER
+	help
+	  Say Y if you want to add support for SoC audio on the
+	  Universal7870 board.
+
 config SND_SOC_SAMSUNG_AUDIO
 	tristate "Audio support for Samsung Projects"
 	help

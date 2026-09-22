@@ -31,6 +31,8 @@
 #include "fimc-is-vendor-config_dns_v01.h"
 #elif defined(CONFIG_CAMERA_DNS_V02)
 #include "fimc-is-vendor-config_dns_v02.h"
+#elif defined(CONFIG_CAMERA_A3Y17)
+#include "fimc-is-vendor-config_a3y17.h"
 #else
 #include "fimc-is-vendor-config_bss_v02.h" /* Default */
 #endif

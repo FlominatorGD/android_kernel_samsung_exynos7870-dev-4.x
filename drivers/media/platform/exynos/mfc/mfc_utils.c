@@ -543,11 +543,13 @@ void mfc_idle_checker(unsigned long arg)
 		return;
 	}
 
+#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	if (atomic_read(&dev->qos_req_cur) == 0) {
 		mfc_debug(6, "[MFCIDLE] MFC QoS not started yet\n");
 		mfc_idle_checker_start_tick(dev);
 		return;
 	}
+#endif
 
 	if (atomic_read(&dev->hw_run_cnt)) {
 		atomic_set(&dev->hw_run_cnt, 0);

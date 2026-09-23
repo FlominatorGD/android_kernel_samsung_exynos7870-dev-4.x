@@ -321,9 +321,15 @@ static void __mfc_dump_state(struct mfc_dev *dev)
 			dev->hwlock.bits, dev->hwlock.dev,
 			dev->curr_ctx, dev->curr_ctx_is_drm,
 			dev->preempt_ctx, mfc_get_bits(&dev->work_bits));
+#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	pr_err("has 2sysmmu:%d, has hwfc:%d, has mmcache:%d, shutdown:%d, sleep:%d, QoS level: %d, itmon_notified:%d\n",
 			dev->has_2sysmmu, dev->has_hwfc, dev->has_mmcache,
 			dev->shutdown, dev->sleep, atomic_read(&dev->qos_req_cur) - 1, dev->itmon_notified);
+#else
+	pr_err("has 2sysmmu:%d, has hwfc:%d, has mmcache:%d, shutdown:%d, sleep:%d, itmon_notified:%d\n",
+			dev->has_2sysmmu, dev->has_hwfc, dev->has_mmcache,
+			dev->shutdown, dev->sleep, dev->itmon_notified);
+#endif
 	pr_err("options debug_level:%d, debug_mode:%d, mmcache:%d, perf_boost:%d\n",
 			debug_level, dev->pdata->debug_mode, dev->mmcache.is_on_status, perf_boost_mode);
 	if (nal_q_handle)

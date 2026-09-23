@@ -967,6 +967,18 @@ static int i2s_set_clkdiv(struct snd_soc_dai *dai,
 		i2s->bfs = div;
 		pm_runtime_put(dai->dev);
 		break;
+	case SAMSUNG_I2S_DIV_RCLK:
+		pm_runtime_get_sync(dai->dev);
+		if ((any_active(i2s) && div && (get_rfs(i2s) != div))
+			|| (other && other->rfs && (other->rfs != div))) {
+			pm_runtime_put(dai->dev);
+			dev_err(&i2s->pdev->dev,
+				"%s:%d Other DAI busy\n", __func__, __LINE__);
+			return -EAGAIN;
+		}
+		i2s->rfs = div;
+		pm_runtime_put(dai->dev);
+		break;
 	default:
 		dev_err(&i2s->pdev->dev,
 			"Invalid clock divider(%d)\n", div_id);

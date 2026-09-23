@@ -102,7 +102,7 @@ extern bool energy_initialized;
 extern void set_energy_table_status(bool status);
 extern bool get_energy_table_status(void);
 #else
-static inline void init_ems(void);
+static inline void init_ems(void) { }
 static inline void exynos_init_entity_util_avg(struct sched_entity *se) { }
 
 static inline int

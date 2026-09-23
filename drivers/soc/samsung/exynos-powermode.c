@@ -19,7 +19,7 @@
 #include <linux/cpuidle_profiler.h>
 
 #include <asm/smp_plat.h>
-#include <asm/psci.h>
+#include <linux/psci.h>
 
 #include <soc/samsung/exynos-pm.h>
 #include <soc/samsung/exynos-pmu.h>

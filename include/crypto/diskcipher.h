@@ -253,7 +253,7 @@ void crypto_diskcipher_debug(enum diskcipher_dbg dbg, int idx);
 #define crypto_free_diskcipher(a) ((void)0)
 #define crypto_free_req_diskcipher(a) ((void)0)
 #define crypto_diskcipher_get(a) ((void *)NULL)
-#define crypto_diskcipher_set(a, b, c, d) ((void)0)
+#define crypto_diskcipher_set(a, b, c) ((void)0)
 #define crypto_diskcipher_clearkey(a) ((void)0)
 #define crypto_diskcipher_setkey(a, b, c, d) (-1)
 #define crypto_diskcipher_debug(a, b) ((void)0)

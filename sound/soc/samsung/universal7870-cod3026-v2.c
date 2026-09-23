@@ -769,9 +769,13 @@ static int cs35l40_external_amp(struct snd_soc_dapm_widget *w,
 
 static int universal7870_init_soundcard(struct snd_soc_card *card)
 {
-	struct snd_soc_codec *codec = card->rtd[0].codec_dais[1]->codec;
+	struct snd_soc_pcm_runtime *rtd;
+	struct snd_soc_codec *codec;
 	struct cod3026x_machine_priv *priv = snd_soc_card_get_drvdata(card);
 	int ret;
+
+	rtd = list_first_entry(&card->rtd_list, struct snd_soc_pcm_runtime, list);
+	codec = snd_soc_component_to_codec(rtd->codec_dais[1]->component);
 
 	priv->codec = codec;
 
@@ -1048,53 +1052,6 @@ static struct snd_soc_dai_link universal7870_cod3025x_dai[] = {
 		.ignore_suspend = 1,
 	},
 
-	/* SW MIXER1 Interface */
-	{
-		.name = "playback-eax0",
-		.stream_name = "eax0",
-		.cpu_dai_name = "samsung-eax.0",
-		.platform_name = "samsung-eax.0",
-		.codecs = codecs_ap0,
-		.num_codecs = ARRAY_SIZE(codecs_ap0),
-		.ops = &universal7870_aif1_ops,
-		.ignore_suspend = 1,
-	},
-
-	/* SW MIXER2 Interface */
-	{
-		.name = "playback-eax1",
-		.stream_name = "eax1",
-		.cpu_dai_name = "samsung-eax.1",
-		.platform_name = "samsung-eax.1",
-		.codecs = codecs_ap0,
-		.num_codecs = ARRAY_SIZE(codecs_ap0),
-		.ops = &universal7870_aif1_ops,
-		.ignore_suspend = 1,
-	},
-
-	/* SW MIXER3 Interface */
-	{
-		.name = "playback-eax2",
-		.stream_name = "eax2",
-		.cpu_dai_name = "samsung-eax.2",
-		.platform_name = "samsung-eax.2",
-		.codecs = codecs_ap0,
-		.num_codecs = ARRAY_SIZE(codecs_ap0),
-		.ops = &universal7870_aif1_ops,
-		.ignore_suspend = 1,
-	},
-
-	/* SW MIXER4 Interface */
-	{
-		.name = "playback-eax3",
-		.stream_name = "eax3",
-		.cpu_dai_name = "samsung-eax.3",
-		.platform_name = "samsung-eax.3",
-		.codecs = codecs_ap0,
-		.num_codecs = ARRAY_SIZE(codecs_ap0),
-		.ops = &universal7870_aif1_ops,
-		.ignore_suspend = 1,
-	},
 };
 
 static struct snd_soc_aux_dev audmixer_aux_dev[] = {

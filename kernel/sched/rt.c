@@ -636,7 +636,11 @@ int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 #ifdef CONFIG_SMP
 
 #include "sched-pelt.h"
+#ifdef CONFIG_RT_GROUP_SCHED
 #define entity_is_task(se)	(!se->my_q)
+#else
+#define entity_is_task(se)	1
+#endif
 
 extern u64 decay_load(u64 val, u64 n);
 
@@ -2391,8 +2395,13 @@ static void put_prev_task_rt(struct rq *rq, struct task_struct *p)
 
 void rt_rq_util_change(struct rt_rq *rt_rq)
 {
+#ifdef CONFIG_RT_GROUP_SCHED
 	if (&this_rq()->rt == rt_rq)
 		cpufreq_update_util(rt_rq->rq, SCHED_CPUFREQ_RT);
+#else
+	if (&this_rq()->rt == rt_rq)
+		cpufreq_update_util(container_of(rt_rq, struct rq, rt), SCHED_CPUFREQ_RT);
+#endif
 }
 
 #ifdef CONFIG_RT_GROUP_SCHED

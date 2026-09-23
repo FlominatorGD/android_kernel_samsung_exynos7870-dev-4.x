@@ -744,29 +744,36 @@ static int si47xx_i2c_remove(struct i2c_client *client)
 	return ret;
 }
 
-static int si47xx_suspend(struct i2c_client *client, pm_message_t mesg)
+static int si47xx_suspend(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
 	struct si47xx_device_t *si47xx = i2c_get_clientdata(client);
 	int ret = 0;
 
-	dev_dbg(&client->dev, "%s():\n", __func__);
+	dev_dbg(dev, "%s():\n", __func__);
 
 	disable_irq(si47xx->pdata->si47xx_irq);
 
 	return ret;
 }
 
-static int si47xx_resume(struct i2c_client *client)
+static int si47xx_resume(struct device *dev)
 {
+	struct i2c_client *client = to_i2c_client(dev);
 	struct si47xx_device_t *si47xx = i2c_get_clientdata(client);
 	int ret = 0;
 
-	dev_dbg(&client->dev, "%s():\n", __func__);
+	dev_dbg(dev, "%s():\n", __func__);
 
 	enable_irq(si47xx->pdata->si47xx_irq);
 
 	return ret;
 }
+
+static const struct dev_pm_ops si47xx_pm_ops = {
+	.suspend = si47xx_suspend,
+	.resume = si47xx_resume,
+};
 
 static const struct file_operations si47xx_fops = {
 	.owner = THIS_MODULE,
@@ -798,12 +805,11 @@ static struct i2c_driver si47xx_i2c_driver = {
 		.owner = THIS_MODULE,
 		.name = "si47xx",
 		.of_match_table = si4705_dt_match,
+		.pm = &si47xx_pm_ops,
 	},
 	.id_table = si47xx_id,
 	.probe = si47xx_i2c_probe,
 	.remove = si47xx_i2c_remove,
-	.suspend = si47xx_suspend,
-	.resume = si47xx_resume,
 };
 
 static __init int si47xx_i2c_drv_init(void)

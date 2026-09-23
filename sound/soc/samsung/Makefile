@@ -9,8 +9,6 @@ snd-soc-samsung-spdif-objs := spdif.o
 snd-soc-pcm-objs := pcm.o
 snd-soc-i2s-objs := i2s.o
 snd-soc-dp_dma-objs := dp_dma.o dummy_cpu_dai.o
-snd-soc-eax-dai-objs := eax-dai.o
-snd-soc-eax-dma-objs := eax-dma.o
 snd-soc-universal7870-cod3026x-v2-objs := universal7870-cod3026-v2.o
 
 
@@ -25,7 +23,6 @@ obj-$(CONFIG_SND_SAMSUNG_I2S) += snd-soc-idma.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_DISPLAYPORT) += snd-soc-dp_dma.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_VTS) += vts/
 obj-$(CONFIG_SND_SOC_SAMSUNG_ABOX) += abox/
-obj-$(CONFIG_SND_SOC_SAMSUNG) += snd-soc-eax-dai.o snd-soc-eax-dma.o
 obj-$(CONFIG_SND_SOC_SAMSUNG_UNIVERSAL7870_COD3026X) += snd-soc-universal7870-cod3026x-v2.o cp_dummy.o
 
 # S3C24XX Machine Support

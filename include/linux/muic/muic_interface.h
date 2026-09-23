@@ -22,6 +22,7 @@
 #define __MUIC_INTERNAL_H__
 
 #include <linux/muic/muic_core.h>
+#include <linux/muic/muic.h>
 
 #define muic_err(fmt, ...)					\
 	do {							\
@@ -37,11 +38,6 @@
 	do {							\
 		pr_debug(pr_fmt(fmt), ##__VA_ARGS__);		\
 	} while (0)
-
-enum muic_op_mode {
-	OPMODE_SMD_ARRAY = 0<<0,
-	OPMODE_DEVICE = 1<<0,
-};
 
 /* Slave addr = 0x4A: MUIC */
 enum ioctl_cmd {

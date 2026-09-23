@@ -169,6 +169,7 @@ static int find_and_derive_key(const struct inode *inode,
 	return err;
 }
 
+#ifdef CONFIG_FS_CRYPTO_SEC_EXTENSION
 static int find_and_derive_key_iv(const struct inode *inode,
 					const struct fscrypt_context *ctx,
 					u8 *derived_key, unsigned int derived_keysize, u8 *iv_key)
@@ -192,13 +193,14 @@ static int find_and_derive_key_iv(const struct inode *inode,
 	key_put(key);
 	return err;
 }
+#endif /* CONFIG_FS_CRYPTO_SEC_EXTENSION */
 
 static inline int __find_and_derive_key(const struct inode *inode,
 					const struct fscrypt_context *ctx,
 					u8 *derived_key, unsigned int derived_keysize,
 					struct fscrypt_info *ci)
 {
-#ifdef CONFIG_CRYPTO_KBKDF_CTR_HMAC_SHA512
+#if defined(CONFIG_CRYPTO_KBKDF_CTR_HMAC_SHA512) && defined(CONFIG_FS_CRYPTO_SEC_EXTENSION)
 	u8 *iv_key = NULL;
 
 	if (!S_ISREG(inode->i_mode))

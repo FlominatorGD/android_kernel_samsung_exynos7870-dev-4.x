@@ -680,9 +680,12 @@ struct bad_stack_info *sec_debug_get_bs_info(void)
 void *sec_debug_get_debug_base(int type)
 {
 	if (sdn) {
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
 		if (type == SDN_MAP_AUTO_COMMENT)
 			return &(sdn->auto_comment);
-		else if (type == SDN_MAP_EXTRA_INFO)
+		else
+#endif
+		if (type == SDN_MAP_EXTRA_INFO)
 			return &(sdn->extra_info);
 	}
 

@@ -45,9 +45,14 @@ static int __mfc_info_show(struct seq_file *s, void *unused)
 	seq_printf(s, "[VERSION] H/W: v%x.%x, F/W: %06x(%c), DRV: %d\n",
 		 MFC_VER_MAJOR(dev), MFC_VER_MINOR(dev), dev->fw.date,
 		 dev->fw.fimv_info, MFC_DRIVER_INFO);
+#ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	seq_printf(s, "[PM] power: %d, clock: %d, QoS level: %d\n",
 			mfc_pm_get_pwr_ref_cnt(dev), mfc_pm_get_clk_ref_cnt(dev),
 			atomic_read(&dev->qos_req_cur) - 1);
+#else
+	seq_printf(s, "[PM] power: %d, clock: %d\n",
+			mfc_pm_get_pwr_ref_cnt(dev), mfc_pm_get_clk_ref_cnt(dev));
+#endif
 	seq_printf(s, "[CTX] num_inst: %d, num_drm_inst: %d, curr_ctx: %d(is_drm: %d)\n",
 			dev->num_inst, dev->num_drm_inst, dev->curr_ctx, dev->curr_ctx_is_drm);
 	seq_printf(s, "[HWLOCK] bits: %#lx, dev: %#lx, owned_by_irq = %d, wl_count = %d\n",

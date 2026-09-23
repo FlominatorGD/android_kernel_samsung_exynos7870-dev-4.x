@@ -39,6 +39,10 @@ config CCIC_S2MM005
 config CCIC_S2MU004
 	bool "CCIC S2MU004 USBPD"
 	depends on I2C && MFD_S2MU004
+	# The s2mu004 stack (usbpd.o/usbpd_manager.o/...) is the Exynos7870
+	# generation of the Samsung USB-PD core; it exports the same symbol
+	# names as the Exynos9820 CCIC core built by USBPD_CORE.
+	depends on !USBPD_CORE
 	default n
 	help
 	  If you say yes here you will get support for

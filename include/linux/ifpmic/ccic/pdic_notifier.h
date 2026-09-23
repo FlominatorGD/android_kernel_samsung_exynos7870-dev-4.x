@@ -21,8 +21,13 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
  */
-#include <linux/ifpmic/muic/muic_notifier.h>
-#include <linux/ifpmic/muic/muic.h>
+#if defined(CONFIG_IFPMIC_SUPPORT)
+#include <linux/ifpmic/ccic/pdic_notifier.h>
+#else
+#include <linux/muic/muic.h>
+#include <linux/muic/muic_notifier.h>
+#endif
+
 #ifndef __PDIC_NOTIFIER_H__
 #define __PDIC_NOTIFIER_H__
 

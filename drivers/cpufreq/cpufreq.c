@@ -2707,6 +2707,22 @@ static struct syscore_ops cpufreq_syscore_ops = {
 struct kobject *cpufreq_global_kobject;
 EXPORT_SYMBOL(cpufreq_global_kobject);
 
+/*
+ * Helper for drivers (e.g. exynos-mp-cpufreq) that expose their own
+ * attribute group below /sys/devices/system/cpu/cpufreq.
+ */
+int cpufreq_sysfs_create_group(const struct attribute_group *attr_grp)
+{
+	return sysfs_create_group(cpufreq_global_kobject, attr_grp);
+}
+EXPORT_SYMBOL(cpufreq_sysfs_create_group);
+
+void cpufreq_sysfs_remove_group(const struct attribute_group *attr_grp)
+{
+	sysfs_remove_group(cpufreq_global_kobject, attr_grp);
+}
+EXPORT_SYMBOL(cpufreq_sysfs_remove_group);
+
 static int __init cpufreq_core_init(void)
 {
 	if (cpufreq_disabled())

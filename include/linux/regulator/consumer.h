@@ -244,6 +244,8 @@ void regulator_bulk_free(int num_consumers,
 
 int regulator_count_voltages(struct regulator *regulator);
 int regulator_list_voltage(struct regulator *regulator, unsigned selector);
+int regulator_get_max_support_voltage(struct regulator *regulator);
+
 int regulator_is_supported_voltage(struct regulator *regulator,
 				   int min_uV, int max_uV);
 unsigned int regulator_get_linear_step(struct regulator *regulator);

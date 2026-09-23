@@ -21,6 +21,7 @@
 #include <linux/slab.h>
 #include <linux/regulator/consumer.h>
 #include <linux/cpufreq.h>
+#include <linux/cpuhotplug.h>
 #include <linux/suspend.h>
 #include <linux/module.h>
 #include <linux/reboot.h>
@@ -569,8 +570,8 @@ static int exynos_target(struct cpufreq_policy *policy,
 	trace_printk("IPA:%s:%d will apply %d ", __PRETTY_FUNCTION__, __LINE__, target_freq);
 #endif
 
-	if (cpufreq_frequency_table_target(policy, freq_table,
-				target_freq, relation, &index)) {
+	index = cpufreq_frequency_table_target(policy, target_freq, relation);
+	if (index < 0) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -791,7 +792,7 @@ void ipa_set_clamp(int cpu, unsigned int clamp_freq, unsigned int gov_target)
 	if (!policy)
 		return;
 
-	if (!policy->user_policy.governor) {
+	if (!policy->governor) {
 		cpufreq_cpu_put(policy);
 		return;
 	}
@@ -832,7 +833,7 @@ static bool hmp_boosted = false;
 static bool cluster1_hotplugged = false;
 
 static ssize_t show_cpufreq_table(struct kobject *kobj,
-				struct attribute *attr, char *buf)
+				struct kobj_attribute *attr, char *buf)
 {
 	int i;
 	ssize_t count = 0;
@@ -868,7 +869,7 @@ static ssize_t show_cpufreq_table(struct kobject *kobj,
 }
 
 static ssize_t show_cpufreq_min_limit(struct kobject *kobj,
-				struct attribute *attr, char *buf)
+				struct kobj_attribute *attr, char *buf)
 {
 	ssize_t	nsize = 0;
 	unsigned int cluster1_qos_min = pm_qos_request(qos_min_class[CL_ONE]);
@@ -899,7 +900,7 @@ static ssize_t show_cpufreq_min_limit(struct kobject *kobj,
 	return nsize;
 }
 
-static ssize_t store_cpufreq_min_limit(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cpufreq_min_limit(struct kobject *kobj, struct kobj_attribute *attr,
 					const char *buf, size_t count)
 {
 	int cluster1_input, cluster0_input;
@@ -952,7 +953,7 @@ static ssize_t store_cpufreq_min_limit(struct kobject *kobj, struct attribute *a
 }
 
 static ssize_t show_cpufreq_max_limit(struct kobject *kobj,
-				struct attribute *attr, char *buf)
+				struct kobj_attribute *attr, char *buf)
 {
 	ssize_t	nsize = 0;
 	unsigned int cluster1_qos_max = pm_qos_request(qos_max_class[CL_ONE]);
@@ -978,7 +979,7 @@ static ssize_t show_cpufreq_max_limit(struct kobject *kobj,
 	return nsize;
 }
 
-static ssize_t store_cpufreq_max_limit(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cpufreq_max_limit(struct kobject *kobj, struct kobj_attribute *attr,
 					const char *buf, size_t count)
 {
 	int cluster1_input, cluster0_input;
@@ -1024,7 +1025,7 @@ static ssize_t store_cpufreq_max_limit(struct kobject *kobj, struct attribute *a
 	return count;
 }
 #else
-static ssize_t show_cpufreq_table(struct kobject *kobj, struct attribute *attr,
+static ssize_t show_cpufreq_table(struct kobject *kobj, struct kobj_attribute *attr,
 		char *buf)
 {
 	unsigned int i;
@@ -1041,7 +1042,7 @@ static ssize_t show_cpufreq_table(struct kobject *kobj, struct attribute *attr,
 	return count;
 }
 
-static ssize_t show_cpufreq_min_limit(struct kobject *kobj, struct attribute *attr,
+static ssize_t show_cpufreq_min_limit(struct kobject *kobj, struct kobj_attribute *attr,
 			     char *buf)
 {
 	int len;
@@ -1052,7 +1053,7 @@ static ssize_t show_cpufreq_min_limit(struct kobject *kobj, struct attribute *at
 	return len;
 }
 
-static ssize_t store_cpufreq_min_limit(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cpufreq_min_limit(struct kobject *kobj, struct kobj_attribute *attr,
 			      const char *buf, size_t n)
 {
 	int i;
@@ -1077,7 +1078,7 @@ static ssize_t store_cpufreq_min_limit(struct kobject *kobj, struct attribute *a
 	return n;
 }
 
-static ssize_t show_cpufreq_max_limit(struct kobject *kobj, struct attribute *attr,
+static ssize_t show_cpufreq_max_limit(struct kobject *kobj, struct kobj_attribute *attr,
 			     char *buf)
 {
 	int len;
@@ -1088,7 +1089,7 @@ static ssize_t show_cpufreq_max_limit(struct kobject *kobj, struct attribute *at
 	return len;
 }
 
-static ssize_t store_cpufreq_max_limit(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cpufreq_max_limit(struct kobject *kobj, struct kobj_attribute *attr,
 			      const char *buf, size_t n)
 {
 	int i;
@@ -1109,12 +1110,12 @@ static ssize_t store_cpufreq_max_limit(struct kobject *kobj, struct attribute *a
 
 #ifdef CONFIG_SW_SELF_DISCHARGING
 static ssize_t show_cpufreq_self_discharging(struct kobject *kobj,
-			     struct attribute *attr, char *buf)
+			     struct kobj_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", self_discharging);
 }
 
-static ssize_t store_cpufreq_self_discharging(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cpufreq_self_discharging(struct kobject *kobj, struct kobj_attribute *attr,
 			      const char *buf, size_t count)
 {
 	int input;
@@ -1206,60 +1207,60 @@ inline ssize_t store_core_freq(const char *buf, size_t count,
 }
 
 static ssize_t show_cluster1_freq_table(struct kobject *kobj,
-				struct attribute *attr, char *buf)
+				struct kobj_attribute *attr, char *buf)
 {
 	return show_core_freq_table(buf, CL_ONE);
 }
 
 static ssize_t show_cluster1_min_freq(struct kobject *kobj,
-				struct attribute *attr, char *buf)
+				struct kobj_attribute *attr, char *buf)
 {
 	return show_core_freq(buf, CL_ONE, false);
 }
 
 static ssize_t show_cluster1_max_freq(struct kobject *kobj,
-				struct attribute *attr, char *buf)
+				struct kobj_attribute *attr, char *buf)
 {
 	return show_core_freq(buf, CL_ONE, true);
 }
 
-static ssize_t store_cluster1_min_freq(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cluster1_min_freq(struct kobject *kobj, struct kobj_attribute *attr,
 					const char *buf, size_t count)
 {
 	return store_core_freq(buf, count, CL_ONE, false);
 }
 
-static ssize_t store_cluster1_max_freq(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cluster1_max_freq(struct kobject *kobj, struct kobj_attribute *attr,
 					const char *buf, size_t count)
 {
 	return store_core_freq(buf, count, CL_ONE, true);
 }
 
 static ssize_t show_cluster0_freq_table(struct kobject *kobj,
-			     struct attribute *attr, char *buf)
+			     struct kobj_attribute *attr, char *buf)
 {
 	return show_core_freq_table(buf, CL_ZERO);
 }
 
 static ssize_t show_cluster0_min_freq(struct kobject *kobj,
-			     struct attribute *attr, char *buf)
+			     struct kobj_attribute *attr, char *buf)
 {
 	return show_core_freq(buf, CL_ZERO, false);
 }
 
 static ssize_t show_cluster0_max_freq(struct kobject *kobj,
-			     struct attribute *attr, char *buf)
+			     struct kobj_attribute *attr, char *buf)
 {
 	return show_core_freq(buf, CL_ZERO, true);
 }
 
-static ssize_t store_cluster0_min_freq(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cluster0_min_freq(struct kobject *kobj, struct kobj_attribute *attr,
 					const char *buf, size_t count)
 {
 	return store_core_freq(buf, count, CL_ZERO, false);
 }
 
-static ssize_t store_cluster0_max_freq(struct kobject *kobj, struct attribute *attr,
+static ssize_t store_cluster0_max_freq(struct kobject *kobj, struct kobj_attribute *attr,
 					const char *buf, size_t count)
 {
 	return store_core_freq(buf, count, CL_ZERO, true);
@@ -1287,18 +1288,28 @@ static struct attribute_group mp_attr_group = {
 	.name = "mp-cpufreq",
 };
 
+#ifndef define_one_global_ro
+#define define_one_global_ro(_name)		\
+static struct kobj_attribute _name = 		\
+__ATTR(_name, 0444, show_##_name, NULL)
+
+#define define_one_global_rw(_name)		\
+static struct kobj_attribute _name = 		\
+__ATTR(_name, 0644, show_##_name, store_##_name)
+#endif
+
 #ifdef CONFIG_PM
-static struct global_attr cpufreq_table =
+static struct kobj_attribute cpufreq_table =
 		__ATTR(cpufreq_table, S_IRUGO, show_cpufreq_table, NULL);
-static struct global_attr cpufreq_min_limit =
+static struct kobj_attribute cpufreq_min_limit =
 		__ATTR(cpufreq_min_limit, S_IRUGO | S_IWUSR,
 			show_cpufreq_min_limit, store_cpufreq_min_limit);
-static struct global_attr cpufreq_max_limit =
+static struct kobj_attribute cpufreq_max_limit =
 		__ATTR(cpufreq_max_limit, S_IRUGO | S_IWUSR,
 			show_cpufreq_max_limit, store_cpufreq_max_limit);
 #endif
 #ifdef CONFIG_SW_SELF_DISCHARGING
-static struct global_attr cpufreq_self_discharging =
+static struct kobj_attribute cpufreq_self_discharging =
 		__ATTR(cpufreq_self_discharging, S_IRUGO | S_IWUSR,
 			show_cpufreq_self_discharging, store_cpufreq_self_discharging);
 #endif
@@ -1366,80 +1377,53 @@ static struct notifier_block exynos_cpufreq_smpl_warn_notifier = {
 };
 
 static bool suspend_prepared = false;
-static int __cpuinit exynos_cpufreq_cpu_up_notifier(struct notifier_block *notifier,
-					unsigned long action, void *hcpu)
+static int exynos_cpufreq_cpu_online(unsigned int cpu)
 {
-	unsigned int cpu = (unsigned long)hcpu;
 	struct device *dev;
 	struct cpumask mask;
 	int cluster;
 
 	dev = get_cpu_device(cpu);
 	if (dev) {
-		switch (action) {
-		case CPU_ONLINE:
-			cluster = get_cur_cluster(cpu);
-			if (cluster == CL_ONE) {
-				cpumask_and(&mask, cpu_coregroup_mask(cpu), cpu_online_mask);
-				if (cpumask_weight(&mask) == 1)
-					pm_qos_update_request(&boot_max_qos[cluster], freq_max[cluster]);
-			}
-			break;
+		cluster = get_cur_cluster(cpu);
+		if (cluster == CL_ONE) {
+			cpumask_and(&mask, cpu_coregroup_mask(cpu), cpu_online_mask);
+			if (cpumask_weight(&mask) == 1)
+				pm_qos_update_request(&boot_max_qos[cluster], freq_max[cluster]);
 		}
 	}
 
-	return NOTIFY_OK;
+	return 0;
 }
 
-static int __cpuinit exynos_cpufreq_cpu_down_notifier(struct notifier_block *notifier,
-					unsigned long action, void *hcpu)
+static int exynos_cpufreq_cpu_offline(unsigned int cpu)
 {
-	unsigned int cpu = (unsigned long)hcpu;
 	struct device *dev;
 	struct cpumask mask;
 	int cluster;
 
 	if (suspend_prepared)
-		return NOTIFY_OK;
+		return 0;
 
 	dev = get_cpu_device(cpu);
 	if (dev) {
-		switch (action) {
-		case CPU_DOWN_PREPARE:
-			cluster = get_cur_cluster(cpu);
-			if (cluster == CL_ONE) {
-				cpumask_and(&mask, cpu_coregroup_mask(cpu), cpu_online_mask);
-				if (cpumask_weight(&mask) == 1)
-					pm_qos_update_request(&boot_max_qos[cluster], freq_min[cluster]);
-			}
-		case CPU_DOWN_PREPARE_FROZEN:
-			mutex_lock(&cpufreq_lock);
-			exynos_info[CL_ZERO]->blocked = true;
-			exynos_info[CL_ONE]->blocked = true;
-			mutex_unlock(&cpufreq_lock);
-			break;
-		case CPU_DOWN_FAILED:
-		case CPU_DOWN_FAILED_FROZEN:
-		case CPU_DEAD:
-			mutex_lock(&cpufreq_lock);
-			exynos_info[CL_ZERO]->blocked = false;
-			exynos_info[CL_ONE]->blocked = false;
-			mutex_unlock(&cpufreq_lock);
-			break;
+		cluster = get_cur_cluster(cpu);
+		if (cluster == CL_ONE) {
+			cpumask_and(&mask, cpu_coregroup_mask(cpu), cpu_online_mask);
+			if (cpumask_weight(&mask) == 1)
+				pm_qos_update_request(&boot_max_qos[cluster], freq_min[cluster]);
 		}
+
+		mutex_lock(&cpufreq_lock);
+		exynos_info[CL_ZERO]->blocked = true;
+		exynos_info[CL_ONE]->blocked = true;
+		mutex_unlock(&cpufreq_lock);
 	}
-	return NOTIFY_OK;
+
+	return 0;
 }
 
-static struct notifier_block __refdata exynos_cpufreq_cpu_up_nb = {
-	.notifier_call = exynos_cpufreq_cpu_up_notifier,
-	.priority = INT_MIN,
-};
-
-static struct notifier_block __refdata exynos_cpufreq_cpu_down_nb = {
-	.notifier_call = exynos_cpufreq_cpu_down_notifier,
-	.priority = INT_MIN + 2,
-};
+static int exynos_cpufreq_cpu_hp_state;
 
 static unsigned int get_resume_freq(unsigned int cluster)
 {
@@ -1751,7 +1735,7 @@ static int exynos_cluster0_min_qos_handler(struct notifier_block *b,
 	if (!policy)
 		goto bad;
 
-	if (!policy->user_policy.governor || !policy->governor_enabled) {
+	if (!policy->governor) {
 		cpufreq_cpu_put(policy);
 		goto bad;
 	}
@@ -1805,7 +1789,7 @@ static int exynos_cluster1_min_qos_handler(struct notifier_block *b,
 	if (!policy)
 		goto bad;
 
-	if (!policy->user_policy.governor || !policy->governor_enabled) {
+	if (!policy->governor) {
 		cpufreq_cpu_put(policy);
 		goto bad;
 	}
@@ -1852,7 +1836,7 @@ static int exynos_cluster0_max_qos_handler(struct notifier_block *b,
 	if (!policy)
 		goto bad;
 
-	if (!policy->user_policy.governor || !policy->governor_enabled) {
+	if (!policy->governor) {
 		cpufreq_cpu_put(policy);
 		goto bad;
 	}
@@ -1899,7 +1883,7 @@ static int exynos_cluster1_max_qos_handler(struct notifier_block *b,
 	if (!policy)
 		goto bad;
 
-	if (!policy->user_policy.governor || !policy->governor_enabled) {
+	if (!policy->governor) {
 		cpufreq_cpu_put(policy);
 		goto bad;
 	}
@@ -2278,8 +2262,9 @@ static int exynos_mp_cpufreq_driver_init(void)
 			exynos_cpufreq_regulator_register_notifier(cluster);
 	}
 
-	register_hotcpu_notifier(&exynos_cpufreq_cpu_up_nb);
-	register_hotcpu_notifier(&exynos_cpufreq_cpu_down_nb);
+	exynos_cpufreq_cpu_hp_state = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+			"cpufreq/exynos-mp:online",
+			exynos_cpufreq_cpu_online, exynos_cpufreq_cpu_offline);
 	register_pm_notifier(&exynos_cpufreq_nb);
 	register_reboot_notifier(&exynos_cpufreq_reboot_notifier);
 #ifdef CONFIG_EXYNOS_THERMAL
@@ -2344,7 +2329,7 @@ static int exynos_mp_cpufreq_driver_init(void)
 	if (!policy)
 		goto err_policy;
 
-	if (!policy->user_policy.governor) {
+	if (!policy->governor) {
 		cpufreq_cpu_put(policy);
 		goto err_policy;
 	}
@@ -2415,8 +2400,7 @@ err_mp_attr:
 err_cpufreq:
 	unregister_reboot_notifier(&exynos_cpufreq_reboot_notifier);
 	unregister_pm_notifier(&exynos_cpufreq_nb);
-	unregister_hotcpu_notifier(&exynos_cpufreq_cpu_up_nb);
-	unregister_hotcpu_notifier(&exynos_cpufreq_cpu_down_nb);
+	cpuhp_remove_state_nocalls(exynos_cpufreq_cpu_hp_state);
 err_init:
 	for_each_cluster(cluster) {
 		/* remove all pm_qos requests */
@@ -2521,8 +2505,7 @@ static int exynos_mp_cpufreq_remove(struct platform_device *pdev)
 
 	unregister_reboot_notifier(&exynos_cpufreq_reboot_notifier);
 	unregister_pm_notifier(&exynos_cpufreq_nb);
-	unregister_hotcpu_notifier(&exynos_cpufreq_cpu_up_nb);
-	unregister_hotcpu_notifier(&exynos_cpufreq_cpu_down_nb);
+	cpuhp_remove_state_nocalls(exynos_cpufreq_cpu_hp_state);
 
 	exynos_cpufreq_smpl_warn_unregister_notifier(&exynos_cpufreq_smpl_warn_notifier);
 	cpufreq_unregister_driver(&exynos_driver);

@@ -2698,6 +2698,20 @@ int regulator_is_supported_voltage(struct regulator *regulator,
 }
 EXPORT_SYMBOL_GPL(regulator_is_supported_voltage);
 
+/**
+ * regulator_get_max_support_voltage - maximum supporting voltage
+ * @regulator: regulator source
+ *
+ * Returns the maximum voltage the given regulator supports.  When one
+ * regulator is shared between multiple consumers, any consumer can query
+ * the maximum supporting voltage through this function.
+ */
+int regulator_get_max_support_voltage(struct regulator *regulator)
+{
+	return regulator->rdev->constraints->max_uV;
+}
+EXPORT_SYMBOL_GPL(regulator_get_max_support_voltage);
+
 static int regulator_map_voltage(struct regulator_dev *rdev, int min_uV,
 				 int max_uV)
 {

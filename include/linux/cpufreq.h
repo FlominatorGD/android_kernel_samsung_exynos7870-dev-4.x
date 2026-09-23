@@ -182,6 +182,8 @@ static inline bool policy_is_shared(struct cpufreq_policy *policy)
 
 /* /sys/devices/system/cpu/cpufreq: entry point for global variables */
 extern struct kobject *cpufreq_global_kobject;
+int cpufreq_sysfs_create_group(const struct attribute_group *attr_grp);
+void cpufreq_sysfs_remove_group(const struct attribute_group *attr_grp);
 
 #ifdef CONFIG_CPU_FREQ
 unsigned int cpufreq_get(unsigned int cpu);

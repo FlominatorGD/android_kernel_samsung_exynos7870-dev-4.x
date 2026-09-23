@@ -1173,6 +1173,7 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	struct exynos_tmu_data *data;
 	struct exynos_tmu_platform_data *pdata;
 	struct thermal_sensor_conf *sensor_conf;
+	struct cpufreq_policy *policy;
 	int ret, i;
 
 	/*
@@ -1182,8 +1183,11 @@ static int exynos_tmu_probe(struct platform_device *pdev)
 	 * cooling device when a cpufreq policy exists, so keep the
 	 * temperature sensors working without a cpufreq driver.
 	 */
-	if (!cpufreq_frequency_get_table(0))
+	policy = cpufreq_cpu_get(0);
+	if (!policy || !policy->freq_table)
 		dev_info(&pdev->dev, "cpufreq driver not ready, cpu cooling disabled\n");
+	if (policy)
+		cpufreq_cpu_put(policy);
 
 	data = devm_kzalloc(&pdev->dev, sizeof(struct exynos_tmu_data),
 					GFP_KERNEL);

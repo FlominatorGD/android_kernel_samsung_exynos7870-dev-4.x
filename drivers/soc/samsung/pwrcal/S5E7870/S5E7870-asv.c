@@ -12,14 +12,14 @@
 
 #ifdef PWRCAL_TARGET_LINUX
 #include <soc/samsung/ect_parser.h>
+
+/* enum ids_info used by sec_debug_hw_param.c */
+#include <soc/samsung/exynos-pm.h>
 //#include <linux/io.h>
 //#include <mach/map.h>
 #endif
 #ifdef PWRCAL_TARGET_FW
 #include <mach/ect_parser.h>
-#if defined(CONFIG_SEC_DEBUG)
-#include <soc/samsung/exynos-pm.h>
-#endif
 #define S5P_VA_APM_SRAM			((void *)0x11200000)
 #endif
 

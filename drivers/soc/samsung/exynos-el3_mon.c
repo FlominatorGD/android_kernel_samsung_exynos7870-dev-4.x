@@ -31,7 +31,7 @@ static int  __init exynos_set_debug_mem(void)
 
 	/* to map & flush memory */
 	memset(smc_debug_mem, 0x00, PAGE_SIZE);
-	__dma_flush_range(smc_debug_mem, smc_debug_mem+PAGE_SIZE);
+	__dma_flush_area(smc_debug_mem, PAGE_SIZE);
 
 	phys = (char *)virt_to_phys(smc_debug_mem);
 	pr_info("%s: alloc kmem for smc_dbg virt: 0x%pK phys: 0x%pK size: %ld.\n",
@@ -146,7 +146,7 @@ int exynos_check_hardlockup_reason(void)
 
 	/* to map & flush memory */
 	memset(smc_lockup, 0x00, PAGE_SIZE);
-	__dma_flush_range(smc_lockup, smc_lockup + PAGE_SIZE);
+	__dma_flush_area(smc_lockup, PAGE_SIZE);
 
 	phys = (char *)virt_to_phys(smc_lockup);
 	pr_err("%s: smc_lockup virt: 0x%p phys: 0x%p size: %ld.\n",

@@ -17,6 +17,9 @@
 #endif
 #ifdef PWRCAL_TARGET_FW
 #include <mach/ect_parser.h>
+#if defined(CONFIG_SEC_DEBUG)
+#include <soc/samsung/exynos-pm.h>
+#endif
 #define S5P_VA_APM_SRAM			((void *)0x11200000)
 #endif
 
@@ -1038,34 +1041,35 @@ static int asv_get_tablever(void)
 }
 
 #if defined(CONFIG_SEC_DEBUG)
-enum ids_info
-{
-	table_ver,
-	cpu_asv,
-	g3d_asv,
-	mif_asv
-};
-
+/*
+ * The generic ids_info enum (see <soc/samsung/exynos-pm.h>) is shared with
+ * drivers/samsung/debug/sec_debug_hw_param.c, so map the fields the 7870 ASV
+ * table actually provides onto it.  The SoC has no middle cluster and the
+ * fused IDS values are not exposed by the 7870 CAL, hence the 0 results.
+ */
 int asv_ids_information(enum ids_info id)
 {
 	int res = 0;
 
 	switch (id) {
-		case table_ver:
-			res = asv_tbl_info.asv_table_ver;
-			break;
-		case cpu_asv:
-			res = asv_tbl_info.cpucl0_asv_group;
-			break;
-		case g3d_asv:
-			res = asv_tbl_info.g3d_asv_group;
-			break;
-		case mif_asv:
-			res = asv_tbl_info.mif_asv_group;
-			break;
-		default:
-			break;
-	};
+	case tg:	/* ASV table version */
+		res = asv_tbl_info.asv_table_ver;
+		break;
+	case lg:	/* little cluster ASV group */
+		res = asv_tbl_info.cpucl0_asv_group;
+		break;
+	case bg:	/* big cluster ASV group */
+		res = asv_tbl_info.cpucl1_asv_group;
+		break;
+	case g3dg:
+		res = asv_tbl_info.g3d_asv_group;
+		break;
+	case mifg:
+		res = asv_tbl_info.mif_asv_group;
+		break;
+	default:
+		break;
+	}
 
 	return res;
 }

@@ -34,7 +34,7 @@ enum sys_powerdown {
         NUM_SYS_POWERDOWN,
 };
 
-extern int exynos_prepare_sys_powerdown(enum sys_powerdown mode);
+extern void exynos_prepare_sys_powerdown(enum sys_powerdown mode);
 extern void exynos_wakeup_sys_powerdown(enum sys_powerdown mode, bool early_wakeup);
 extern void exynos_prepare_cp_call(void);
 extern void exynos_wakeup_cp_call(bool early_wakeup);
@@ -42,6 +42,22 @@ extern int exynos_rtc_wakeup(void);
 
 extern int exynos_system_idle_enter(void);
 extern void exynos_system_idle_exit(int cancel);
+
+/**
+ * Cluster power down blocker
+ */
+extern void block_cpd(void);
+extern void release_cpd(void);
+
+/**
+ * Checking cluster idle state
+ */
+extern int check_cluster_idle_state(unsigned int cpu);
+
+#define MAX_CLUSTER		2
+
+#define for_each_cluster(id)					\
+	for ((id) = 0; (id) < MAX_CLUSTER; (id)++)
 
 /**
  * external driver APIs
@@ -52,6 +68,51 @@ extern u64 exynos_get_eint_wake_mask(void);
 #else
 static inline u64 exynos_get_eint_wake_mask(void) { return ULLONG_MAX; }
 
+#endif
+
+/**
+ * IDLE_IP control
+ */
+#define IDLE_IP_REG_SIZE		32
+#define IDLE_IP_MAX_INDEX		127
+#define IDLE_IP_FIX_INDEX_COUNT		2
+#define IDLE_IP_MAX_CONFIGURABLE_INDEX	(IDLE_IP_MAX_INDEX - IDLE_IP_FIX_INDEX_COUNT)
+
+enum exynos_idle_ip {
+	IDLE_IP0,
+	IDLE_IP1,
+	IDLE_IP2,
+	IDLE_IP3,
+	NUM_IDLE_IP,
+};
+
+#define for_each_idle_ip(num)					\
+	for ((num) = 0; (num) < NUM_IDLE_IP; (num)++)
+
+#define for_each_syspower_mode(mode)				\
+	for ((mode) = 0; (mode) < NUM_SYS_POWERDOWN; (mode)++)
+
+/**
+ * Functions for cpuidle driver
+ */
+extern int enter_c2(unsigned int cpu, int index);
+extern void wakeup_from_c2(unsigned int cpu, int early_wakeup);
+
+#ifdef CONFIG_CPU_IDLE
+extern void exynos_get_idle_ip_list(char *(*idle_ip_list)[IDLE_IP_REG_SIZE]);
+#else
+static inline void exynos_get_idle_ip_list(char *(*idle_ip_list)[IDLE_IP_REG_SIZE])
+{
+	return;
+}
+#endif
+
+#define EXYNOS_SS_SICD_INDEX		('S' + 'I' + 'C' + 'D')	/* 291 */
+
+#ifdef CONFIG_SERIAL_SAMSUNG
+extern void s3c24xx_serial_fifo_wait(void);
+#else
+static inline void s3c24xx_serial_fifo_wait(void) { }
 #endif
 
 #endif /* __EXYNOS_POWERMODE_H */

@@ -45,6 +45,8 @@ int register_usb_is_connect(u32 (*func)(void));
 #ifdef CONFIG_CPU_IDLE
 int exynos_pm_register_notifier(struct notifier_block *nb);
 int exynos_pm_unregister_notifier(struct notifier_block *nb);
+int exynos_pm_sicd_enter(void);
+int exynos_pm_sicd_exit(void);
 #else
 static inline int exynos_pm_register_notifier(struct notifier_block *nb)
 {
@@ -52,6 +54,16 @@ static inline int exynos_pm_register_notifier(struct notifier_block *nb)
 }
 
 static inline int exynos_pm_unregister_notifier(struct notifier_block *nb)
+{
+	return 0;
+}
+
+static inline int exynos_pm_sicd_enter(void)
+{
+	return 0;
+}
+
+static inline int exynos_pm_sicd_exit(void)
 {
 	return 0;
 }

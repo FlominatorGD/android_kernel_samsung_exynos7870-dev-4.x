@@ -13,6 +13,7 @@
 #include <linux/cpuidle.h>
 #include <linux/slab.h>
 #include <soc/samsung/exynos_perf_cpuidle.h>
+#include <soc/samsung/exynos-powermode.h>
 
 /* whether profiling has started */
 static bool profile_started;
@@ -180,7 +181,9 @@ static ktime_t profile_start_time;
 
 /* idle ip */
 static int idle_ip_stats[4][32];
-extern char *idle_ip_names[4][32];
+
+/* filled from the exynos-powermode idle-ip device tree data */
+static char *idle_ip_names[4][32];
 
 static void clear_stats(struct cpuidle_stats *stats)
 {
@@ -527,6 +530,8 @@ static int __init cpuidle_profile_init(void)
 	ret = sysfs_create_group(&dev->kobj, &cpuidle_profile_group);
 	if (ret)
 		pr_err("%s: failed to create sysfs group", __func__);
+
+	exynos_get_idle_ip_list(idle_ip_names);
 
 	return ret;
 }

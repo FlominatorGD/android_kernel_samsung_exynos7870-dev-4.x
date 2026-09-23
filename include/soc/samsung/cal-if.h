@@ -102,7 +102,7 @@ extern int cal_dfs_ext_ctrl(unsigned int id,
 				int para);
 
 extern int cal_asv_get_ids_info(unsigned int id);
-extern int cal_asv_get_grp(unsigned int id);
+extern int cal_asv_get_grp(unsigned int id, unsigned int lv);
 extern int cal_asv_get_tablever(void);
 
 extern int cal_cp_init(void);

@@ -191,26 +191,13 @@ unsigned int bts_calc_bw(enum bts_bw_type type, void *data);
 
 #elif defined(CONFIG_EXYNOS7870_BTS)
 
-enum bts_scen_type {
-	TYPE_MFC_UD_ENCODING = 0,
-	TYPE_MFC_UD_DECODING,
-	TYPE_LAYERS,
-	TYPE_G3D_FREQ,
-	TYPE_G3D_SCENARIO,
-	TYPE_ROTATION,
-	TYPE_HIGHPERF,
-	TYPE_URGENT_OFF,
-	TYPE_DECON_INT,
-	TYPE_CAM,
-};
-
 struct bts_bw {
 	unsigned int peak;
 	unsigned int read;
 	unsigned int write;
 };
 
-void bts_scen_update(enum bts_scen_type type, unsigned int val);
+/* void bts_scen_update() is declared together with enum bts_scen_type below */
 void bts_initialize(const char *pd_name, bool on);
 int exynos7_bts_register_notifier(struct notifier_block *nb);
 int exynos7_update_bts_param(int target_idx, int work);
@@ -218,7 +205,6 @@ void bts_debugfs(void);
 int exynos7_bts_unregister_notifier(struct notifier_block *nb);
 void exynos7_init_bts_ioremap(void);
 int exynos_update_overlay_wincnt(int cnt);
-void exynos_update_media_scenario(enum bts_scen_type media_type, unsigned int bw);
 #define bts_update_scen(a, b) do {} while(0)
 #define bts_update_bw(a, b) do {} while(0)
 #define bts_calc_bw(a, b) do {} while(0)
@@ -248,6 +234,7 @@ enum bts_scen_type {
 	TYPE_ROTATION,
 	TYPE_HIGHPERF,
 	TYPE_URGENT_OFF,
+	TYPE_CAM_BNS,
 };
 
 void bts_scen_update(enum bts_scen_type type, unsigned int val);
@@ -390,12 +377,16 @@ enum vpp_bw_type {
 	BW_FULLHD_ROT,
 };
 
-#if defined(CONFIG_EXYNOS8890_BTS)
+#if defined(CONFIG_EXYNOS8890_BTS) || defined(CONFIG_EXYNOS7870_BTS)
 void exynos_update_media_scenario(enum bts_media_type media_type,
 		unsigned int bw, int bw_type);
-int bts_update_gpu_mif(unsigned int freq);
 #else
 #define exynos_update_media_scenario(a, b, c) do {} while (0)
+#endif
+
+#if defined(CONFIG_EXYNOS8890_BTS)
+int bts_update_gpu_mif(unsigned int freq);
+#else
 #define bts_update_gpu_mif(a) do {} while (0)
 #endif
 
@@ -413,6 +404,8 @@ void exynos7_update_media_scenario(enum bts_media_type media_type,
 int exynos7_update_bts_param(int target_idx, int work);
 int exynos7_bts_register_notifier(struct notifier_block *nb);
 int exynos7_bts_unregister_notifier(struct notifier_block *nb);
+#elif defined(CONFIG_EXYNOS7870_BTS)
+/* Exynos7870 declares these in its own block above */
 #else
 #define exynos7_update_media_scenario(a, b, c) do {} while (0)
 #define exynos7_update_bts_param(a, b) do {} while (0)
@@ -422,7 +415,8 @@ int exynos7_bts_unregister_notifier(struct notifier_block *nb);
 
 #if defined(CONFIG_EXYNOS5430_BTS) || defined(CONFIG_EXYNOS5422_BTS)	\
 	|| defined(CONFIG_EXYNOS5433_BTS)|| defined(CONFIG_EXYNOS7420_BTS) \
-	|| defined(CONFIG_EXYNOS7890_BTS) || defined(CONFIG_EXYNOS8890_BTS)
+	|| defined(CONFIG_EXYNOS7890_BTS) || defined(CONFIG_EXYNOS8890_BTS) \
+	|| defined(CONFIG_EXYNOS7870_BTS)
 void bts_initialize(const char *pd_name, bool on);
 #else
 #define bts_initialize(a, b) do {} while (0)

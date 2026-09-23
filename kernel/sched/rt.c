@@ -2488,7 +2488,10 @@ static inline int propagate_entity_rt_load_avg(struct sched_rt_entity *rt_se)
 	return 1;
 }
 #else
-static inline int propagate_entity_rt_load_avg(struct sched_rt_entity *rt_se) { };
+static inline int propagate_entity_rt_load_avg(struct sched_rt_entity *rt_se)
+{
+	return 0;
+}
 #endif
 
 void update_rt_load_avg(u64 now, struct sched_rt_entity *rt_se)

@@ -419,14 +419,6 @@ static const struct attribute_group *exynos_info_sysfs_groups[] = {
 };
 
 #if defined(CONFIG_SEC_DEBUG)
-enum ids_info
-{
-	table_ver,
-	cpu_asv,
-	g3d_asv
-};
-
-extern int asv_ids_information(enum ids_info id);
 
 static ssize_t show_asv_info(struct device *dev,
 					struct device_attribute *attr,
@@ -435,9 +427,9 @@ static ssize_t show_asv_info(struct device *dev,
 	int count = 0;
 
 	/* Set asv group info to buf */
-	count += sprintf(&buf[count], "%d ", asv_ids_information(table_ver));
-	count += sprintf(&buf[count], "%03x ", asv_ids_information(cpu_asv));
-	count += sprintf(&buf[count], "%03x ", asv_ids_information(g3d_asv));
+	count += sprintf(&buf[count], "%d ", asv_ids_information(tg));
+	count += sprintf(&buf[count], "%03x ", asv_ids_information(lg));
+	count += sprintf(&buf[count], "%03x ", asv_ids_information(g3dg));
 	count += sprintf(&buf[count], "\n");
 
 	return count;

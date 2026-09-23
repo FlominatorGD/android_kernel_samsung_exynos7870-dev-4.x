@@ -662,6 +662,18 @@ static int s2mu004_chg_set_property(struct power_supply *psy,
 	union power_supply_propval value;
 	int ret;
 
+	/* POWER_SUPPLY_PROP_FUELGAUGE_RESET is a Samsung extension property
+	 * outside enum power_supply_property, so it cannot be a switch case.
+	 */
+	if (psp == POWER_SUPPLY_PROP_FUELGAUGE_RESET) {
+		s2mu004_write_reg(charger->i2c, 0x6F, 0xC4);
+		msleep(1000);
+		s2mu004_write_reg(charger->i2c, 0x6F, 0x04);
+		msleep(50);
+		pr_info("%s: reset fuelgauge when surge occur!\n", __func__);
+		return 0;
+	}
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
 		charger->status = val->intval;
@@ -765,13 +777,6 @@ static int s2mu004_chg_set_property(struct power_supply *psy,
 			pr_debug("%s: Relieve VBUS2BAT\n", __func__);
 			s2mu004_write_reg(charger->i2c, 0x2F, 0x5D);
 		}
-		break;
-	case POWER_SUPPLY_PROP_FUELGAUGE_RESET:
-		s2mu004_write_reg(charger->i2c, 0x6F, 0xC4);
-		msleep(1000);
-		s2mu004_write_reg(charger->i2c, 0x6F, 0x04);
-		msleep(50);
-		pr_info("%s: reset fuelgauge when surge occur!\n", __func__);
 		break;
 	default:
 		return -EINVAL;

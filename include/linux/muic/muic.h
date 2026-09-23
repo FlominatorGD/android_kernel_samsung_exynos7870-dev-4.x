@@ -121,6 +121,8 @@ typedef enum {
 	ADC_ERROR		= 0xff, /* ADC value read error */
 } muic_adc_t;
 
+#define ADC_WATER_THRESHOLD	ADC_OPEN
+
 /* MUIC attached device type */
 typedef enum {
 	ATTACHED_DEV_NONE_MUIC = 0,
@@ -194,6 +196,24 @@ typedef enum {
 
 	ATTACHED_DEV_TIMEOUT_OPEN_MUIC,
 	ATTACHED_DEV_HICCUP_MUIC,
+
+	/* S2MU004 (Exynos7870) attached device types */
+	ATTACHED_DEV_JIG_RID_OPEN_MUIC,	/* recovery factory mode 523k to open */
+	ATTACHED_DEV_TYPE3_MUIC,
+	ATTACHED_DEV_TYPE3_MUIC_TA,
+	ATTACHED_DEV_TYPE3_ADAPTER_MUIC,
+	ATTACHED_DEV_TYPE3_CHARGER_MUIC,
+	ATTACHED_DEV_NONE_TYPE3_MUIC,
+	ATTACHED_DEV_WIRELESS_PAD_MUIC,
+#if defined(CONFIG_SEC_FACTORY)
+	ATTACHED_DEV_CARKIT_MUIC,
+#endif
+	ATTACHED_DEV_POWERPACK_MUIC,
+	ATTACHED_DEV_WATER_MUIC,
+	ATTACHED_DEV_CHK_WATER_REQ,
+	ATTACHED_DEV_CHK_WATER_DRY_REQ,
+	ATTACHED_DEV_CHECK_OCP,
+
 	ATTACHED_DEV_UNKNOWN_MUIC,
 	ATTACHED_DEV_NUM,
 } muic_attached_dev_t;
@@ -215,7 +235,13 @@ typedef enum {
  * that setted at muic-core.c file
  */
 struct muic_platform_data {
+	void *drv_data;
+	void *muic_if;
+
 	int irq_gpio;
+
+	bool suspended;
+	bool need_to_noti;
 
 	int switch_sel;
 
@@ -224,10 +250,24 @@ struct muic_platform_data {
 	int uart_path;
 
 	int gpio_uart_sel;
+	int gpio_usb_sel;
 
 	bool rustproof_on;
 	bool afc_disable;
 	int afc_disabled_updated;
+
+	/* muic current attached device */
+	muic_attached_dev_t attached_dev;
+
+	bool is_usb_ready;
+	bool is_factory_start;
+	bool is_rustproof;
+	bool is_otg_test;
+	bool is_jig_on;
+
+	int vbvolt;
+	int adc;
+	int vmid;
 
 #ifdef CONFIG_MUIC_HV_FORCE_LIMIT
 	int hv_sel;
@@ -241,6 +281,7 @@ struct muic_platform_data {
 
 	/* muic GPIO control function */
 	int (*init_gpio_cb)(int switch_sel);
+	void (*jig_uart_cb)(int jig_state);
 	int (*set_gpio_usb_sel)(int usb_path);
 	int (*set_gpio_uart_sel)(int uart_path);
 	int (*set_safeout)(int safeout_path);
@@ -262,6 +303,24 @@ struct muic_platform_data {
 	int (*muic_set_hiccup_mode_cb)(int on_off);
 };
 
+#define MUIC_PDATA_FUNC(func, param, ret) \
+{\
+	*ret = -1;	\
+	if (func)	\
+		*ret = func(param);	\
+	else	\
+		pr_err("[muic_core] func not defined %s\n", __func__);	\
+}
+
+#define MUIC_PDATA_FUNC_MULTI_PARAM(func, param1, param2, ret) \
+{					\
+	*ret = -1;	\
+	if (func)	\
+		*ret = func(param1, param2);	\
+	else	\
+		pr_err("[muic_core] func not defined %s\n", __func__);	\
+}
+
 int get_switch_sel(void);
 int get_afc_mode(void);
 int get_ccic_info(void);
@@ -270,6 +329,14 @@ int muic_afc_set_voltage(int voltage);
 extern int muic_hv_charger_disable(bool en);
 int muic_hv_charger_init(void);
 int muic_set_hiccup_mode(int on_off);
+int muic_core_handle_attach(struct muic_platform_data *muic_pdata,
+			muic_attached_dev_t new_dev, int adc, u8 vbvolt);
+int muic_core_handle_detach(struct muic_platform_data *muic_pdata);
+bool muic_core_get_ccic_cable_state(struct muic_platform_data *muic_pdata);
+struct muic_platform_data *muic_core_init(void *drv_data);
+void muic_core_exit(struct muic_platform_data *muic_pdata);
+bool muic_core_is_cable_attached(struct muic_platform_data *muic_pdata);
+extern void muic_disable_otg_detect(void);
 #ifdef CONFIG_SEC_FACTORY
 extern void muic_send_attached_muic_cable_intent(int type);
 #endif /* CONFIG_SEC_FACTORY */

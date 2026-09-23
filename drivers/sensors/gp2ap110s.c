@@ -31,7 +31,7 @@
 #include <linux/of_gpio.h>
 #include <linux/fs.h>
 #include <asm/segment.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <linux/sensor/sensors_core.h>
 #include "gp2ap110s.h"
 

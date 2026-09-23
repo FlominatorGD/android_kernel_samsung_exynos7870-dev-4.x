@@ -632,4 +632,10 @@ config BATTERY_S2MU00X
 	help
 	  Say Y here to enable support for S2MU00x battery driver.
 
+config AFC_S2MU004
+	tristate "S2MU004 AFC (Adaptive Fast Charging)"
+	depends on MUIC_S2MU004
+	help
+	  Say Y here to enable support for AFC on S2MU004.
+
 endif # POWER_SUPPLY

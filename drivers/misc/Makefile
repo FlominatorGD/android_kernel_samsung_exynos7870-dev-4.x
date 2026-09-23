@@ -69,6 +69,7 @@ obj-$(CONFIG_TZDEV)		+= tzdev/
 obj-$(CONFIG_SAMSUNG_TUI)	+= tui/
 obj-$(CONFIG_SEC_JACK)		+= sec_jack.o
 obj-$(CONFIG_GNSS_SHMEM_IF)	+= gnss_if/
+obj-$(CONFIG_UART_SEL)		+= uart_sel/
 
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_core.o
 lkdtm-$(CONFIG_LKDTM)		+= lkdtm_bugs.o

@@ -47,4 +47,11 @@ config EXYNOS9820_BTS
 	  setting BTS and DVFS to manage bus traffic. Default setting
 	  is different to chipset because of the hardware change and DVFS
 	  status.
+
+config EXYNOS7870_BTS
+	bool "Bus traffic shaper support for Exynos7870"
+	default y
+	depends on SOC_EXYNOS7870
+	help
+	  Enable BTS (Bus traffic shaper) support for Exynos7870.
 endif

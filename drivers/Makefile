@@ -219,11 +219,17 @@ obj-$(CONFIG_SENSORS_FINGERPRINT)       += fingerprint/
 # Sensorhub driver
 obj-$(CONFIG_SENSORS_SSP)	+= sensorhub/
 
+# Sensors (legacy Samsung sensor drivers for exynos7870)
+obj-$(CONFIG_SENSORS)		+= sensors/
+
 # optics sensor driver
 obj-$(CONFIG_SENSORS_HRMSENSOR)	+= optics/
 obj-$(CONFIG_SENSORS_MAX86915)	+= optics/
 obj-$(CONFIG_SENSORS_TCS3407)	+= optics/
 obj-$(CONFIG_SENSORS_VD6281)	+= optics/
+
+# GPS
+obj-$(CONFIG_SEC_GPS)		+= gps/
 
 # Motor
 obj-y                           += motor/

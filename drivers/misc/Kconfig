@@ -553,4 +553,13 @@ source "drivers/misc/modem_v1_dual/Kconfig"
 source "drivers/misc/tzdev/Kconfig"
 source "drivers/misc/tui/Kconfig"
 source "drivers/misc/dev_ril_bridge/Kconfig"
+source "drivers/misc/gnss_if/Kconfig"
+
+config SEC_JACK
+	bool "Samsung earjack detection driver"
+	default n
+	help
+	  Say y here to support Samsung sec-jack (earjack/earphone detection)
+	  driver.
+
 endmenu

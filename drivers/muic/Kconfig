@@ -40,6 +40,29 @@ config HV_MUIC_MAX77705_AFC
 	  To enable this driver,
 	  MUIC_MAX77705 should be enabled.
 
+config MUIC_S2MU004
+	bool "Using S2MU004 MUIC"
+	depends on USE_MUIC && MFD_S2MU004
+	default n
+	help
+	  If you say yes here you will get support for
+	  the S2MU004 MUIC chip.
+
+config MUIC_HV_S2MU004_AFC
+	bool "Using S2MU004 AFC MUIC"
+	depends on MUIC_S2MU004
+	default n
+	help
+	  If you say yes here you will get support for
+	  S2MU004 AFC (Adaptive Fast Charging) MUIC.
+
+config MUIC_S2MU004_SYSFS
+	bool "S2MU004 MUIC sysfs debug"
+	depends on MUIC_S2MU004
+	default n
+	help
+	  Say y to enable sysfs debug nodes for S2MU004 MUIC.
+
 config MUIC_MANAGER
 	bool "MUIC Manager supports CCIC chip interface"
 	depends on USE_MUIC && MFD_S2MU004

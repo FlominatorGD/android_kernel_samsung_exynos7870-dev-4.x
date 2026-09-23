@@ -34,7 +34,15 @@ config CCIC_S2MM005
 	default n
 	help
 	  If you say yes here you will get support for
-	  s2mm005 ccic full version chipset 
+	  s2mm005 ccic full version chipset
+
+config CCIC_S2MU004
+	bool "CCIC S2MU004 USBPD"
+	depends on I2C && MFD_S2MU004
+	default n
+	help
+	  If you say yes here you will get support for
+	  s2mu004-usbpd CCIC/USBPD chip (a3y17lte).
 
 config USBPD_S2MM005
 	bool "USBPD S2MM005"

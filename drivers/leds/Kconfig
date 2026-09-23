@@ -645,6 +645,34 @@ config LEDS_RT8547
 	  If you say yes here you will get support for
 	  for the RT8547 FLASH led chip.
 
+config LEDS_S2MU005
+	tristate "LED Support for S2MU005 PMIC"
+	depends on LEDS_CLASS && MFD_S2MU005
+	help
+	  This option enables support for the LED chip on S2MU005 PMIC.
+
+config LEDS_S2MU005_RGB
+	tristate "RGB LED Support for S2MU005 PMIC"
+	depends on LEDS_CLASS && MFD_S2MU005
+	help
+	  This option enables support for the RGB LED chip on S2MU005 PMIC.
+
+config LEDS_SM5703_FLED
+	bool "Flash LED support for SM5703"
+	depends on I2C && LEDS_CLASS_FLASH
+	help
+	  Flash LED driver for SM5703 PMIC.
+
+config FLASHLIGHT_SUPPORT
+	bool "Samsung Flashlight class support"
+	help
+	  Say y here to enable flashlight module.
+
+config SMFLED
+	bool "SM Flash LED support"
+	help
+	  Say y here to enable SMFLED(flash) support.
+
 config LEDS_IS31FL319X
 	tristate "LED Support for ISSI IS31FL319x I2C LED controller family"
 	depends on LEDS_CLASS && I2C && OF

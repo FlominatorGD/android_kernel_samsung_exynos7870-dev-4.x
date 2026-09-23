@@ -230,6 +230,10 @@ source "drivers/vision/Kconfig"
 source "drivers/sensorhub/brcm/Kconfig"
 source "drivers/sensorhub/stm32/Kconfig"
 
+source "drivers/sensors/Kconfig"
+
+source "drivers/gps/Kconfig"
+
 source "drivers/optics/Kconfig"
 
 source "drivers/motor/Kconfig"

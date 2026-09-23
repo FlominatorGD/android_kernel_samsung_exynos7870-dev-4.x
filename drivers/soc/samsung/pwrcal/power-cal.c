@@ -619,6 +619,15 @@ void cal_asv_set_grp(unsigned int id, unsigned int asvgrp)
 		cal_asv_ops.set_grp(id, asvgrp);
 }
 
+/*
+ * The S5E7870 ASV table does not carry a fused IDS value, so report 0 here.
+ * Callers (thermal cooling) then fall back to their ASV-group ratio table.
+ */
+int cal_asv_get_ids_info(unsigned int id)
+{
+	return 0;
+}
+
 int cal_asv_get_grp(unsigned int id, unsigned int lv)
 {
 	if (cal_asv_ops.get_grp)

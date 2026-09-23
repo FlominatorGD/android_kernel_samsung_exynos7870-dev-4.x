@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/cpuidle_profiler.h>
+#include <linux/exynos-ss.h>
 
 #include <asm/smp_plat.h>
 #include <linux/psci.h>
@@ -123,8 +124,11 @@ static int exynos_check_idle_ip_stat(int mode, int reg_index)
 		 *--------------------------- (XOR)
 		 *            0 0 0 0 0 1 0 0
 		 */
-		cpuidle_profile_collect_idle_ip(mode, reg_index,
-				((val & ~mask) ^ ~mask));
+		/*
+		 * The 4.14 profiler accounts the busy idle-ip bits per register
+		 * only, it has no per system power mode breakdown.
+		 */
+		cpuidle_profile_idle_ip(reg_index, ((val & ~mask) ^ ~mask));
 	}
 
 	return ret;
@@ -335,9 +339,11 @@ static void update_c2_state(bool down, unsigned int cpu)
 
 static s64 get_next_event_time_us(unsigned int cpu)
 {
-	struct clock_event_device *dev = per_cpu(tick_cpu_device, cpu).evtdev;
-
-	return ktime_to_us(ktime_sub(dev->next_event, ktime_get()));
+	/*
+	 * get_next_event_cpu() is the platform helper for reading another cpu's
+	 * next tick event; 4.14 keeps struct tick_device private to the core.
+	 */
+	return ktime_to_us(ktime_sub(*(get_next_event_cpu(cpu)), ktime_get()));
 }
 
 static int is_cpus_busy(unsigned int target_residency,
@@ -765,31 +771,19 @@ void exynos_wakeup_cp_call(bool early_wakeup)
  * In case of non-boot cluster, CPU sequencer should be disabled
  * even each cpu wake up through hotplug in.
  */
-static int exynos_cpuidle_hotcpu_callback(struct notifier_block *nfb,
-                                       unsigned long action, void *hcpu)
+static int exynos_cpuidle_cpu_starting(unsigned int cpu)
 {
-       unsigned int cpu = (unsigned long)hcpu;
-       int ret = NOTIFY_OK;
+	spin_lock(&c2_lock);
 
-       switch (action) {
-       case CPU_STARTING:
-       case CPU_STARTING_FROZEN:
-               spin_lock(&c2_lock);
+	if (!is_cpu_boot_cluster(cpu))
+		exynos_cpu.cluster_up(get_cluster_id(cpu));
 
-               if (!is_cpu_boot_cluster(cpu))
-                       exynos_cpu.cluster_up(get_cluster_id(cpu));
+	spin_unlock(&c2_lock);
 
-               spin_unlock(&c2_lock);
-               break;
-       }
-
-       return ret;
+	return 0;
 }
 
-static struct notifier_block __refdata cpuidle_hotcpu_notifier = {
-       .notifier_call = exynos_cpuidle_hotcpu_callback,
-       .priority = INT_MAX,
-};
+static int cpuidle_hotcpu_state;
 
 /******************************************************************************
  *                              Driver initialized                            *
@@ -845,7 +839,11 @@ int __init exynos_powermode_init(void)
 
 #endif
 
-	register_hotcpu_notifier(&cpuidle_hotcpu_notifier);
+	cpuidle_hotcpu_state = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
+			"exynos-powermode:starting",
+			exynos_cpuidle_cpu_starting, NULL);
+	if (cpuidle_hotcpu_state < 0)
+		pr_err("%s: failed to register cpuhp state\n", __func__);
 
 	return 0;
 }

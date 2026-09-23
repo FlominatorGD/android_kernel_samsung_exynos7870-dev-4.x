@@ -188,9 +188,11 @@ static int do_cpu_hotplug(void)
 	cpumask_andnot(&enable_cpus, &enable_cpus, cpu_online_mask);
 	cpumask_and(&disable_cpus, &disable_cpus, cpu_online_mask);
 
-	cpulist_scnprintf(cpus_buf, sizeof(cpus_buf), &enable_cpus);
+	scnprintf(cpus_buf, sizeof(cpus_buf), "%*pbl",
+			cpumask_pr_args(&enable_cpus));
 	pr_debug("%s: enable_cpus=%s\n", __func__, cpus_buf);
-	cpulist_scnprintf(cpus_buf, sizeof(cpus_buf), &disable_cpus);
+	scnprintf(cpus_buf, sizeof(cpus_buf), "%*pbl",
+			cpumask_pr_args(&disable_cpus));
 	pr_debug("%s: disable_cpus=%s\n", __func__, cpus_buf);
 
 	/* If request has the callback, call cpus_up() and cpus_down() */

@@ -46,18 +46,6 @@ static const struct samsung_pin_bank_type exynos5433_bank_type_alive = {
 };
 
 
-/* bank type for non-alive type (DRV bit field: 2) */
-static struct samsung_pin_bank_type bank_type_0  = {
-	.fld_width = { 4, 1, 2, 2, 2, 2, },
-	.reg_offset = { 0x00, 0x04, 0x08, 0x0c, 0x10, 0x14, },
-};
-
-/* bank type for alive type (DRV bit field: 2) */
-static struct samsung_pin_bank_type bank_type_1 = {
-	.fld_width = { 4, 1, 2, 2, },
-	.reg_offset = { 0x00, 0x04, 0x08, 0x0c, },
-};
-
 /* bank type for non-alive type (DRV bit field: 3) */
 static struct samsung_pin_bank_type bank_type_4  = {
 	.fld_width = { 4, 1, 2, 3, 2, 2, },
@@ -313,7 +301,7 @@ const struct samsung_pinctrl_of_match_data exynos5433_of_data __initconst = {
 };
 
 /* pin banks of exynos8890 pin-controller 0 (ALIVE) */
-static const struct samsung_pin_bank exynos8890_pin_banks0[] __initconst = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks0[] __initconst = {
 	EXYNOS8890_PIN_BANK_EINTW(bank_type_5, 8, 0x000, "gpa0", 0x00),
 	EXYNOS8890_PIN_BANK_EINTW(bank_type_5, 8, 0x020, "gpa1", 0x04),
 	EXYNOS8890_PIN_BANK_EINTW(bank_type_5, 8, 0x040, "gpa2", 0x08),
@@ -321,43 +309,43 @@ static const struct samsung_pin_bank exynos8890_pin_banks0[] __initconst = {
 };
 
 /* pin banks of exynos8890 pin-controller 1 (AUD) */
-static struct samsung_pin_bank exynos8890_pin_banks1[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks1[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 7, 0x000, "gph0", 0x00),
 };
 
 /* pin banks of exynos8890 pin-controller 2 (CCORE) */
-static struct samsung_pin_bank exynos8890_pin_banks2[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks2[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 2, 0x000, "etc0", 0x00),
 };
 
 /* pin banks of exynos8890 pin-controller 3 (ESE) */
-static struct samsung_pin_bank exynos8890_pin_banks3[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks3[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 5, 0x000, "gpf3", 0x00),
 };
 
 /* pin banks of exynos8890 pin-controller 4 (FP) */
-static struct samsung_pin_bank exynos8890_pin_banks4[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks4[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 4, 0x000, "gpf2", 0x00),
 };
 
 /* pin banks of exynos8890 pin-controller 5 (FSYS0) */
-static struct samsung_pin_bank exynos8890_pin_banks5[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks5[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 4, 0x000, "gpi1", 0x00),
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 8, 0x020, "gpi2", 0x04),
 };
 
 /* pin banks of exynos8890 pin-controller 6 (FSYS1) */
-static struct samsung_pin_bank exynos8890_pin_banks6[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks6[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 7, 0x000, "gpj0", 0x00),
 };
 
 /* pin banks of exynos8890 pin-controller 7 (NFC) */
-static struct samsung_pin_bank exynos8890_pin_banks7[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks7[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 3, 0x000, "gpf0", 0x00),
 };
 
 /* pin banks of exynos8890 pin-controller 8 (PERIC0) */
-static struct samsung_pin_bank exynos8890_pin_banks8[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks8[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 6, 0x000, "gpi0", 0x00),
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 8, 0x020, "gpd0", 0x04),
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 6, 0x040, "gpd1", 0x08),
@@ -375,7 +363,7 @@ static struct samsung_pin_bank exynos8890_pin_banks8[] = {
 };
 
 /* pin banks of exynos8890 pin-controller 9 (PERIC1) */
-static struct samsung_pin_bank exynos8890_pin_banks9[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks9[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 8, 0x000, "gpe0", 0x00),
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 8, 0x020, "gpe5", 0x04),
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 8, 0x040, "gpe6", 0x08),
@@ -390,7 +378,7 @@ static struct samsung_pin_bank exynos8890_pin_banks9[] = {
 };
 
 /* pin banks of exynos8890 pin-controller 10 (TOUCH) */
-static struct samsung_pin_bank exynos8890_pin_banks10[] = {
+static const struct samsung_pin_bank_data exynos8890_pin_banks10[] = {
 	EXYNOS8890_PIN_BANK_EINTG(bank_type_4, 3, 0x000, "gpf1", 0x00),
 };
 
@@ -474,7 +462,7 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 };
 
 /* pin banks of exynos7870 pin-controller 0 (ALIVE) */
-static struct samsung_pin_bank exynos7870_pin_banks0[] = {
+static const struct samsung_pin_bank_data exynos7870_pin_banks0[] = {
 	EXYNOS7870_PIN_BANK_EINTN(bank_type_5, 6, 0x000, "etc0"),
 	EXYNOS7870_PIN_BANK_EINTN(bank_type_5, 3, 0x020, "etc1"),
 	EXYNOS7870_PIN_BANK_EINTW(bank_type_5, 8, 0x040, "gpa0", 0x00),
@@ -484,19 +472,19 @@ static struct samsung_pin_bank exynos7870_pin_banks0[] = {
 };
 
 /* pin banks of exynos7870 pin-controller 1 (DISPAUD) */
-static struct samsung_pin_bank exynos7870_pin_banks1[] = {
+static const struct samsung_pin_bank_data exynos7870_pin_banks1[] = {
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 4, 0x000, "gpz0", 0x00),
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 6, 0x020, "gpz1", 0x04),
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 4, 0x040, "gpz2", 0x08),
 };
 
 /* pin banks of exynos7870 pin-controller 2 (EsE) */
-static struct samsung_pin_bank exynos7870_pin_banks2[] = {
+static const struct samsung_pin_bank_data exynos7870_pin_banks2[] = {
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 5, 0x000, "gpc7", 0x00),
 };
 
 /* pin banks of exynos7870 pin-controller 3 (FSYS) */
-static struct samsung_pin_bank exynos7870_pin_banks3[] = {
+static const struct samsung_pin_bank_data exynos7870_pin_banks3[] = {
          EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 3, 0x000, "gpr0", 0x00),
          EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 8, 0x020, "gpr1", 0x04),
          EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 2, 0x040, "gpr2", 0x08),
@@ -505,17 +493,17 @@ static struct samsung_pin_bank exynos7870_pin_banks3[] = {
 };
 
 /* pin banks of exynos7870 pin-controller 4 (MIF) */
-static struct samsung_pin_bank exynos7870_pin_banks4[] = {
+static const struct samsung_pin_bank_data exynos7870_pin_banks4[] = {
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 2, 0x000, "gpm0", 0x00),
 };
 
 /* pin banks of exynos7870 pin-controller 5 (NFC) */
-static struct samsung_pin_bank exynos7870_pin_banks5[] = {
+static const struct samsung_pin_bank_data exynos7870_pin_banks5[] = {
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 4, 0x000, "gpc2", 0x00),
 };
 
 /* pin banks of exynos7870 pin-controller 6 (TOP) */
-static struct samsung_pin_bank exynos7870_pin_banks6[] = {
+static const struct samsung_pin_bank_data exynos7870_pin_banks6[] = {
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 4, 0x000, "gpb0", 0x00),
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 3, 0x020, "gpc0", 0x04),
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 4, 0x040, "gpc1", 0x08),
@@ -537,7 +525,7 @@ static struct samsung_pin_bank exynos7870_pin_banks6[] = {
 };
 
 /* pin banks of exynos7870 pin-controller 10 (TOUCH) */
-static struct samsung_pin_bank exynos7870_pin_banks7[] = {
+static const struct samsung_pin_bank_data exynos7870_pin_banks7[] = {
 	EXYNOS7870_PIN_BANK_EINTG(bank_type_4, 3, 0x000, "gpc3", 0x00),
 };
 

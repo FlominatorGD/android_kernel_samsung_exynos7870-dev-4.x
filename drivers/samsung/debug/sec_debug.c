@@ -933,6 +933,7 @@ static void sec_debug_set_taskinfo(void)
 	SET_MEMBER_TYPE_INFO(&sdn->task.ts.pc, struct task_struct,
 					thread.cpu_context.pc);
 
+#ifdef CONFIG_SCHED_INFO
 	SET_MEMBER_TYPE_INFO(&sdn->task.ts.sched_info__pcount,
 					struct task_struct, sched_info.pcount);
 	SET_MEMBER_TYPE_INFO(&sdn->task.ts.sched_info__run_delay,
@@ -944,6 +945,7 @@ static void sec_debug_set_taskinfo(void)
 	SET_MEMBER_TYPE_INFO(&sdn->task.ts.sched_info__last_queued,
 					struct task_struct,
 					sched_info.last_queued);
+#endif
 	SET_MEMBER_TYPE_INFO(&sdn->task.ts.ssdbg_wait__type,
 					struct task_struct,
 					ssdbg_wait.type);

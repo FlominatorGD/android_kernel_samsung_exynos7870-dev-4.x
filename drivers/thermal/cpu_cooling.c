@@ -284,7 +284,7 @@ static int build_static_power_table(struct device_node *np, struct cpufreq_cooli
 	}
 
 	ratio = cal_asv_get_ids_info(cal_id);
-	asv_group = cal_asv_get_grp(cal_id);
+	asv_group = cal_asv_get_grp(cal_id, 0);
 
 	if (asv_group < 0 || asv_group > 15)
 		asv_group = 0;

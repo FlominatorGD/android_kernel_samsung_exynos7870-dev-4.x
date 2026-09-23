@@ -141,7 +141,7 @@ static int exynos_mcinfo_parse_dt(struct device_node *np, struct mcinfo_data *da
 }
 #endif /* OF */
 
-static int __devinit exynos_mcinfo_probe(struct platform_device *pdev)
+static int exynos_mcinfo_probe(struct platform_device *pdev)
 {
 	struct mcinfo_data *data;
 	struct resource *res;
@@ -189,7 +189,7 @@ static int __devinit exynos_mcinfo_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int __devexit exynos_mcinfo_remove(struct platform_device *pdev)
+static int exynos_mcinfo_remove(struct platform_device *pdev)
 {
 	struct mcinfo_data *data = platform_get_drvdata(pdev);
 	int i;

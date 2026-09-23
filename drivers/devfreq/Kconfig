@@ -108,6 +108,16 @@ config ARM_EXYNOS_DEVFREQ
 	help
 	  This adds the DEVFREQ driver for Exynos series common bus.
 
+config ARM_EXYNOS7870_DEVFREQ
+	bool "Exynos7870 legacy DEVFREQ common driver"
+	depends on SOC_EXYNOS7870 && !ARM_EXYNOS_DEVFREQ
+	select ARCH_HAS_OPP
+	select PM_OPP
+	help
+	  Build the clock/regulator based DEVFREQ core used by Exynos7870.
+	  This is separate from the ACPM based ARM_EXYNOS_DEVFREQ driver used
+	  by newer SoCs because the device-tree bindings are incompatible.
+
 config ARM_EXYNOS_DEVFREQ_DEBUG
 	bool "ARM Exynos DEVFREQ sysfs for Debug"
 	depends on ARM_EXYNOS_DEVFREQ
@@ -151,6 +161,16 @@ config ARM_RK3399_DMC_DEVFREQ
           from hardware.
 
 source "drivers/devfreq/event/Kconfig"
+
+config ARM_EXYNOS7870_BUS_DEVFREQ
+	bool "ARM Exynos7870 Memory Bus DEVFREQ Driver"
+	depends on ARM_EXYNOS7870_DEVFREQ
+	select DEVFREQ_GOV_SIMPLE_ONDEMAND
+	select DEVFREQ_GOV_SIMPLE_EXYNOS
+	help
+	  Enable the MIF, INT, display and camera DVFS domains found on
+	  Exynos7870.  Their frequency and voltage tables are described by
+	  the samsung,exynos7870-devfreq device-tree binding.
 
 config ARM_EXYNOS9810_BUS_DEVFREQ
 	bool "ARM Exynos9810 Memory Bus DEVFREQ Driver"

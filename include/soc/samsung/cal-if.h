@@ -13,6 +13,16 @@ static inline int cal_if_init(void)
 {
 	return 0;
 }
+
+/* CP CAL not implemented in pwrcal framework; stub for modem driver. */
+static inline int cal_cp_init(void) { return 0; }
+static inline int cal_cp_status(void) { return 1; }
+static inline int cal_cp_reset_assert(void) { return 0; }
+static inline int cal_cp_reset_release(void) { return 0; }
+static inline void cal_cp_active_clear(void) { }
+static inline void cal_cp_reset_req_clear(void) { }
+static inline void cal_cp_enable_dump_pc_no_pg(void) { }
+static inline void cal_cp_disable_dump_pc_no_pg(void) { }
 #else
 #include "../../../drivers/soc/samsung/cal-if/pmucal_system.h"
 

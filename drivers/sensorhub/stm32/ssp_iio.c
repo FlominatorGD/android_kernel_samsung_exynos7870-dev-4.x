@@ -80,15 +80,13 @@ static int ssp_iio_configure_ring(struct iio_dev *indio_dev)
 {
 	struct iio_buffer *ring;
 
-	ring = iio_kfifo_allocate(indio_dev);
+	ring = iio_kfifo_allocate();
 	if (!ring)
 		return -ENOMEM;
 
-	ring->scan_timestamp = true;
-	ring->bytes_per_datum = 8;
-	indio_dev->buffer = ring;
+	iio_device_attach_buffer(indio_dev, ring);
 	indio_dev->setup_ops = &ssp_iio_ring_setup_ops;
-	indio_dev->modes |= INDIO_BUFFER_HARDWARE;
+	indio_dev->modes |= INDIO_BUFFER_SOFTWARE;
 
 	return 0;
 }
@@ -307,11 +305,6 @@ static void *init_indio_device(struct ssp_data *data,
 	if (ret)
 		goto err_config_ring;
 
-	ret = iio_buffer_register(indio_dev,
-			indio_dev->channels, indio_dev->num_channels);
-	if (ret)
-		goto err_register_buffer;
-
 	ret = iio_device_register(indio_dev);
 	if (ret)
 		goto err_register_device;
@@ -320,9 +313,6 @@ static void *init_indio_device(struct ssp_data *data,
 
 err_register_device:
 	ssp_err("fail to register %s device", device_name);
-	iio_buffer_unregister(indio_dev);
-err_register_buffer:
-	ssp_err("fail to register %s buffer", device_name);
 	iio_kfifo_free(indio_dev->buffer);
 err_config_ring:
 	ssp_err("fail to configure %s ring buffer", device_name);

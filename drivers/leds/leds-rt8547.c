@@ -383,7 +383,7 @@ static int rt8547_probe(struct platform_device *pdev)
 
 	return 0;
 }
-static int __devexit rt8547_remove(struct platform_device *pdev)
+static int rt8547_remove(struct platform_device *pdev)
 {
 	device_remove_file(rt8547_dev, &dev_attr_rear_flash);
 	device_remove_file(rt8547_dev, &dev_attr_rear_torch_flash);

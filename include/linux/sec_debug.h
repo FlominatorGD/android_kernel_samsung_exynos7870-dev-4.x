@@ -62,6 +62,7 @@ extern void sec_gaf_supply_rqinfo(unsigned short curr_offset, unsigned short rq_
 #define sec_getlog_supply_platform(a, b)	do { } while (0)
 
 #define sec_gaf_supply_rqinfo(a, b)		do { } while (0)
+#define sec_debug_clear_magic_rambase()	do { } while (0)
 #endif /* CONFIG_SEC_DEBUG */
 
 enum sec_debug_reset_reason_t {
@@ -521,6 +522,7 @@ extern void sec_debug_set_extra_info_epd(char *str);
 #define sec_debug_set_extra_info_panic(a)	do { } while (0)
 #define sec_debug_set_extra_info_backtrace(a)	do { } while (0)
 #define sec_debug_set_extra_info_backtrace_cpu(a, b)	do { } while (0)
+#define sec_debug_set_extra_info_backtrace_task(a)	do { } while (0)
 #define sec_debug_set_extra_info_evt_version()	do { } while (0)
 #define sec_debug_set_extra_info_sysmmu(a)	do { } while (0)
 #define sec_debug_set_extra_info_busmon(a)	do { } while (0)
@@ -660,7 +662,9 @@ struct sec_debug_next {
 	struct sec_debug_spinlock_info rlock;
 	struct sec_debug_kernel_data kernd;
 
+#ifdef CONFIG_SEC_DEBUG_AUTO_COMMENT
 	struct sec_debug_auto_comment auto_comment;
+#endif
 	struct sec_debug_shared_buffer extra_info;
 };
 

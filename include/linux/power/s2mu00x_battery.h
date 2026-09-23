@@ -16,6 +16,11 @@
 #ifndef __S2MU00X_BATTERY_H
 #define __S2MU00X_BATTERY_H
 
+/* S2MU004 internal signal: fuelgauge requests charger to reset it.
+ * Uses Samsung EXT range (battery_v2 uses MAX..MAX+78, cap is MAX+256).
+ */
+#define POWER_SUPPLY_PROP_FUELGAUGE_RESET (POWER_SUPPLY_PROP_MAX + 200)
+
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>

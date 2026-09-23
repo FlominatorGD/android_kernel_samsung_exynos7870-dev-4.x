@@ -190,6 +190,11 @@ void bts_update_bw(enum bts_bw_type type, struct bts_bw bw);
 unsigned int bts_calc_bw(enum bts_bw_type type, void *data);
 
 #else
+struct bts_bw {
+	unsigned int peak;
+	unsigned int read;
+	unsigned int write;
+};
 #define bts_update_scen(a, b) do {} while(0)
 #define bts_update_bw(a, b) do {} while(0)
 #define bts_calc_bw(a, b) do {} while(0)

@@ -13,7 +13,7 @@
  *
  */
 
-#include <linux/timekeeping.h>
+#include <linux/ktime.h>
 #include "ssp_debug.h"
 
 static mm_segment_t backup_fs;

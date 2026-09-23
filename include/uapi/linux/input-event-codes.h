@@ -706,6 +706,8 @@
 #define BTN_HOTKEY_APP3 		0x2f7
 
 /* 0x2f1~2f8 is key event for specail event. */
+#define KEY_CP_GRIP	0x2f1	/* grip sensor for CP */
+#define KEY_TSP_NONE_KEY2	0x2f2	/* grip sensor for WIFI */
 
 /* We avoid low common keys in module aliases so they don't get huge. */
 #define KEY_MIN_INTERESTING	KEY_MUTE

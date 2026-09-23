@@ -33,6 +33,9 @@
 #include <sound/exynos-audmixer-v2.h>
 #include "exynos-audmixer-regs.h"
 
+/* LPASS (lpass-exynos7870) is not ported; BT/FM mux is left at reset. */
+static inline void lpass_set_fm_bt_mux(int is_fm) { }
+
 /*
  * The sysclk is derived from the audio PLL. The value of the PLL is not always
  * rounded, many times the actual rate is a little bit higher or less than the
@@ -2479,8 +2482,10 @@ static int audmixer_remove(struct snd_soc_codec *codec)
 static struct snd_soc_codec_driver soc_codec_dev_audmixer = {
 	.probe = audmixer_probe,
 	.remove = audmixer_remove,
-	.controls = audmixer_snd_controls,
-	.num_controls = ARRAY_SIZE(audmixer_snd_controls),
+	.component_driver = {
+		.controls = audmixer_snd_controls,
+		.num_controls = ARRAY_SIZE(audmixer_snd_controls),
+	},
 	.idle_bias_off = true,
 	.ignore_pmdown_time = true,
 };

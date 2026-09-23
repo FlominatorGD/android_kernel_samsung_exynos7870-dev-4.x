@@ -228,6 +228,18 @@ extern int fscrypt_dd_submit_bio(struct inode *inode, struct bio *bio);
 extern int fscrypt_dd_may_submit_bio(struct bio *bio);
 extern struct inode *fscrypt_bio_get_inode(const struct bio *bio);
 extern bool fscrypt_dd_can_merge_bio(struct bio *bio, struct address_space *mapping);
+#else /* !CONFIG_DDAR */
+static inline int fscrypt_dd_decrypt_page(struct inode *inode, struct page *page) { return 0; }
+static inline int fscrypt_dd_encrypted(struct bio *bio) { return 0; }
+static inline int fscrypt_dd_encrypted_inode(const struct inode *inode) { return 0; }
+static inline int fscrypt_dd_is_traced_inode(const struct inode *inode) { return 0; }
+static inline void fscrypt_dd_trace_inode(const struct inode *inode) { }
+static inline long fscrypt_dd_get_ino(struct bio *bio) { return 0; }
+static inline long fscrypt_dd_ioctl(unsigned int cmd, unsigned long *arg, struct inode *inode) { return -EOPNOTSUPP; }
+static inline int fscrypt_dd_submit_bio(struct inode *inode, struct bio *bio) { return 0; }
+static inline int fscrypt_dd_may_submit_bio(struct bio *bio) { return 0; }
+static inline struct inode *fscrypt_bio_get_inode(const struct bio *bio) { return NULL; }
+static inline bool fscrypt_dd_can_merge_bio(struct bio *bio, struct address_space *mapping) { return true; }
 #endif
 
 #endif	/* _LINUX_FSCRYPT_SUPP_H */

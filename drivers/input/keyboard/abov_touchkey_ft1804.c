@@ -38,6 +38,7 @@
 
 #ifdef CONFIG_OF
 #include <linux/of_gpio.h>
+#include <linux/wakelock.h>
 #endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND

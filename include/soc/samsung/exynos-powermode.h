@@ -13,6 +13,27 @@
 #define __EXYNOS_POWERMODE_H __FILE__
 #include <soc/samsung/cal-if.h>
 
+/**
+ * System power down mode
+ */
+enum sys_powerdown {
+        SYS_SICD,
+#if !defined(CONFIG_SOC_EXYNOS7870)
+        SYS_SICD_CPD,
+#endif
+        SYS_AFTR,
+        SYS_STOP,
+#if !defined(CONFIG_SOC_EXYNOS7870)
+        SYS_DSTOP,
+#endif
+        SYS_LPD,
+#if !defined(CONFIG_SOC_EXYNOS7870)
+        SYS_ALPA,
+#endif
+        SYS_SLEEP,
+        NUM_SYS_POWERDOWN,
+};
+
 extern int exynos_prepare_sys_powerdown(enum sys_powerdown mode);
 extern void exynos_wakeup_sys_powerdown(enum sys_powerdown mode, bool early_wakeup);
 extern void exynos_prepare_cp_call(void);

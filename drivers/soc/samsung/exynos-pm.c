@@ -18,7 +18,7 @@
 #ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
 #endif
-#include <asm/psci.h>
+#include <linux/psci.h>
 #include <asm/suspend.h>
 #include <asm/smp_plat.h>
 
@@ -111,7 +111,6 @@ static void exynos_show_wakeup_reason_eint(void)
 
 #ifdef CONFIG_SUSPEND
 			log_wakeup_reason(irq);
-			update_wakeup_reason_stats(irq, i + bit);
 #endif
 			found = 1;
 		}
@@ -306,7 +305,7 @@ static int exynos_pm_syscore_suspend(void)
 
 	is_cp_call = is_cp_aud_enabled();
 	if (is_cp_call) {
-		psci_index = PSCI_SYSTEM_CP_CALL;
+		psci_index = PSCI_CP_CALL;
 		exynos_prepare_cp_call();
 		pr_info("%s: Enter CP Call mode for voice call\n",__func__);
 	} else {
@@ -354,7 +353,7 @@ static int exynos_pm_enter(suspend_state_t state)
 	/* This will also act as our return point when
 	 * we resume as it saves its own register state and restores it
 	 * during the resume. */
-	early_wakeup = cpu_suspend(psci_index);
+	early_wakeup = psci_cpu_suspend_enter(psci_index);
 	if (early_wakeup)
 		pr_info("%s: return to originator\n", __func__);
 

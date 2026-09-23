@@ -403,12 +403,10 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_wkup_init = exynos_eint_wkup_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl0",
 	}, {
 		/* pin-controller instance 1 AUD data */
 		.pin_banks	= exynos8890_pin_banks1,
 		.nr_banks	= ARRAY_SIZE(exynos8890_pin_banks1),
-		.label		= "exynos8890-gpio-ctrl1",
 	}, {
 		/* pin-controller instance 2 CCORE data */
 		.pin_banks	= exynos8890_pin_banks2,
@@ -416,7 +414,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl2",
 	}, {
 		/* pin-controller instance 3 ESE data */
 		.pin_banks	= exynos8890_pin_banks3,
@@ -424,7 +421,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl3",
 	}, {
 		/* pin-controller instance 4 FP data */
 		.pin_banks	= exynos8890_pin_banks4,
@@ -432,7 +428,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl4",
 	}, {
 		/* pin-controller instance 5 FSYS0 data */
 		.pin_banks	= exynos8890_pin_banks5,
@@ -440,7 +435,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl5",
 	}, {
 		/* pin-controller instance 6 FSYS1 data */
 		.pin_banks	= exynos8890_pin_banks6,
@@ -448,7 +442,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl6",
 	}, {
 		/* pin-controller instance 7 NFC data */
 		.pin_banks	= exynos8890_pin_banks7,
@@ -456,7 +449,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl7",
 	}, {
 		/* pin-controller instance 8 PERIC0 data */
 		.pin_banks	= exynos8890_pin_banks8,
@@ -464,7 +456,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl8",
 	}, {
 		/* pin-controller instance 9 PERIC1 data */
 		.pin_banks	= exynos8890_pin_banks9,
@@ -472,7 +463,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl9",
 	}, {
 		/* pin-controller instance 10 TOUCH data */
 		.pin_banks	= exynos8890_pin_banks10,
@@ -480,7 +470,6 @@ static const struct samsung_pin_ctrl exynos8890_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos8890-gpio-ctrl10",
 	},
 };
 
@@ -561,12 +550,10 @@ static const struct samsung_pin_ctrl exynos7870_pin_ctrl[] __initconst = {
 		.eint_wkup_init = exynos_eint_wkup_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos7870-gpio-ctrl0",
 	}, {
 		/* pin-controller instance 1 DISPAUD data */
 		.pin_banks	= exynos7870_pin_banks1,
 		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks1),
-		.label		= "exynos7870-gpio-ctrl1",
 	}, {
 		/* pin-controller instance 2 ESE  data */
 		.pin_banks	= exynos7870_pin_banks2,
@@ -576,7 +563,6 @@ static const struct samsung_pin_ctrl exynos7870_pin_ctrl[] __initconst = {
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
 #endif
-		.label		= "exynos7870-gpio-ctrl2",
 	}, {
 		/* pin-controller instance 3 FSYS data */
 		.pin_banks	= exynos7870_pin_banks3,
@@ -584,7 +570,6 @@ static const struct samsung_pin_ctrl exynos7870_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos7870-gpio-ctrl3",
 	}, {
 		/* pin-controller instance 4 MIF data */
 		.pin_banks	= exynos7870_pin_banks4,
@@ -592,7 +577,6 @@ static const struct samsung_pin_ctrl exynos7870_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos7870-gpio-ctrl4",
 	}, {
 		/* pin-controller instance 5 NFC data */
 		.pin_banks	= exynos7870_pin_banks5,
@@ -600,7 +584,6 @@ static const struct samsung_pin_ctrl exynos7870_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos7870-gpio-ctrl5",
 	}, {
 		/* pin-controller instance 6 TOP data */
 		.pin_banks	= exynos7870_pin_banks6,
@@ -608,7 +591,6 @@ static const struct samsung_pin_ctrl exynos7870_pin_ctrl[] __initconst = {
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
-		.label		= "exynos7870-gpio-ctrl6",
 	}, {
 		/* pin-controller instance 7 TOUCH data */
 		.pin_banks	= exynos7870_pin_banks7,
@@ -618,7 +600,6 @@ static const struct samsung_pin_ctrl exynos7870_pin_ctrl[] __initconst = {
 		.suspend	= exynos_pinctrl_suspend,
 		.resume		= exynos_pinctrl_resume,
 #endif
-		.label		= "exynos7870-gpio-ctrl7",
 	},
 };
 
@@ -636,27 +617,6 @@ int exynos7870_secgpio_get_nr_gpio(void)
 	return nr_gpio;
 }
 #endif
-#if defined(CONFIG_SOC_EXYNOS7870)
-u32 exynos_eint_to_pin_num(int eint)
-{
-	int i;
-	int etc_offset = 0;
-
-	for(i = 0; i < exynos7870_pin_ctrl[0].nr_banks &&
-		strncmp(exynos7870_pin_ctrl[0].pin_banks[i].name, "gpa", 3); i++)
-		etc_offset += exynos7870_pin_ctrl[0].pin_banks[i].nr_pins;
-
-        return exynos7870_pin_ctrl[0].base + eint + etc_offset;
-}
-#endif
-
-#if defined(CONFIG_SOC_EXYNOS8890)
-u32 exynos_eint_to_pin_num(int eint)
-{
-        return exynos8890_pin_ctrl[0].base + eint;
-}
-#endif
-
 /* pin banks of exynos7 pin-controller - ALIVE */
 static const struct samsung_pin_bank_data exynos7_pin_banks0[] __initconst = {
 	EXYNOS_PIN_BANK_EINTW(8, 0x000, "gpa0", 0x00),

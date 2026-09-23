@@ -57,6 +57,8 @@ typedef enum {
 	CCIC_NOTIFY_ID_FAC,
 	CCIC_NOTIFY_ID_CC_PIN_STATUS,
 	CCIC_NOTIFY_ID_WATER_CABLE,
+	CCIC_NOTIFY_ID_OTG,
+	CCIC_NOTIFY_ID_TA,
 } ccic_notifier_id_t;
 
 typedef struct

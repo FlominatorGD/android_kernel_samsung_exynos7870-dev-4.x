@@ -125,11 +125,15 @@ typedef struct _pdic_sink_status {
 	unsigned int rp_currentlvl; // rp current level by ccic
 } PDIC_SINK_STATUS;
 
+struct usbpd_data;
+
 struct pdic_notifier_struct {
 	pdic_notifier_event_t event;
 	PDIC_SINK_STATUS sink_status;
 	struct blocking_notifier_head notifier_call_chain;
 	void *pusbpd;
+	/* Exynos7870: the CCIC driver reads its usbpd_data back out of here */
+	struct usbpd_data *pd_data;
 };
 
 extern void pdic_notifier_call(struct pdic_notifier_struct *value);

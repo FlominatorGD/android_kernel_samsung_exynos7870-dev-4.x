@@ -163,7 +163,9 @@ static int s2mu004_i2c_update_bit(struct i2c_client *client,
 	u8 reg, u8 mask, u8 shift, u8 value);
 static int s2mu004_muic_set_com_sw(struct s2mu004_muic_data *muic_data,
 	u8 reg_val);
+#if IS_ENABLED(CONFIG_MUIC_MANAGER)
 static void s2mu004_muic_set_dn_ready_for_killer(struct s2mu004_muic_data *muic_data);
+#endif
 #if defined(CONFIG_HV_MUIC_S2MU004_AFC)
 int s2mu004_muic_check_afc_ready(struct s2mu004_muic_data *muic_data);
 #endif
@@ -241,6 +243,7 @@ void s2mu004_print_reg_dump(struct s2mu004_muic_data *muic_data)
 }
 #endif
 
+#if IS_ENABLED(CONFIG_MUIC_MANAGER)
 /* interface functions */
 static int s2mu004_if_com_to_open_with_vbus(void *mdata)
 {
@@ -685,6 +688,7 @@ static int s2mu004_if_set_gpio_uart_sel(void *mdata, int uart_path)
 
 	return s2mu004_set_gpio_uart_sel(muic_data, uart_path);
 }
+#endif /* CONFIG_MUIC_MANAGER */
 
 int s2mu004_i2c_read_byte(struct i2c_client *client, u8 command)
 {
@@ -777,6 +781,7 @@ static int s2mu004_i2c_update_bit(struct i2c_client *i2c,
 	return ret;
 }
 
+#if IS_ENABLED(CONFIG_MUIC_MANAGER)
 static void s2mu004_muic_set_dn_ready_for_killer(struct s2mu004_muic_data *muic_data)
 {
 	struct i2c_client *i2c = muic_data->i2c;
@@ -833,6 +838,8 @@ vdnmon_chk_done:
 		s2mu004_i2c_write_byte(i2c, S2MU004_REG_AFC_CTRL1, reg_val);
 	}
 }
+
+#endif /* CONFIG_MUIC_MANAGER */
 
 int s2mu004_muic_control_rid_adc(struct s2mu004_muic_data *muic_data, bool enable)
 {
@@ -1589,7 +1596,7 @@ int s2mu004_muic_get_otg_state(void)
 
 	psy_otg = get_power_supply_by_name("otg");
 	if (psy_otg)
-		ret = psy_otg->get_property(psy_otg, POWER_SUPPLY_PROP_CHARGE_POWERED_OTG_CONTROL, &val);
+		ret = psy_otg->desc->get_property(psy_otg, POWER_SUPPLY_PROP_CHARGE_POWERED_OTG_CONTROL, &val);
 	else
 		pr_info("%s get psy otg failed\n", __func__);
 
@@ -1946,6 +1953,7 @@ static int s2mu004_muic_detect_by_dpdm(struct s2mu004_muic_data *muic_data,
 	return S2MU004_DETECT_DONE;
 }
 
+#if IS_ENABLED(CONFIG_MUIC_MANAGER)
 static int s2mu004_muic_detect_jig_dev_type(struct s2mu004_muic_data *muic_data,
 	int *read_val, int vbvolt, int *intr, muic_attached_dev_t *new_dev)
 {
@@ -1990,6 +1998,8 @@ static int s2mu004_muic_detect_jig_dev_type(struct s2mu004_muic_data *muic_data,
 	}
 	return S2MU004_DETECT_DONE;
 }
+
+#endif /* CONFIG_MUIC_MANAGER */
 
 #ifdef CONFIG_MUIC_S2MU004_NON_USB_C_TYPE
 static void s2mu004_muic_detect_jig_by_adc(struct s2mu004_muic_data *muic_data,
@@ -2831,6 +2841,7 @@ static void s2mu004_muic_init_drvdata(struct s2mu004_muic_data *muic_data,
 	muic_data->dry_duration_sec = WATER_DRY_RETRY_INTERVAL_SEC;
 }
 
+#if IS_ENABLED(CONFIG_MUIC_MANAGER)
 static void s2mu004_muic_init_interface(struct s2mu004_muic_data *muic_data,
 	struct muic_interface_t *muic_if)
 {
@@ -2872,6 +2883,7 @@ static void s2mu004_muic_init_interface(struct s2mu004_muic_data *muic_data,
 	muic_data->if_data = muic_if;
 	muic_pdata->muic_if = muic_if;
 }
+#endif /* CONFIG_MUIC_MANAGER */
 
 
 static int s2mu004_muic_probe(struct platform_device *pdev)
@@ -2940,7 +2952,7 @@ static int s2mu004_muic_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, muic_data);
 
 	if (muic_data->pdata->init_gpio_cb)
-		ret = muic_data->pdata->init_gpio_cb(muic_data->pdata, get_switch_sel());
+		ret = muic_data->pdata->init_gpio_cb(get_switch_sel());
 	if (ret) {
 		pr_err("%s failed to init gpio(%d)\n", __func__, ret);
 		goto fail_init_gpio;

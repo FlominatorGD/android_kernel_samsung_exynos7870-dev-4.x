@@ -212,6 +212,7 @@ struct muic_interface_t {
 	bool			discard_interrupt;
 	bool			is_dcdtmr_intr;
 	bool			is_dcp_charger;
+	bool			is_afc_pdic_ready;
 	bool			is_afc_reset;
 
 	struct hv_data		*phv;
@@ -231,13 +232,18 @@ struct muic_interface_t {
 	struct notifier_block	ccic_nb;
 #endif
 	struct delayed_work	ccic_work;
-	bool afc_water_disable;
+	bool			afc_water_disable;
 #endif
 	/* Operation Mode */
 	enum muic_op_mode	opmode;
 
 	/* function pointer should be registered from each specific driver file */
 	int (*set_com_to_open)(void *);
+	int (*set_com_to_open_with_vbus)(void *);
+	int (*check_usb_killer)(void *);
+#ifndef CONFIG_SEC_FACTORY
+	void (*set_water_detect_from_boot)(void *, bool val);
+#endif
 	int (*set_switch_to_usb)(void *);
 	int (*set_switch_to_uart)(void *);
 	void (*set_jig_state)(void *, bool val);

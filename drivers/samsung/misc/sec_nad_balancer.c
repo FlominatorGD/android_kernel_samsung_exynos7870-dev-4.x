@@ -288,13 +288,13 @@ static void update_temperature(struct nad_balancer_pm_qos *pqos, int type)
 #endif
 
 	if (type == UPDATE_FIRST_TEMPERATURE) {
-		sec_bootstat_get_thermal(pqos->temperature);
+		sec_bootstat_get_thermal(pqos->temperature, MAX_TMU_COUNT);
 		NAD_PRINT("first temperature ");
 		for (i = 0; i < MAX_TMU_COUNT; i++)
 			pr_info("[%d]", pqos->temperature[i]);
 		pr_info("\n");
 	} else if (type == UPDATE_CONTI_TEMPERATURE) {
-		sec_bootstat_get_thermal(temp);
+		sec_bootstat_get_thermal(temp, MAX_TMU_COUNT);
 		for (i = 0; i < MAX_TMU_COUNT; i++) {
 			if (pqos->temperature[i] != max(pqos->temperature[i], temp[i])) {
 				NAD_PRINT("update temperature[%d] prev[%d] new [%d]\n",
@@ -303,7 +303,7 @@ static void update_temperature(struct nad_balancer_pm_qos *pqos, int type)
 			}
 		}
 	} else if (type == UPDATE_FINAL_TEMPERATURE) {
-		sec_bootstat_get_thermal(temp);
+		sec_bootstat_get_thermal(temp, MAX_TMU_COUNT);
 		for (i = 0; i < MAX_TMU_COUNT; i++) {
 			if (pqos->temperature[i] != max(pqos->temperature[i], temp[i])) {
 				NAD_PRINT("update temperature[%d] prev[%d] new [%d]\n",

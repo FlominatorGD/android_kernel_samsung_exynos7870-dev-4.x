@@ -21,4 +21,5 @@ obj-$(CONFIG_MTK_SMI)		+= mtk-smi.o
 obj-$(CONFIG_DA8XX_DDRCTL)	+= da8xx-ddrctl.o
 
 obj-$(CONFIG_SAMSUNG_MC)	+= samsung/
+obj-$(CONFIG_EXYNOS_MCOMP)		+= exynos-mcomp.o
 obj-$(CONFIG_TEGRA_MC)		+= tegra/

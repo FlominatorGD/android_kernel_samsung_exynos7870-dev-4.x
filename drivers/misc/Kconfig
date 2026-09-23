@@ -554,6 +554,7 @@ source "drivers/misc/tzdev/Kconfig"
 source "drivers/misc/tui/Kconfig"
 source "drivers/misc/dev_ril_bridge/Kconfig"
 source "drivers/misc/gnss_if/Kconfig"
+source "drivers/misc/uart_sel/Kconfig"
 
 config SEC_JACK
 	bool "Samsung earjack detection driver"

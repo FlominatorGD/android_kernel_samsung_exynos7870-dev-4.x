@@ -493,7 +493,7 @@
 	};
 
 	devfreq_0: devfreq_mif@17000010 {
-		compatible = "samsung,exynos-devfreq";
+		compatible = "samsung,exynos7870-devfreq";
 		reg = <0x0 0x17000010 0x0>;
 		clocks = <&clock 2000>, <&clock 2001>;
 		clock-names = "dvfs_mif", "dvfs_mif_sw";
@@ -537,7 +537,7 @@
 	};
 
 	devfreq_1: devfreq_int@17000020 {
-		compatible = "samsung,exynos-devfreq";
+		compatible = "samsung,exynos7870-devfreq";
 		reg = <0x0 0x17000020 0x0>;
 		clocks = <&clock 2002>;
 		clock-names = "dvfs_int";
@@ -579,7 +579,7 @@
 	};
 
 	devfreq_2: devfreq_disp@17000030 {
-		compatible = "samsung,exynos-devfreq";
+		compatible = "samsung,exynos7870-devfreq";
 		reg = <0x0 0x17000030 0x0>;
 		clocks = <&clock 2004>;
 		clock-names = "dvfs_disp";
@@ -619,7 +619,7 @@
 	};
 
 	devfreq_3: devfreq_cam@17000040 {
-		compatible = "samsung,exynos-devfreq";
+		compatible = "samsung,exynos7870-devfreq";
 		reg = <0x0 0x17000040 0x0>;
 		clocks = <&clock 2003>;
 		clock-names = "dvfs_cam";

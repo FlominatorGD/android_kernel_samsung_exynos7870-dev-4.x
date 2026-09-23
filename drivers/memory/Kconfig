@@ -146,4 +146,10 @@ config DA8XX_DDRCTL
 source "drivers/memory/samsung/Kconfig"
 source "drivers/memory/tegra/Kconfig"
 
+config EXYNOS_MCOMP
+	tristate "EXYNOS Multi-core Compression driver"
+	depends on ARCH_EXYNOS
+	help
+	  Driver for Exynos memory compressor (exynos-mcomp).
+
 endif

@@ -321,3 +321,12 @@ config ARM_EXYNOS_FF
 	  SW is not able to set to CPUFreq Driver.
 
 	  If in doubt, say N.
+
+config ARM_EXYNOS_MP_CPUFREQ
+	tristate "SAMSUNG EXYNOS MP CPUFreq driver"
+	depends on ARCH_EXYNOS7
+	help
+	  This adds the CPUFreq driver for Exynos7/Multi-Cluster chips
+	  like Exynos7870.
+
+	  If in doubt, say N.

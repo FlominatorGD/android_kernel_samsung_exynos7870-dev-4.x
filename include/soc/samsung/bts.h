@@ -189,6 +189,37 @@ void bts_update_scen(enum bts_scen_type type, unsigned int val);
 void bts_update_bw(enum bts_bw_type type, struct bts_bw bw);
 unsigned int bts_calc_bw(enum bts_bw_type type, void *data);
 
+#elif defined(CONFIG_EXYNOS7870_BTS)
+
+enum bts_scen_type {
+	TYPE_MFC_UD_ENCODING = 0,
+	TYPE_MFC_UD_DECODING,
+	TYPE_LAYERS,
+	TYPE_G3D_FREQ,
+	TYPE_G3D_SCENARIO,
+	TYPE_ROTATION,
+	TYPE_HIGHPERF,
+	TYPE_URGENT_OFF,
+	TYPE_DECON_INT,
+	TYPE_CAM,
+};
+
+struct bts_bw {
+	unsigned int peak;
+	unsigned int read;
+	unsigned int write;
+};
+
+void bts_scen_update(enum bts_scen_type type, unsigned int val);
+void bts_initialize(const char *pd_name, bool on);
+int exynos7_bts_register_notifier(struct notifier_block *nb);
+int exynos7_update_bts_param(int target_idx, int work);
+void bts_debugfs(void);
+#define bts_update_scen(a, b) do {} while(0)
+#define bts_update_bw(a, b) do {} while(0)
+#define bts_calc_bw(a, b) do {} while(0)
+#define bts_pd_sync(a, b) do {} while(0)
+
 #else
 struct bts_bw {
 	unsigned int peak;
